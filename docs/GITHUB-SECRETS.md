@@ -31,9 +31,11 @@
 
 المزامنة الاختيارية في الإصدار الحالي تستخدم Supabase Publishable Key للعميل مع RLS. هذا ليس `service_role` ولا مفتاح خادم سري، ولذلك لا يحتاج Workflow الحالي إلى Secret خاص بـ Supabase.
 
-## غير مطلوب حاليًا
+ميزة AI PRO تستدعي Supabase Edge Function. إذا احتاجت الدالة `OPENAI_API_KEY` أو `GEMINI_API_KEY` أو رمز PRO خاصًا بها، فتوضع هذه القيم في **Supabase Edge Function Secrets** وليس في GitHub ولا داخل APK.
 
-لا تنشئ هذه الأسرار لهذا الإصدار ما لم نضيف ميزة تعتمد عليها فعليًا:
+## غير مطلوب كـ GitHub Secret حاليًا
+
+لا تنشئ القيم التالية داخل GitHub لهذا الإصدار ما لم نغير بنية البناء لاحقًا:
 
 - `TELEGRAM_BOT_TOKEN`
 - `GOOGLE_CLIENT_SECRET`
