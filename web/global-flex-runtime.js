@@ -47,7 +47,7 @@ function persistZoom(){try{localStorage.setItem(ZOOM_KEY,JSON.stringify(zoomMap)
 function visible(el){if(!el||!el.isConnected)return false;const s=getComputedStyle(el);if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return false;const r=el.getBoundingClientRect();return r.width>2&&r.height>2}
 function labelFor(el){
   if(!el)return 'القسم الحالي';
-  if(el.id){const labels={nationalCenter:'البطاقة الوطنية',cardsCenter:'الباركود والكروت',vaultCenter:'الحفظ والمستندات',questionsCenter:'صياغة الأسئلة',compressorCenter:'ضغط الصور',workspace:'ورقة الأسئلة',pages-container:'ورقة الأسئلة',dsCanvas:'مساحة التصميم'};return labels[el.id]||el.id}
+  if(el.id){const labels={nationalCenter:'البطاقة الوطنية',cardsCenter:'الباركود والكروت',vaultCenter:'الحفظ والمستندات',questionsCenter:'صياغة الأسئلة',compressorCenter:'ضغط الصور',workspace:'ورقة الأسئلة','pages-container':'ورقة الأسئلة',dsCanvas:'مساحة التصميم'};return labels[el.id]||el.id}
   if(el.classList.contains('preview'))return 'معاينة الصور';
   if(el.classList.contains('nat-stage'))return 'معاينة البطاقة الوطنية';
   if(el.classList.contains('nat-card'))return 'نافذة البطاقة الوطنية';
