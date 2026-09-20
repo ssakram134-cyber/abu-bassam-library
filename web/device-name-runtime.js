@@ -18,12 +18,11 @@
   }
 
   function normalizeName(value) {
-    const name = String(value || '').trim();
-    return /^(أ?كرم|akram)$/i.test(name) ? 'أكرم' : name;
+    return String(value || '').trim() || 'جهاز المكتبة';
   }
 
   function current() {
-    const name = normalizeName(localStorage.getItem(DEVICE_NAME_KEY) || 'أكرم');
+    const name = normalizeName(localStorage.getItem(DEVICE_NAME_KEY) || 'جهاز المكتبة');
     return {
       id: localStorage.getItem(DEVICE_ID_KEY) || '',
       name,
@@ -34,7 +33,7 @@
   function ensureIdentity() {
     let identity = current();
     if (identity.id) return identity;
-    identity = { id: uuid(), name: 'أكرم', createdAt: new Date().toISOString() };
+    identity = { id: uuid(), name: 'جهاز المكتبة', createdAt: new Date().toISOString() };
     localStorage.setItem(DEVICE_ID_KEY, identity.id);
     localStorage.setItem(DEVICE_NAME_KEY, identity.name);
     localStorage.setItem(DEVICE_CREATED_KEY, identity.createdAt);
@@ -66,12 +65,18 @@
     const cloud = window.AbuBassamCloud;
     if (navigator.onLine && cloud?.isConnected()) {
       try {
-        const rows = await cloud.list('device', 100);
-        rows.forEach((row) => {
-          const data = row?.data || {};
-          const id = String(data.id || row.client_id || '');
-          if (id) map.set(id, { ...data, id, updated_at: row.updated_at });
-        });
+        if (window.AbuBassamSecurity?.device && cloud.client) {
+          const result = await cloud.client.from('abu_bassam_devices').select('device_id,device_name,model,platform,role,active,first_seen,last_seen,app_version').order('first_seen', { ascending: true });
+          if (!result.error) result.data?.forEach((row) => map.set(row.device_id, { id: row.device_id, name: row.device_name, ...row }));
+        }
+        if (!map.size) {
+          const rows = await cloud.list('device', 100);
+          rows.forEach((row) => {
+            const data = row?.data || {};
+            const id = String(data.id || row.client_id || '');
+            if (id) map.set(id, { ...data, id, updated_at: row.updated_at });
+          });
+        }
       } catch (_) {}
     }
     if (!map.has(identity.id)) {
@@ -91,26 +96,30 @@
   }
 
   function deviceName() {
-    return normalizeName(current().name || 'أكرم');
+    return normalizeName(current().name || 'جهاز المكتبة');
   }
 
-  function loadGlobalFlex() {
-    if (document.getElementById('abuGlobalFlexRuntime') || window.__ABU_GLOBAL_FLEX_V1__) return;
+  function loadScript(id, src, guard) {
+    if (document.getElementById(id) || (guard && window[guard])) return;
     const script = document.createElement('script');
-    script.id = 'abuGlobalFlexRuntime';
-    script.src = 'global-flex-runtime.js';
+    script.id = id;
+    script.src = src;
     (document.head || document.documentElement).appendChild(script);
   }
+
+  function loadGlobalFlex() { loadScript('abuGlobalFlexRuntime', 'global-flex-runtime.js', '__ABU_GLOBAL_FLEX_V1__'); }
+  function loadSecurity() { loadScript('abuAppSecurityRuntime', 'app-security-runtime.js', '__ABU_APP_SECURITY_V1__'); }
 
   window.AbuBassamDevices = { get: current, name: deviceName, ensure: ensureIdentity, heartbeat, list, version: APP_VERSION };
   window.AbuBassamDeviceName = deviceName;
   window.addEventListener('DOMContentLoaded', () => {
     ensureIdentity();
     loadGlobalFlex();
+    loadSecurity();
     setTimeout(heartbeat, 800);
     setInterval(() => { if (document.visibilityState !== 'hidden') heartbeat(); }, 120000);
   });
-  if (document.readyState !== 'loading') loadGlobalFlex();
+  if (document.readyState !== 'loading') { loadGlobalFlex(); loadSecurity(); }
   window.addEventListener('online', heartbeat);
-  document.addEventListener('abu-bassam-auth-changed', heartbeat);
+  document.addEventListener('abu-bassam-auth-changed', () => { heartbeat(); window.AbuBassamSecurity?.onSessionChanged?.(); });
 })();
