@@ -1,0 +1,119 @@
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const root = path.resolve(__dirname, '..');
+const web = path.join(root, 'web');
+const required = [
+  'index.html',
+  'residence-card.html',
+  'cards-studio-runtime.js',
+  'national-id-runtime.js',
+  'document-vault-runtime.js',
+  'app-settings-runtime.js',
+  'typography-runtime.js',
+  'secure-sync-runtime.js',
+  'device-name-runtime.js',
+  'productivity-tools-runtime.js',
+  'questions-ar.html',
+  'questions-en.html',
+  'image-compressor.html',
+  'supabase-2.58.0.js',
+  'qrcode.js',
+  'jszip.min.js',
+  'fonts/Cairo-Regular.ttf',
+  'fonts/Cairo-Bold.ttf',
+  'fonts/Tajawal-Regular.ttf',
+  'fonts/Tajawal-Bold.ttf',
+];
+
+const errors = [];
+for (const relative of required) {
+  if (!fs.existsSync(path.join(web, relative))) errors.push(`Missing web asset: ${relative}`);
+}
+
+for (const filename of fs.readdirSync(web).filter((name) => name.endsWith('.js'))) {
+  const source = fs.readFileSync(path.join(web, filename), 'utf8');
+  try {
+    new vm.Script(source, { filename });
+  } catch (error) {
+    errors.push(`${filename}: ${error.message}`);
+  }
+}
+
+for (const filename of ['index.html', 'residence-card.html', 'questions-ar.html', 'questions-en.html', 'image-compressor.html']) {
+  const source = fs.readFileSync(path.join(web, filename), 'utf8');
+  const scripts = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+  let match;
+  let index = 0;
+  while ((match = scripts.exec(source))) {
+    index += 1;
+    if (!match[1].trim()) continue;
+    try {
+      new vm.Script(match[1], { filename: `${filename}#${index}` });
+    } catch (error) {
+      errors.push(`${filename} script ${index}: ${error.message}`);
+    }
+  }
+}
+
+const indexHtml = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
+for (const reference of ['supabase-2.58.0.js', 'secure-sync-runtime.js', 'device-name-runtime.js', 'productivity-tools-runtime.js']) {
+  if (!indexHtml.includes(`src="${reference}"`)) errors.push(`index.html does not load ${reference}`);
+}
+
+const nationalRuntime = fs.readFileSync(path.join(web, 'national-id-runtime.js'), 'utf8');
+for (const marker of ['tabQuestions', 'tabCompressor', "switchTab('questions')", "switchTab('compressor')"]) {
+  if (!nationalRuntime.includes(marker)) errors.push(`Missing productivity tab marker: ${marker}`);
+}
+
+const productivityRuntime = fs.readFileSync(path.join(web, 'productivity-tools-runtime.js'), 'utf8');
+for (const marker of ['questions-ar.html', 'questions-en.html', 'image-compressor.html', 'abuPrintQuestion', 'abuSaveQuestionPdf', 'abuCompressionReady']) {
+  if (!productivityRuntime.includes(marker)) errors.push(`Missing productivity integration marker: ${marker}`);
+}
+
+const localToolPages = ['questions-ar.html', 'questions-en.html', 'image-compressor.html'];
+for (const filename of localToolPages) {
+  const source = fs.readFileSync(path.join(web, filename), 'utf8');
+  if (/(?:src|href)\s*=\s*["']https?:\/\//i.test(source) || /url\(\s*["']?https?:\/\//i.test(source)) {
+    errors.push(`${filename} still depends on an external URL`);
+  }
+  if (/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(source)) errors.push(`${filename} contains the previous author or social link`);
+  if (!source.includes('أكرم حاتم الغزالي') && !source.includes('Akram Hatem Al-Ghazali')) {
+    errors.push(`${filename} is missing the approved programmer identity`);
+  }
+}
+
+const arabicQuestions = fs.readFileSync(path.join(web, 'questions-ar.html'), 'utf8');
+const englishQuestions = fs.readFileSync(path.join(web, 'questions-en.html'), 'utf8');
+const compressor = fs.readFileSync(path.join(web, 'image-compressor.html'), 'utf8');
+if (!arabicQuestions.includes('abuBassamQuestionDraftArabicV1')) errors.push('Arabic question draft persistence is missing');
+if (!englishQuestions.includes('abuBassamQuestionDraftEnglishV1')) errors.push('English question draft persistence is missing');
+for (const marker of ['multiple accept="image/*"', 'MAX_FILES = 20', 'abuCompressionReady']) {
+  if (!compressor.includes(marker)) errors.push(`Image compressor marker is missing: ${marker}`);
+}
+
+const firstSupabase = indexHtml.indexOf('supabase-2.58.0.js');
+const secureSync = indexHtml.indexOf('secure-sync-runtime.js');
+if (firstSupabase < 0 || secureSync < firstSupabase) errors.push('Supabase must load before secure-sync-runtime.js');
+
+const projectText = fs.readdirSync(web)
+  .filter((name) => /\.(?:html|js)$/i.test(name) && name !== 'supabase-2.58.0.js')
+  .map((name) => fs.readFileSync(path.join(web, name), 'utf8'))
+  .join('\n');
+for (const forbidden of ['api.telegram.org/bot', 'service_role', 'sb_secret_', 'BEGIN ' + 'PRIVATE KEY']) {
+  if (projectText.includes(forbidden)) errors.push(`Forbidden secret/sender marker found: ${forbidden}`);
+}
+if (/\/rest\/v1\/abu_bassam_sync(?:\?|['"])/.test(projectText)) {
+  errors.push('Legacy anonymous sync endpoint is still referenced');
+}
+
+const app = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
+if (app.android.package !== 'com.abubassam.librarycamera3') errors.push('Unexpected Android package');
+if (app.version !== '4.3.2' || app.android.versionCode !== 432) errors.push('Unexpected version metadata');
+
+if (errors.length) {
+  process.stderr.write(`${errors.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`Project checks passed (${required.length} required assets).\n`);
