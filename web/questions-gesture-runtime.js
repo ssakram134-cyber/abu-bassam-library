@@ -206,6 +206,7 @@ function observe(){
 }
 
 function init(){
+  document.querySelectorAll('.question-container.abu-q-selected').forEach(q=>q.classList.remove('abu-q-selected'));
   addCss();addToolbar();applyPaperZoom(paperZoom,false);
   document.querySelectorAll('.question-container[data-abu-scale],.question-container[data-abu-move-x],.question-container[data-abu-move-y]').forEach(applyQuestionTransform);
   document.addEventListener('pointerdown',pointerDown,true);
