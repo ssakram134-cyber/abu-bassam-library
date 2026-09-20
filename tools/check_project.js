@@ -16,6 +16,7 @@ const required = [
   'device-name-runtime.js',
   'productivity-tools-runtime.js',
   'questions-templates-runtime.js',
+  'questions-paper-runtime.js',
   'design-studio-runtime.js',
   'envelopes.html',
   'certificates.html',
@@ -74,7 +75,7 @@ for (const marker of ['tabQuestions', 'tabCompressor', "switchTab('questions')",
 const productivityRuntime = fs.readFileSync(path.join(web, 'productivity-tools-runtime.js'), 'utf8');
 for (const marker of [
   'questions-ar.html', 'questions-en.html', 'image-compressor.html',
-  'envelopes.html', 'certificates.html', 'questions-templates-runtime.js',
+  'envelopes.html', 'certificates.html', 'questions-templates-runtime.js', 'questions-paper-runtime.js',
   'abuPrintQuestion', 'abuSaveQuestionPdf', 'abuCompressionReady',
   'abuDesignPrint', 'abuDesignPdf', 'abuDesignSaveImage',
   'prodModeEnvelope', 'prodModeCertificate'
@@ -84,7 +85,7 @@ for (const marker of [
 
 const questionTemplates = fs.readFileSync(path.join(web, 'questions-templates-runtime.js'), 'utf8');
 for (const marker of [
-  'math1-','science3-','science4-','islamic-',
+  'math1-','makeScienceTemplate(3','makeScienceTemplate(4','islamic-',
   'نماذج خاصة بالمادة','نماذج عامة','قوالب الأسئلة',
   'أتعلم — ٢ درجة','أتأكد — ٢ درجة','أتحدث — ٢ درجة','أحل — ٢ درجة','أفكر — ٢ درجة',
   'الحفظ — ٢ درجة','الحديث الشريف — ٢ درجة','التلاوة — ٢ درجة','العقائد والعبادات — ١ درجة','المعاني — ١ درجة','السيرة — ١ درجة','الآداب الإسلامية — ١ درجة',
@@ -97,10 +98,15 @@ if (!questionTemplates.includes('Array.from({length:3}') || !questionTemplates.i
 if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeScienceTemplate(4,i))')) errors.push('Science grade-4 ten-template marker is missing');
 if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeIslamicTemplate(i))')) errors.push('Islamic ten-template marker is missing');
 
+const questionPaper = fs.readFileSync(path.join(web, 'questions-paper-runtime.js'), 'utf8');
+for (const marker of ['A4P','A4L','A5P','A5L','مخصص','abuQuestionPaperSettingsV1','@page','ملم','سم']) {
+  if (!questionPaper.includes(marker)) errors.push(`Missing question-paper marker: ${marker}`);
+}
+
 const designStudio = fs.readFileSync(path.join(web, 'design-studio-runtime.js'), 'utf8');
 for (const marker of [
   'ENVELOPE_PRESETS','CERT_PRESETS','225x115','DL —','C6 —','#10 —',
-  'Array.from({length:10}','Array.from({length:9}',
+  'Array.from({length:10','Array.from({length:9',
   'صناعة الظرف / غلاف الأسئلة','شهادات التقدير','إضافة نماذج',
   'الوحدة','ملم','سم','saveAsTemplate','applyCrop','replaceImage','front','back','lock',
   'abuDesignPrint','abuDesignPdf','abuDesignSaveImage'
@@ -153,4 +159,4 @@ if (errors.length) {
   process.stderr.write(`${errors.join('\n')}\n`);
   process.exit(1);
 }
-process.stdout.write(`Project checks passed (${required.length} required assets, question templates, envelopes and certificates).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets, question templates, paper sizes, envelopes and certificates).\n`);
