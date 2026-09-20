@@ -17,7 +17,7 @@ function addCss(){
 
 function mainHtml(){
   return `<div class="productivity-shell"><div class="productivity-head"><div><h2>الأسئلة والطباعة المدرسية</h2><p>قوالب أسئلة حسب المادة • صناعة الظرف • شهادات تقدير • حفظ تلقائي • PDF وطباعة</p></div><span>📝</span></div><div class="productivity-subtabs"><button id="prodModeQuestions" onclick="AbuBassamProductivity.mode('questions')">صياغة الأسئلة</button><button id="prodModeEnvelope" onclick="AbuBassamProductivity.mode('envelope')">صناعة الظرف</button><button id="prodModeCertificate" onclick="AbuBassamProductivity.mode('certificate')">شهادات التقدير</button></div>
-  <div id="prodPaneQuestions" class="productivity-pane"><div class="question-language"><button id="questionLangAr" class="active" onclick="AbuBassamProductivity.language('ar')">العربي — RTL</button><button id="questionLangEn" onclick="AbuBassamProductivity.language('en')">English — LTR</button></div><div class="productivity-frame-wrap"><iframe id="questionsFrame" class="productivity-frame" src="questions-ar.html" title="صياغة الأسئلة بالعربية والإنكليزية"></iframe></div><div class="productivity-note">للعربي: زر «القوالب» داخل المحرر يعرض نماذج الرياضيات والعلوم والإسلامية والنماذج العامة. تحفظ المسودة والتعديلات تلقائيًا.</div><span id="questionsHostStatus" class="productivity-status">جاهز للعمل محليًا</span></div>
+  <div id="prodPaneQuestions" class="productivity-pane"><div class="question-language"><button id="questionLangAr" class="active" onclick="AbuBassamProductivity.language('ar')">العربي — RTL</button><button id="questionLangEn" onclick="AbuBassamProductivity.language('en')">English — LTR</button></div><div class="productivity-frame-wrap"><iframe id="questionsFrame" class="productivity-frame" src="questions-ar.html" title="صياغة الأسئلة بالعربية والإنكليزية"></iframe></div><div class="productivity-note">للعربي: زر «القوالب» يعرض نماذج الرياضيات والعلوم والإسلامية والعامة، وزر «الورق» يتيح A4 وA5 والمقاس المخصص. تحفظ المسودة والتعديلات تلقائيًا.</div><span id="questionsHostStatus" class="productivity-status">جاهز للعمل محليًا</span></div>
   <div id="prodPaneEnvelope" class="productivity-pane"><div class="productivity-frame-wrap"><iframe id="envelopeFrame" class="productivity-frame design-frame" src="envelopes.html" title="صناعة الظرف وغلاف الأسئلة"></iframe></div><div class="productivity-note">قسم مستقل عن صياغة الأسئلة. يدعم المقاسات الجاهزة، الطول والعرض، سم/ملم، ٩ نماذج، تحرير العناصر والحفظ التلقائي.</div><span id="envelopeHostStatus" class="productivity-status">محرر الأظرف جاهز</span></div>
   <div id="prodPaneCertificate" class="productivity-pane"><div class="productivity-frame-wrap"><iframe id="certificateFrame" class="productivity-frame design-frame" src="certificates.html" title="شهادات التقدير"></iframe></div><div class="productivity-note">١٠ نماذج احترافية قابلة للتحرير، مع A4 وA5 عمودي/أفقي والحفظ التلقائي والطباعة وPDF.</div><span id="certificateHostStatus" class="productivity-status">محرر الشهادات جاهز</span></div></div>`
 }
@@ -35,20 +35,25 @@ function build(){
   let compressor=document.createElement('section');compressor.id='compressorCenter';compressor.innerHTML=compressorHtml();
   app.insertBefore(questions,preview||null);app.insertBefore(compressor,preview||null);
   window.addEventListener('message',handleMessage);
-  $('questionsFrame')?.addEventListener('load',()=>{if(language==='ar')setTimeout(injectArabicTemplateRuntime,50)});
+  $('questionsFrame')?.addEventListener('load',()=>{if(language==='ar')setTimeout(injectArabicRuntimes,50)});
   setMode(studioMode)
 }
 
-function injectArabicTemplateRuntime(){
+function injectArabicRuntimes(){
   let frame=$('questionsFrame');if(!frame||language!=='ar')return;
-  try{let doc=frame.contentDocument;if(!doc||doc.getElementById('abuQuestionTemplatesExternal'))return;let script=doc.createElement('script');script.id='abuQuestionTemplatesExternal';script.src='questions-templates-runtime.js';doc.head.appendChild(script)}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات القوالب داخل المحرر',false)}
+  try{
+    let doc=frame.contentDocument;if(!doc)return;
+    [['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js']].forEach(([id,src])=>{
+      if(doc.getElementById(id))return;let script=doc.createElement('script');script.id=id;script.src=src;doc.head.appendChild(script)
+    })
+  }catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات القوالب والورق داخل المحرر',false)}
 }
 
 function setMode(value){
   studioMode=['questions','envelope','certificate'].includes(value)?value:'questions';
   localStorage.setItem('abuBassamProductivityModeV2',studioMode);
-  [['questions','prodModeQuestions','prodPaneQuestions'],['envelope','prodModeEnvelope','prodPaneEnvelope'],['certificate','prodModeCertificate','prodPaneCertificate']].forEach(([m,b,p])=>{ $(b)?.classList.toggle('active',studioMode===m);$(p)?.classList.toggle('show',studioMode===m)});
-  if(studioMode==='questions'){setTimeout(()=>{notifyFrame('questionsFrame');if(language==='ar')injectArabicTemplateRuntime()},50)}
+  [['questions','prodModeQuestions','prodPaneQuestions'],['envelope','prodModeEnvelope','prodPaneEnvelope'],['certificate','prodModeCertificate','prodPaneCertificate']].forEach(([m,b,p])=>{$(b)?.classList.toggle('active',studioMode===m);$(p)?.classList.toggle('show',studioMode===m)});
+  if(studioMode==='questions'){setTimeout(()=>{notifyFrame('questionsFrame');if(language==='ar')injectArabicRuntimes()},50)}
   if(studioMode==='envelope')setTimeout(()=>notifyFrame('envelopeFrame'),50);
   if(studioMode==='certificate')setTimeout(()=>notifyFrame('certificateFrame'),50)
 }
@@ -60,7 +65,7 @@ function setLanguage(value){
   if(frame&&!String(frame.getAttribute('src')||'').endsWith(wanted))frame.src=wanted;
   localStorage.setItem('abuBassamQuestionLanguageV1',language);
   setStatus('questionsHostStatus',language==='ar'?'تم فتح نموذج الأسئلة العربي':'English question template opened',true);
-  if(language==='ar')setTimeout(injectArabicTemplateRuntime,120)
+  if(language==='ar')setTimeout(injectArabicRuntimes,120)
 }
 
 function setStatus(id,message,ok){let element=$(id);if(!element)return;element.className='productivity-status '+(ok===false?'err':ok===true?'ok':'');element.textContent=message}
@@ -71,7 +76,7 @@ function browserSave(name,data){let link=document.createElement('a');link.downlo
 
 function handleMessage(event){
   let data=event.data;if(!data||typeof data!=='object'||typeof data.type!=='string')return;
-  if(data.type==='abuQuestionReady'&&trustedSource(event,'questionsFrame')){setStatus('questionsHostStatus',String(data.message||'تم استعادة المسودة وأصبح النموذج جاهزًا'),true);if(language==='ar')setTimeout(injectArabicTemplateRuntime,40);return}
+  if(data.type==='abuQuestionReady'&&trustedSource(event,'questionsFrame')){setStatus('questionsHostStatus',String(data.message||'تم استعادة المسودة وأصبح النموذج جاهزًا'),true);if(language==='ar')setTimeout(injectArabicRuntimes,40);return}
   if((data.type==='abuPrintQuestion'||data.type==='abuSaveQuestionPdf')&&!trustedSource(event,'questionsFrame'))return;
   if(data.type==='abuPrintQuestion'){if(window.Android&&Android.printHtml)Android.printHtml(String(data.html||''));else alert('الطباعة متاحة داخل تطبيق Android');setStatus('questionsHostStatus','تم إرسال نموذج الأسئلة إلى معاينة الطباعة',true);log('print','طباعة نموذج أسئلة',data.language==='en'?'English':'عربي');return}
   if(data.type==='abuSaveQuestionPdf'){let name=safeName(data.name,'Abu_Bassam_Questions.pdf');if(window.Android&&Android.savePdfHtml)Android.savePdfHtml(name,String(data.html||''));else alert('حفظ PDF متاح داخل تطبيق Android');setStatus('questionsHostStatus','تم تجهيز ملف PDF للحفظ',true);log('pdf','حفظ نموذج أسئلة PDF',data.language==='en'?'English':'عربي');return}
