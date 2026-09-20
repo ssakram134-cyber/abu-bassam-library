@@ -13,17 +13,19 @@ const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
 const dist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
 const interactive='input,textarea,select,button,a,[contenteditable="true"],[role="button"],label';
-const ownGesture='.paper-zoom,.paper-zoom-stage,.nat-zoom,.nat-zoom-actions,.crop-wrap,.ds-crop,.v-edit-canvas,#natCropCanvas,#dsCropCanvas';
+const ownGesture='.paper-zoom,.paper-zoom-stage,.nat-zoom,.nat-zoom-actions';
+const protectedDrag='#natCropCanvas,#dsCropCanvas,.v-edit-canvas,.drag-move-handle,.img-resize-handle,.ds-resize,.ds-el,.draggable-item';
 const surfaceSelector=[
   '[data-abu-flex-surface]',
-  '.ds-stage','.ds-paper-wrap','.ds-paper',
-  '.cs-preview-wrap','.cs-dialog-body',
-  '.nat-stage','.nat-work','.nat-doc','.nat-residence-block',
-  '.v-view','.v-body','.v-grid',
+  '.ds-stage','.ds-paper-wrap','.ds-paper','.ds-crop',
+  '.cs-preview-wrap','.cs-dialog-body','.cs-dialog',
+  '.nat-stage','.nat-work','.nat-doc','.nat-residence-block','.nat-card',
+  '.v-view','.v-body','.v-grid','.v-dialog','.v-edit-canvas',
+  '.abu-settings-dialog','.abu-settings-body','.abu-text-sheet','.abu-text-body',
   '.productivity-frame-wrap',
   '.preview','.ai-pro-preview','.crop-wrap',
   '#workspace','#pages-container',
-  '[id$="Center"]','section','.panel','.sheet','.v-dialog','.cs-dialog','.ds-app'
+  '[id$="Center"]','section','.panel','.sheet','.ds-sheet','.ds-app'
 ].join(',');
 
 let settings={move:false,sensitivity:1,showHints:true};
@@ -48,9 +50,13 @@ function labelFor(el){
   if(el.id){const labels={nationalCenter:'البطاقة الوطنية',cardsCenter:'الباركود والكروت',vaultCenter:'الحفظ والمستندات',questionsCenter:'صياغة الأسئلة',compressorCenter:'ضغط الصور',workspace:'ورقة الأسئلة',pages-container:'ورقة الأسئلة',dsCanvas:'مساحة التصميم'};return labels[el.id]||el.id}
   if(el.classList.contains('preview'))return 'معاينة الصور';
   if(el.classList.contains('nat-stage'))return 'معاينة البطاقة الوطنية';
+  if(el.classList.contains('nat-card'))return 'نافذة البطاقة الوطنية';
   if(el.classList.contains('cs-preview-wrap'))return 'معاينة الكروت والباجات';
   if(el.classList.contains('v-view'))return 'عارض المستندات';
+  if(el.classList.contains('abu-settings-dialog'))return 'الإعدادات';
+  if(el.classList.contains('abu-text-sheet'))return 'محرر الخطوط والنصوص';
   if(el.classList.contains('ds-stage')||el.classList.contains('ds-paper-wrap')||el.classList.contains('ds-paper'))return document.body.dataset.studioMode==='certificate'?'شهادة التقدير':'تصميم الظرف';
+  if(el.classList.contains('ds-crop')||el.classList.contains('crop-wrap'))return 'القص والتحرير';
   if(el.classList.contains('productivity-frame-wrap'))return 'مساحة العمل';
   return 'القسم الحالي';
 }
@@ -98,7 +104,7 @@ function surfaceFrom(target){
 }
 function defaultSurface(){
   const preferred=[
-    '.ds-stage','.cs-preview-wrap','.nat-stage','.v-view','.productivity-frame-wrap',
+    '.ds-stage','.cs-preview-wrap','.nat-stage','.v-view','.abu-settings-dialog','.abu-text-sheet','.productivity-frame-wrap',
     '#questionsCenter','#compressorCenter','#vaultCenter','#cardsCenter','#nationalCenter','.preview','.panel'
   ];
   for(const selector of preferred){const list=[...document.querySelectorAll(selector)];const item=list.find(visible);if(item)return item}
@@ -164,7 +170,7 @@ function endPinch(e){
 function pointerDown(e){
   const surface=surfaceFrom(e.target);if(surface)setActive(surface);
   if(!settings.move||!surface||scaleOf(surface)<=1.01)return;
-  if(e.target?.closest?.(interactive)||e.target?.closest?.(ownGesture)||e.target?.closest?.('.drag-move-handle,.img-resize-handle,.ds-resize,.ds-el,.draggable-item'))return;
+  if(e.target?.closest?.(interactive)||e.target?.closest?.(ownGesture)||e.target?.closest?.(protectedDrag))return;
   if(e.pointerType==='mouse'&&e.button!==0)return;
   pan={id:e.pointerId,x:e.clientX,y:e.clientY,scrollX:window.scrollX,scrollY:window.scrollY,surface};
   document.body.classList.add('abu-flex-moving');
