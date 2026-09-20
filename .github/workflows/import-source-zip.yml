@@ -6,7 +6,7 @@ on:
       zip_file:
         description: "Source ZIP filename in repository root"
         required: false
-        default: "Abu_Bassam_Library_v4.3.1_Latest_Source.zip"
+        default: "Abu_Bassam_Library_v4.3.2_Audited_Source.zip"
   push:
     paths:
       - "Abu_Bassam_Library*_Source.zip"
@@ -87,13 +87,13 @@ jobs:
           APP_DIR="${{ steps.validate.outputs.app_dir }}"
           rsync -a \
             --exclude='.git/' \
+            --exclude='.github/workflows/' \
             --exclude='output/' \
             --exclude='tools/__pycache__/' \
             --exclude='*.pyc' \
             "$APP_DIR/" ./
 
           cat >> .gitignore <<'EOF'
-
           # Local QA/generated outputs
           output/
           tools/__pycache__/
