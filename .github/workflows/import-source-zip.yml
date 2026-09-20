@@ -1,0 +1,133 @@
+name: Import Abu Bassam source ZIP
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_file:
+        description: "Source ZIP filename in repository root"
+        required: false
+        default: "Abu_Bassam_Library_v4.3.1_Latest_Source.zip"
+  push:
+    paths:
+      - "Abu_Bassam_Library*_Source.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  import_source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Locate source ZIP
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_ZIP="${{ github.event.inputs.zip_file || '' }}"
+          if [ -n "$INPUT_ZIP" ] && [ -f "$INPUT_ZIP" ]; then
+            ZIP_FILE="$INPUT_ZIP"
+          else
+            ZIP_FILE="$(find . -maxdepth 1 -type f -name 'Abu_Bassam_Library*_Source.zip' -printf '%T@ %f\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+          fi
+          if [ -z "${ZIP_FILE:-}" ] || [ ! -f "$ZIP_FILE" ]; then
+            echo "No source ZIP is present; nothing to import."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          sha256sum "$ZIP_FILE"
+
+      - name: Extract and validate application identity
+        if: steps.source.outputs.skip != 'true'
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="${{ steps.source.outputs.zip_file }}"
+          WORK_DIR="$RUNNER_TEMP/abu-bassam-import"
+          rm -rf "$WORK_DIR"
+          mkdir -p "$WORK_DIR"
+          unzip -q "$ZIP_FILE" -d "$WORK_DIR"
+
+          APP_JSON="$(find "$WORK_DIR" -maxdepth 5 -type f -name app.json -print -quit)"
+          test -n "$APP_JSON" || { echo "::error::app.json not found in source ZIP"; exit 1; }
+          APP_DIR="$(dirname "$APP_JSON")"
+          test -f "$APP_DIR/package.json" || { echo "::error::package.json not found beside app.json"; exit 1; }
+          test -f "$APP_DIR/package-lock.json" || { echo "::error::package-lock.json missing"; exit 1; }
+
+          node - "$APP_JSON" <<'NODE'
+          const fs = require('fs');
+          const file = process.argv[2];
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const expo = data.expo || {};
+          if (expo.android?.package !== 'com.abubassam.librarycamera3') {
+            throw new Error('Wrong Android package: ' + (expo.android?.package || 'missing'));
+          }
+          if (expo.slug !== 'abu-bassam-library') {
+            throw new Error('Wrong Expo slug: ' + (expo.slug || 'missing'));
+          }
+          console.log('Validated:', expo.name, expo.version, expo.android.package);
+          NODE
+
+          echo "app_dir=$APP_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Copy clean source into repository
+        if: steps.source.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="${{ steps.validate.outputs.app_dir }}"
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='output/' \
+            --exclude='tools/__pycache__/' \
+            --exclude='*.pyc' \
+            "$APP_DIR/" ./
+
+          cat >> .gitignore <<'EOF'
+
+          # Local QA/generated outputs
+          output/
+          tools/__pycache__/
+          *.pyc
+          EOF
+
+          rm -f "${{ steps.source.outputs.zip_file }}"
+
+      - name: Set up Node
+        if: steps.source.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify imported source
+        if: steps.source.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run check:web
+
+      - name: Commit verified source
+        if: steps.source.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Import verified Abu Bassam Library source"
+          git push origin HEAD:main
