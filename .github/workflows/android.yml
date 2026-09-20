@@ -42,9 +42,10 @@ jobs:
           CI: "1"
         run: npm run android:prebuild
 
-      - name: Build debug APK
+      - name: Build standalone CI APK
+        if: ${{ env.HAS_ANDROID_RELEASE_KEY != 'true' }}
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Configure existing release key
         if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
