@@ -14,6 +14,7 @@ const required = [
   'typography-runtime.js',
   'secure-sync-runtime.js',
   'device-name-runtime.js',
+  'global-flex-runtime.js',
   'productivity-tools-runtime.js',
   'questions-templates-runtime.js',
   'questions-template-tools-runtime.js',
@@ -67,6 +68,22 @@ for (const filename of ['index.html', 'residence-card.html', 'questions-ar.html'
 const indexHtml = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
 for (const reference of ['supabase-2.58.0.js', 'secure-sync-runtime.js', 'device-name-runtime.js', 'productivity-tools-runtime.js']) {
   if (!indexHtml.includes(`src="${reference}"`)) errors.push(`index.html does not load ${reference}`);
+}
+
+const deviceRuntime = fs.readFileSync(path.join(web, 'device-name-runtime.js'), 'utf8');
+for (const marker of ['global-flex-runtime.js', 'abuGlobalFlexRuntime', 'loadGlobalFlex']) {
+  if (!deviceRuntime.includes(marker)) errors.push(`Missing global-flex loader marker: ${marker}`);
+}
+
+const globalFlex = fs.readFileSync(path.join(web, 'global-flex-runtime.js'), 'utf8');
+for (const marker of [
+  'abuGlobalFlexSettingsV1','abuGlobalFlexZoomMapV1','MIN_ZOOM','MAX_ZOOM',
+  'touchstart','touchmove','pointerdown','pointermove','wheelZoom','scrollIntoView',
+  '✥ تحريك','إصبعان للتكبير والتصغير','scanFrames','global-flex-runtime.js',
+  '.preview','.nat-stage','.cs-preview-wrap','.v-view','.productivity-frame-wrap','.ds-stage',
+  '@media print','abu-flex-has-zoom','abuFlexSensitivity'
+]) {
+  if (!globalFlex.includes(marker)) errors.push(`Missing global-flex marker: ${marker}`);
 }
 
 const nationalRuntime = fs.readFileSync(path.join(web, 'national-id-runtime.js'), 'utf8');
@@ -147,6 +164,11 @@ for (const marker of ['multiple accept="image/*"', 'MAX_FILES = 20', 'abuCompres
   if (!compressor.includes(marker)) errors.push(`Image compressor marker is missing: ${marker}`);
 }
 
+const agents = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+for (const marker of ['كل بند تم تدقيقه','تم ✅','ناقص ⚠️','غير موجود ❌','يحتاج تحقق 🔍','التكبير والتصغير','جميع أقسام البرنامج']) {
+  if (!agents.includes(marker)) errors.push(`Missing mandatory audit/flex rule in AGENTS.md: ${marker}`);
+}
+
 const firstSupabase = indexHtml.indexOf('supabase-2.58.0.js');
 const secureSync = indexHtml.indexOf('secure-sync-runtime.js');
 if (firstSupabase < 0 || secureSync < firstSupabase) errors.push('Supabase must load before secure-sync-runtime.js');
@@ -170,4 +192,4 @@ if (errors.length) {
   process.stderr.write(`${errors.join('\n')}\n`);
   process.exit(1);
 }
-process.stdout.write(`Project checks passed (${required.length} required assets, question templates, paper sizes, gestures, envelopes and certificates).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets, global flex, question templates, paper sizes, gestures, envelopes and certificates).\n`);
