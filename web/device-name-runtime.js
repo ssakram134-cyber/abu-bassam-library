@@ -94,13 +94,23 @@
     return normalizeName(current().name || 'أكرم');
   }
 
+  function loadGlobalFlex() {
+    if (document.getElementById('abuGlobalFlexRuntime') || window.__ABU_GLOBAL_FLEX_V1__) return;
+    const script = document.createElement('script');
+    script.id = 'abuGlobalFlexRuntime';
+    script.src = 'global-flex-runtime.js';
+    (document.head || document.documentElement).appendChild(script);
+  }
+
   window.AbuBassamDevices = { get: current, name: deviceName, ensure: ensureIdentity, heartbeat, list, version: APP_VERSION };
   window.AbuBassamDeviceName = deviceName;
   window.addEventListener('DOMContentLoaded', () => {
     ensureIdentity();
+    loadGlobalFlex();
     setTimeout(heartbeat, 800);
     setInterval(() => { if (document.visibilityState !== 'hidden') heartbeat(); }, 120000);
   });
+  if (document.readyState !== 'loading') loadGlobalFlex();
   window.addEventListener('online', heartbeat);
   document.addEventListener('abu-bassam-auth-changed', heartbeat);
 })();
