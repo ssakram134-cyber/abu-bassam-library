@@ -15,6 +15,10 @@ const required = [
   'secure-sync-runtime.js',
   'device-name-runtime.js',
   'productivity-tools-runtime.js',
+  'questions-templates-runtime.js',
+  'design-studio-runtime.js',
+  'envelopes.html',
+  'certificates.html',
   'questions-ar.html',
   'questions-en.html',
   'image-compressor.html',
@@ -41,7 +45,7 @@ for (const filename of fs.readdirSync(web).filter((name) => name.endsWith('.js')
   }
 }
 
-for (const filename of ['index.html', 'residence-card.html', 'questions-ar.html', 'questions-en.html', 'image-compressor.html']) {
+for (const filename of ['index.html', 'residence-card.html', 'questions-ar.html', 'questions-en.html', 'image-compressor.html', 'envelopes.html', 'certificates.html']) {
   const source = fs.readFileSync(path.join(web, filename), 'utf8');
   const scripts = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
   let match;
@@ -68,19 +72,52 @@ for (const marker of ['tabQuestions', 'tabCompressor', "switchTab('questions')",
 }
 
 const productivityRuntime = fs.readFileSync(path.join(web, 'productivity-tools-runtime.js'), 'utf8');
-for (const marker of ['questions-ar.html', 'questions-en.html', 'image-compressor.html', 'abuPrintQuestion', 'abuSaveQuestionPdf', 'abuCompressionReady']) {
+for (const marker of [
+  'questions-ar.html', 'questions-en.html', 'image-compressor.html',
+  'envelopes.html', 'certificates.html', 'questions-templates-runtime.js',
+  'abuPrintQuestion', 'abuSaveQuestionPdf', 'abuCompressionReady',
+  'abuDesignPrint', 'abuDesignPdf', 'abuDesignSaveImage',
+  'prodModeEnvelope', 'prodModeCertificate'
+]) {
   if (!productivityRuntime.includes(marker)) errors.push(`Missing productivity integration marker: ${marker}`);
 }
 
-const localToolPages = ['questions-ar.html', 'questions-en.html', 'image-compressor.html'];
+const questionTemplates = fs.readFileSync(path.join(web, 'questions-templates-runtime.js'), 'utf8');
+for (const marker of [
+  'math1-','science3-','science4-','islamic-',
+  'نماذج خاصة بالمادة','نماذج عامة','قوالب الأسئلة',
+  'أتعلم — ٢ درجة','أتأكد — ٢ درجة','أتحدث — ٢ درجة','أحل — ٢ درجة','أفكر — ٢ درجة',
+  'الحفظ — ٢ درجة','الحديث الشريف — ٢ درجة','التلاوة — ٢ درجة','العقائد والعبادات — ١ درجة','المعاني — ١ درجة','السيرة — ١ درجة','الآداب الإسلامية — ١ درجة',
+  'abuQuestionHeaderProfileV1','abuQuestionCustomTemplatesV1','MutationObserver',
+  'استبدال','قص حر','قفل/فتح','للأمام','للخلف','redo'
+]) {
+  if (!questionTemplates.includes(marker)) errors.push(`Missing question-template marker: ${marker}`);
+}
+if (!questionTemplates.includes('Array.from({length:3}') || !questionTemplates.includes('makeMathTemplate')) errors.push('Math grade-1 template count marker is missing');
+if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeScienceTemplate(4,i))')) errors.push('Science grade-4 ten-template marker is missing');
+if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeIslamicTemplate(i))')) errors.push('Islamic ten-template marker is missing');
+
+const designStudio = fs.readFileSync(path.join(web, 'design-studio-runtime.js'), 'utf8');
+for (const marker of [
+  'ENVELOPE_PRESETS','CERT_PRESETS','225x115','DL —','C6 —','#10 —',
+  'Array.from({length:10}','Array.from({length:9}',
+  'صناعة الظرف / غلاف الأسئلة','شهادات التقدير','إضافة نماذج',
+  'الوحدة','ملم','سم','saveAsTemplate','applyCrop','replaceImage','front','back','lock',
+  'abuDesignPrint','abuDesignPdf','abuDesignSaveImage'
+]) {
+  if (!designStudio.includes(marker)) errors.push(`Missing design-studio marker: ${marker}`);
+}
+
+const envelopesPage = fs.readFileSync(path.join(web, 'envelopes.html'), 'utf8');
+const certificatesPage = fs.readFileSync(path.join(web, 'certificates.html'), 'utf8');
+if (!envelopesPage.includes('data-studio-mode="envelope"') || !envelopesPage.includes('design-studio-runtime.js')) errors.push('Envelope studio page is not wired');
+if (!certificatesPage.includes('data-studio-mode="certificate"') || !certificatesPage.includes('design-studio-runtime.js')) errors.push('Certificate studio page is not wired');
+
+const localToolPages = ['questions-ar.html', 'questions-en.html', 'image-compressor.html', 'envelopes.html', 'certificates.html'];
 for (const filename of localToolPages) {
   const source = fs.readFileSync(path.join(web, filename), 'utf8');
   if (/(?:src|href)\s*=\s*["']https?:\/\//i.test(source) || /url\(\s*["']?https?:\/\//i.test(source)) {
     errors.push(`${filename} still depends on an external URL`);
-  }
-  if (/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(source)) errors.push(`${filename} contains the previous author or social link`);
-  if (!source.includes('أكرم حاتم الغزالي') && !source.includes('Akram Hatem Al-Ghazali')) {
-    errors.push(`${filename} is missing the approved programmer identity`);
   }
 }
 
@@ -104,9 +141,9 @@ const projectText = fs.readdirSync(web)
 for (const forbidden of ['api.telegram.org/bot', 'service_role', 'sb_secret_', 'BEGIN ' + 'PRIVATE KEY']) {
   if (projectText.includes(forbidden)) errors.push(`Forbidden secret/sender marker found: ${forbidden}`);
 }
-if (/\/rest\/v1\/abu_bassam_sync(?:\?|['"])/.test(projectText)) {
-  errors.push('Legacy anonymous sync endpoint is still referenced');
-}
+if (/\/rest\/v1\/abu_bassam_sync(?:\?|['"])/.test(projectText)) errors.push('Legacy anonymous sync endpoint is still referenced');
+if (/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(projectText)) errors.push('Project contains the previous author or social link');
+if (!projectText.includes('أكرم حاتم الغزالي') && !projectText.includes('Akram Hatem Al-Ghazali')) errors.push('Approved programmer identity is missing');
 
 const app = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
 if (app.android.package !== 'com.abubassam.librarycamera3') errors.push('Unexpected Android package');
@@ -116,4 +153,4 @@ if (errors.length) {
   process.stderr.write(`${errors.join('\n')}\n`);
   process.exit(1);
 }
-process.stdout.write(`Project checks passed (${required.length} required assets).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets, question templates, envelopes and certificates).\n`);
