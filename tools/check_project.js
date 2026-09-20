@@ -16,7 +16,9 @@ const required = [
   'device-name-runtime.js',
   'productivity-tools-runtime.js',
   'questions-templates-runtime.js',
+  'questions-template-tools-runtime.js',
   'questions-paper-runtime.js',
+  'questions-gesture-runtime.js',
   'design-studio-runtime.js',
   'envelopes.html',
   'certificates.html',
@@ -99,8 +101,17 @@ if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeScienceTempla
 if (!questionTemplates.includes('Array.from({length:10},(_,i)=>makeIslamicTemplate(i))')) errors.push('Islamic ten-template marker is missing');
 
 const questionPaper = fs.readFileSync(path.join(web, 'questions-paper-runtime.js'), 'utf8');
-for (const marker of ['A4P','A4L','A5P','A5L','مخصص','abuQuestionPaperSettingsV1','@page','ملم','سم']) {
+for (const marker of ['A4P','A4L','A5P','A5L','مخصص','abuQuestionPaperSettingsV1','@page','ملم','سم','questions-gesture-runtime.js','abuQuestionGestureExternal']) {
   if (!questionPaper.includes(marker)) errors.push(`Missing question-paper marker: ${marker}`);
+}
+
+const questionGestures = fs.readFileSync(path.join(web, 'questions-gesture-runtime.js'), 'utf8');
+for (const marker of [
+  'abuQuestionCanvasZoomV1','MIN_PAPER_ZOOM','MAX_PAPER_ZOOM','MIN_QUESTION_SCALE','MAX_QUESTION_SCALE',
+  'touchstart','touchmove','pointerdown','pointermove','abuMoveX','abuMoveY','abuScale',
+  '✥ نقل','إصبعان على الورقة','scrollIntoView','abu-question-move-mode','@media print'
+]) {
+  if (!questionGestures.includes(marker)) errors.push(`Missing question-gesture marker: ${marker}`);
 }
 
 const designStudio = fs.readFileSync(path.join(web, 'design-studio-runtime.js'), 'utf8');
@@ -159,4 +170,4 @@ if (errors.length) {
   process.stderr.write(`${errors.join('\n')}\n`);
   process.exit(1);
 }
-process.stdout.write(`Project checks passed (${required.length} required assets, question templates, paper sizes, envelopes and certificates).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets, question templates, paper sizes, gestures, envelopes and certificates).\n`);
