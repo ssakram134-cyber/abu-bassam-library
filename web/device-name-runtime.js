@@ -99,16 +99,19 @@
     return normalizeName(current().name || 'جهاز المكتبة');
   }
 
-  function loadScript(id, src, guard) {
-    if (document.getElementById(id) || (guard && window[guard])) return;
+  function loadScript(id, src, guard, onload) {
+    if (document.getElementById(id) || (guard && window[guard])) { if (onload) onload(); return; }
     const script = document.createElement('script');
     script.id = id;
     script.src = src;
+    if (onload) script.onload = onload;
     (document.head || document.documentElement).appendChild(script);
   }
 
   function loadGlobalFlex() { loadScript('abuGlobalFlexRuntime', 'global-flex-runtime.js', '__ABU_GLOBAL_FLEX_V1__'); }
-  function loadSecurity() { loadScript('abuAppSecurityRuntime', 'app-security-runtime.js', '__ABU_APP_SECURITY_V1__'); }
+  function loadPermissionGuard() { loadScript('abuPermissionGuardRuntime', 'permission-guard-runtime.js', '__ABU_PERMISSION_GUARD_V1__'); }
+  function loadSecurityExtras() { loadScript('abuSecurityExtrasRuntime', 'security-extras-runtime.js', '__ABU_SECURITY_EXTRAS_V1__', () => setTimeout(loadPermissionGuard, 20)); }
+  function loadSecurity() { loadScript('abuAppSecurityRuntime', 'app-security-runtime.js', '__ABU_APP_SECURITY_V1__', () => setTimeout(loadSecurityExtras, 20)); }
 
   window.AbuBassamDevices = { get: current, name: deviceName, ensure: ensureIdentity, heartbeat, list, version: APP_VERSION };
   window.AbuBassamDeviceName = deviceName;

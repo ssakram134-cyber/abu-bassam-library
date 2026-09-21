@@ -15,6 +15,8 @@ const required = [
   'secure-sync-runtime.js',
   'device-name-runtime.js',
   'global-flex-runtime.js',
+  'app-security-runtime.js',
+  'security-extras-runtime.js',
   'productivity-tools-runtime.js',
   'questions-templates-runtime.js',
   'questions-template-tools-runtime.js',
@@ -71,8 +73,12 @@ for (const reference of ['supabase-2.58.0.js', 'secure-sync-runtime.js', 'device
 }
 
 const deviceRuntime = fs.readFileSync(path.join(web, 'device-name-runtime.js'), 'utf8');
-for (const marker of ['global-flex-runtime.js', 'abuGlobalFlexRuntime', 'loadGlobalFlex']) {
-  if (!deviceRuntime.includes(marker)) errors.push(`Missing global-flex loader marker: ${marker}`);
+for (const marker of [
+  'global-flex-runtime.js', 'abuGlobalFlexRuntime', 'loadGlobalFlex',
+  'app-security-runtime.js', 'abuAppSecurityRuntime', 'loadSecurity',
+  'security-extras-runtime.js', 'abuSecurityExtrasRuntime', 'loadSecurityExtras'
+]) {
+  if (!deviceRuntime.includes(marker)) errors.push(`Missing device/runtime loader marker: ${marker}`);
 }
 
 const globalFlex = fs.readFileSync(path.join(web, 'global-flex-runtime.js'), 'utf8');
@@ -84,6 +90,47 @@ for (const marker of [
   '@media print','abu-flex-has-zoom','abuFlexSensitivity'
 ]) {
   if (!globalFlex.includes(marker)) errors.push(`Missing global-flex marker: ${marker}`);
+}
+
+const securityRuntime = fs.readFileSync(path.join(web, 'app-security-runtime.js'), 'utf8');
+for (const marker of [
+  'MAIN_USERNAME','akrama1992','MAX_DEVICES=5','abu_bassam_register_device','abu_bassam_touch_device',
+  'abu_bassam_manage_device','abu_bassam_remove_device','SECONDARY_DEFAULT','OWNER_PERMISSIONS',
+  'secureGet','secureSet','biometricStatus','biometricAuth','تسجيل الدخول بالبصمة','قفل الآن',
+  'إدارة الأجهزة (٥)','appearanceSync','PREVIOUS_THEME_KEY','اضغط مرة ثانية للخروج',
+  'AbuBassamNativeBackPress','AbuBassamNativeAppState','AbuBassamNativeSecurityResult',
+  'الرئيسية','abu-focus-mode','OFFLINE_GRACE_MS'
+]) {
+  if (!securityRuntime.includes(marker)) errors.push(`Missing app-security marker: ${marker}`);
+}
+
+const securityExtras = fs.readFileSync(path.join(web, 'security-extras-runtime.js'), 'utf8');
+for (const marker of [
+  'PIN_KEY','abu_bassam_danger_pin_hash_v1','SNAPSHOT_KEY','abuBassamEmergencySnapshotV1',
+  'PRIVACY_KEY','abuBassamPrivacyModeV1','verifyDangerPin','createSnapshot','restoreSnapshot',
+  'safeSnapshot','privacyMode','خصوصية عالية','نقطة أمان','مسح سجل العمليات','removeDevice'
+]) {
+  if (!securityExtras.includes(marker)) errors.push(`Missing security-extras marker: ${marker}`);
+}
+
+const nativeIndex = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+for (const marker of [
+  'expo-local-authentication','expo-secure-store','AppState','SecureStore.getItemAsync','SecureStore.setItemAsync',
+  'LocalAuthentication.authenticateAsync','biometricsSecurityLevel','ANDROID_BRIDGE','security: function','exitApp: function',
+  'AbuBassamNativeBackPress','AbuBassamNativeAppState','BackHandler.exitApp','deviceInfo'
+]) {
+  if (!nativeIndex.includes(marker)) errors.push(`Missing native security/control marker: ${marker}`);
+}
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+for (const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture']) {
+  if (!packageJson.dependencies?.[dep]) errors.push(`Missing native dependency: ${dep}`);
+}
+
+const appConfig = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
+const pluginText = JSON.stringify(appConfig.plugins || []);
+for (const plugin of ['expo-local-authentication','expo-secure-store']) {
+  if (!pluginText.includes(plugin)) errors.push(`Missing Expo security plugin: ${plugin}`);
 }
 
 const nationalRuntime = fs.readFileSync(path.join(web, 'national-id-runtime.js'), 'utf8');
@@ -184,12 +231,11 @@ if (/\/rest\/v1\/abu_bassam_sync(?:\?|['"])/.test(projectText)) errors.push('Leg
 if (/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(projectText)) errors.push('Project contains the previous author or social link');
 if (!projectText.includes('أكرم حاتم الغزالي') && !projectText.includes('Akram Hatem Al-Ghazali')) errors.push('Approved programmer identity is missing');
 
-const app = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
-if (app.android.package !== 'com.abubassam.librarycamera3') errors.push('Unexpected Android package');
-if (app.version !== '4.3.2' || app.android.versionCode !== 432) errors.push('Unexpected version metadata');
+if (appConfig.android.package !== 'com.abubassam.librarycamera3') errors.push('Unexpected Android package');
+if (appConfig.version !== '4.3.2' || appConfig.android.versionCode !== 432) errors.push('Unexpected version metadata');
 
 if (errors.length) {
   process.stderr.write(`${errors.join('\n')}\n`);
   process.exit(1);
 }
-process.stdout.write(`Project checks passed (${required.length} required assets, global flex, question templates, paper sizes, gestures, envelopes and certificates).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets, security, recovery/privacy extras, biometrics, device roles, app controls, global flex, question templates, paper sizes, gestures, envelopes and certificates).\n`);

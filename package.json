@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "android:prebuild": "expo prebuild --platform android --clean && npm run assets:android",
     "assets:android": "node scripts/prepare-android-assets.mjs",
-    "check:web": "node tools/check_project.js",
+    "check:web": "node tools/check_project.js && node tools/check_security_controls.js",
     "ios": "expo run:ios"
   },
   "engines": {
@@ -20,6 +20,7 @@
     "expo-file-system": "19.0.24",
     "expo-local-authentication": "~17.0.9",
     "expo-print": "15.0.8",
+    "expo-screen-capture": "~8.0.10",
     "expo-secure-store": "~15.0.8",
     "expo-sharing": "14.0.8",
     "react": "19.1.0",
