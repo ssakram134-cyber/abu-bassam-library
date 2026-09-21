@@ -29,7 +29,7 @@ for(const section of ['personal','child','login','wifi','qr','ration','mawkib','
 for(const m of ["addCardTool(types,'envelope'","envelope:{title:"])forbid(recovery,m,'feature-recovery-runtime.js');
 
 const library=read('card-template-library.js');
-for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','شهادات التقدير','child-clouds','child-future','cert-10'])need(library,m,'card-template-library.js');
+for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','شهادات التقدير','child-clouds','child-future','cert-10','الوسام المركزي','الترويسة الأكاديمية','اللوحة الهندسية'])need(library,m,'card-template-library.js');
 forbid(library,"id:'envelope'",'card-template-library.js');
 const groupCount=id=>{const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`));return m?(m[1].match(/\{id:/g)||[]).length:0};
 for(const id of ['personal','login','wifi','qr'])if(groupCount(id)!==1)errors.push(`${id} templates: expected 1 original, got ${groupCount(id)}`);
@@ -47,6 +47,9 @@ const strict=read('strict-workflow-runtime.js');
 for(const m of ['abu-fold-btn','abu-child-collapsed','RATION_CSS','MAWKIB_CSS','.t10#front','.t4#front','foldIframeSection','المعلومات والبيانات','الطباعة والتصدير','certificates.html'])need(strict,m,'strict-workflow-runtime.js');
 const rationLayoutCount=(strict.match(/\.t\d+#front/g)||[]).length;if(rationLayoutCount<9)errors.push(`strict-workflow-runtime.js: insufficient ration layout variants (${rationLayoutCount})`);
 
+const thanks=read('thanks-letter.html');
+for(const m of ['1 — الإطار الملكي','2 — الشريط الجانبي','3 — الوسام المركزي','4 — الترويسة الأكاديمية','5 — اللوحة الهندسية','6 — الرسمي المبسط','.t2:before{inset:0 auto 0 0','.t3 .title{display:inline-block','.t4:before{inset:0 0 auto 0','.t5:before{inset:auto -120px','.t6 .title{text-align:right'])need(thanks,m,'thanks-letter.html real layouts');
+
 const qtypes=read('question-type-runtime.js');
 for(const m of ['blanks','brackets','definitions','enumeration','points','multiple','truefalse','short','المستوى السهل','المستوى المتوسط','المستوى الصعب','التسلسل','الحفظ','الحديث الشريف','التلاوة','العقائد والعبادات','المعاني','السيرة','الآداب الإسلامية','abu-qtype-select'])need(qtypes,m,'question-type-runtime.js');
 
@@ -62,7 +65,7 @@ for(const m of ['رقم هاتف ولي الأمر','روضة أطفال الق�
 const ration=read('ration-card.html');for(const m of ['رقم البطاقة التموينية','renderQr(q(\'rationNumber\').value)','CR80 — كارت مباشر','حفظ الوجه والظهر'])need(ration,m,'ration-card.html');
 const mawkib=read('mawkib-cards.html');for(const m of ['اسم المسؤول','رقم الهاتف','qrcode_UTF8.js','حفظ PDF'])need(mawkib,m,'mawkib-cards.html');
 
-const reconcile=read('device-reconcile-runtime.js');for(const m of ['dedupe(rows)','CURRENT_ID','هذا الجهاز','abu_bassam_devices','onSessionChanged'])need(reconcile,m,'device-reconcile-runtime.js');
+const reconcile=read('device-reconcile-runtime.js');for(const m of ['dedupe(rows)','CURRENT_ID','displayName(row)','هذا الجهاز','تسمية الجهاز','abu_bassam_devices','onSessionChanged'])need(reconcile,m,'device-reconcile-runtime.js');
 const migration=fs.readFileSync(path.join(root,'supabase','migrations','202609210001_device_reconciliation.sql'),'utf8');
 for(const m of ['abu_bassam_register_device','abu_bassam_touch_device','abu_bassam_manage_device','role=\'owner\'','30 days','DEVICE_LIMIT_REACHED','unique index'])need(migration,m,'device migration');
 
@@ -71,4 +74,4 @@ for(const file of ['feature-recovery-runtime.js','child-card-templates-runtime.j
 }
 for(const file of ['card-templates-v2.html','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html']){const source=read(file),scripts=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;let match,index=0;while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${file}#${index}`})}catch(error){errors.push(`${file} inline script ${index}: ${error.message}`)}}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Strict canonical audit passed: real section-specific templates, compact foldable card UI, certificates in Cards, envelopes in Questions & Envelopes, per-question type controls, subject-specific science/Islamic fields, and device reconciliation.\n');
+process.stdout.write('Strict canonical audit passed: real section-specific templates (including six real thanks-letter layouts), compact foldable card UI, certificates in Cards, envelopes in Questions & Envelopes, per-question type controls, subject-specific science/Islamic fields, and reconciled real-device naming.\n');
