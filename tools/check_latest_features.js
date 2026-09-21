@@ -23,7 +23,7 @@ need(gestures, 'restoreNativeTouch', 'questions-gesture-runtime.js');
 
 const recovery = read('feature-recovery-runtime.js');
 for (const marker of [
-  '#abuControlDock','.abu-control-dock','.top-actions{top:54px','abuCardsTemplatesBtn',
+  '#abuControlDock','.abu-control-dock','.top-actions{top:76px','.top-actions .icon-btn,.top-actions button{width:52px','font-size:24px','abuCardsTemplatesBtn',
   "addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'thanks'",
   'ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','removeOldPlacements','recoveryMessage',
   "$('prodModeEnvelope')?.remove()","$('prodPaneEnvelope')?.remove()"
@@ -70,4 +70,4 @@ if (errors.length) {
   process.stderr.write(errors.join('\n') + '\n');
   process.exit(1);
 }
-process.stdout.write('Latest UX/features checks passed (native touch, hidden bottom dock, lowered header controls, and agreed tools grouped inside Barcode & Cards only).\n');
+process.stdout.write('Latest UX/features checks passed (native touch, hidden bottom dock, lowered and enlarged header controls, and agreed tools grouped inside Barcode & Cards only).\n');
