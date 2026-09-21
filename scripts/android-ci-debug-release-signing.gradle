@@ -1,0 +1,10 @@
+android {
+    buildTypes {
+        release {
+            // CI fallback only: keep the Release variant (so React Native bundles JS
+            // into the APK) but sign it with the generated project's stable debug key
+            // when no production keystore is configured.
+            signingConfig signingConfigs.debug
+        }
+    }
+}
