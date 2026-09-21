@@ -23,8 +23,9 @@
   function loadDeviceReconcile(){loadScript('abuDeviceReconcileRuntime','device-reconcile-runtime.js','__ABU_DEVICE_RECONCILE_V1__')}
   function loadPermissionGuard(){loadScript('abuPermissionGuardRuntime','permission-guard-runtime.js','__ABU_PERMISSION_GUARD_V1__')}
   function loadLoginThrottleFix(){loadScript('abuLoginThrottleFixRuntime','login-throttle-fix-runtime.js','__ABU_LOGIN_THROTTLE_FIX_V1__')}
-  function loadSecurityExtras(){loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__',()=>{setTimeout(loadPermissionGuard,20);setTimeout(loadLoginThrottleFix,35)})}
-  function loadSecurity(){loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40)})}
+  function loadLoginInputDirection(){loadScript('abuLoginInputDirectionRuntime','login-input-direction-runtime.js','__ABU_LOGIN_INPUT_DIRECTION_V1__')}
+  function loadSecurityExtras(){loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__',()=>{setTimeout(loadPermissionGuard,20);setTimeout(loadLoginThrottleFix,35);setTimeout(loadLoginInputDirection,45)})}
+  function loadSecurity(){loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40);setTimeout(loadLoginInputDirection,50)})}
   function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadSecurity()}
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
