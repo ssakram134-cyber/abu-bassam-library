@@ -61,9 +61,11 @@ if (groupCount('envelope') !== 9) errors.push(`envelope templates: expected 9, g
 if (groupCount('thanks') !== 6) errors.push(`thanks templates: expected 6, got ${groupCount('thanks')}`);
 
 const childTemplates = read('child-card-templates-runtime.js');
-for (const marker of ['__ABU_CHILD_TEMPLATES_V1__','AbuBassamChildTemplates','child-clouds','child-hearts','child-nature','child-space','child-rainbow','child-garden','child-shapes','child-balloons','child-board','child-future','templateCss','installPicker','AbuBassamTypography.printCss','CardsStudio.selectType','رقم هاتف ولي الأمر']) need(childTemplates, marker, 'child-card-templates-runtime.js');
+for (const marker of ['__ABU_CHILD_TEMPLATES_V1__','AbuBassamChildTemplates','child-clouds','child-hearts','child-nature','child-space','child-rainbow','child-garden','child-shapes','child-balloons','child-board','child-future','templateCss','installPicker','AbuBassamTypography.printCss','CardsStudio.selectType']) need(childTemplates, marker, 'child-card-templates-runtime.js');
 const childTemplateIds = childTemplates.match(/id:'child-[a-z]+'/g) || [];
 if (new Set(childTemplateIds).size !== 10) errors.push(`child-card-templates-runtime.js: expected 10 unique templates, got ${new Set(childTemplateIds).size}`);
+const cardsStudio = read('cards-studio-runtime.js');
+for (const marker of ['رقم هاتف ولي الأمر','childInstitution(data)',"data.institutionType==='school'",'روضة أطفال القادسية']) need(cardsStudio, marker, 'cards-studio-runtime.js child fields');
 
 const ration = read('ration-card.html');
 for (const marker of ['البطاقة التموينية','اسم رب العائلة','رقم البطاقة التموينية','ملاحظة أسفل الكارت','85.6 × 54','CR80 — كارت مباشر','A4 — الوجه والظهر','value="t10"',"renderQr(q('rationNumber').value)",'يحتوي الباركود على رقم البطاقة التموينية فقط','حفظ PDF','حفظ الوجه والظهر','localStorage']) need(ration, marker, 'ration-card.html');
