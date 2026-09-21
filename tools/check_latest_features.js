@@ -7,15 +7,14 @@ const web = path.join(root, 'web');
 const errors = [];
 const read = (name) => fs.readFileSync(path.join(web, name), 'utf8');
 const need = (source, marker, label) => { if (!source.includes(marker)) errors.push(`${label}: missing ${marker}`); };
+const forbid = (source, marker, label) => { if (source.includes(marker)) errors.push(`${label}: forbidden ${marker}`); };
 
 for (const file of ['feature-recovery-runtime.js','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html','envelope-agreement-runtime.js']) {
   if (!fs.existsSync(path.join(web, file))) errors.push(`Missing latest feature asset: ${file}`);
 }
 
 const device = read('device-name-runtime.js');
-if (/function\s+loadGlobalFlex\s*\(/.test(device) || /(^|[^\w])loadGlobalFlex\s*\(\s*\)\s*;/m.test(device)) {
-  errors.push('Global flex runtime is still actively loaded');
-}
+if (/function\s+loadGlobalFlex\s*\(/.test(device) || /(^|[^\w])loadGlobalFlex\s*\(\s*\)\s*;/m.test(device)) errors.push('Global flex runtime is still actively loaded');
 need(device, 'feature-recovery-runtime.js', 'device-name-runtime.js');
 
 const gestures = read('questions-gesture-runtime.js');
@@ -25,12 +24,14 @@ need(gestures, 'restoreNativeTouch', 'questions-gesture-runtime.js');
 const recovery = read('feature-recovery-runtime.js');
 for (const marker of [
   '#abuControlDock','.abu-control-dock','.top-actions{top:54px','abuCardsTemplatesBtn',
-  'البطاقة التموينية','ration-card.html','كارت المواكب','صناعة الأظرف','كتاب الشكر والتقدير','mawkib-cards.html','thanks-letter.html',
-  'removeFlex','cleanQuestions','tabEnvelopes','tabThanks'
+  "addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'thanks'",
+  'ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','removeOldPlacements','recoveryMessage',
+  "$('prodModeEnvelope')?.remove()","$('prodPaneEnvelope')?.remove()"
 ]) need(recovery, marker, 'feature-recovery-runtime.js');
+for (const marker of ["b.id='tabEnvelopes'","b.id='tabThanks'","p.id='prodPaneThanks'"]) forbid(recovery, marker, 'feature-recovery-runtime.js');
 
 const cards = read('card-templates.html');
-for (const marker of ['نماذج الباجات والكروت','البطاقة التموينية','ration-card.html','كروت المواكب الحسينية','الباج التعريفي','باج الروضة والمدرسة']) need(cards, marker, 'card-templates.html');
+for (const marker of ['نماذج الباجات والكروت','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف','الشكر والتقدير','ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','الباج التعريفي','باج الروضة والمدرسة']) need(cards, marker, 'card-templates.html');
 
 const ration = read('ration-card.html');
 for (const marker of [
@@ -56,8 +57,7 @@ for (const file of ['feature-recovery-runtime.js','envelope-agreement-runtime.js
 for (const file of ['card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html']) {
   const source = read(file);
   const scripts = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
-  let match;
-  let index = 0;
+  let match, index = 0;
   while ((match = scripts.exec(source))) {
     index += 1;
     if (!match[1].trim()) continue;
@@ -70,4 +70,4 @@ if (errors.length) {
   process.stderr.write(errors.join('\n') + '\n');
   process.exit(1);
 }
-process.stdout.write('Latest UX/features checks passed (native touch, no flex loader, hidden bottom dock, lowered header controls, card templates, ration card, procession cards, envelope agreement fields, thanks letters).\n');
+process.stdout.write('Latest UX/features checks passed (native touch, hidden bottom dock, lowered header controls, and agreed tools grouped inside Barcode & Cards only).\n');
