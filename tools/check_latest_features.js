@@ -5,12 +5,12 @@ const root=path.resolve(__dirname,'..'),web=path.join(root,'web'),errors=[];
 const read=name=>fs.readFileSync(path.join(web,name),'utf8');
 const need=(src,m,label)=>{if(!src.includes(m))errors.push(`${label}: missing ${m}`)};
 const forbid=(src,m,label)=>{if(src.includes(m))errors.push(`${label}: forbidden ${m}`)};
-const required=['feature-recovery-runtime.js','child-card-templates-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','question-type-runtime.js','envelope-preload-runtime.js','envelope-tools-runtime.js','card-templates-v2.html','card-template-library.js','ration-card.html','mawkib-cards.html','thanks-letter.html','certificates.html','envelopes.html','envelope-agreement-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js'];
+const required=['feature-recovery-runtime.js','child-card-templates-runtime.js','card-models-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','question-type-runtime.js','envelope-preload-runtime.js','envelope-tools-runtime.js','card-templates-v2.html','card-template-library.js','ration-card.html','mawkib-cards.html','thanks-letter.html','certificates.html','envelopes.html','envelope-agreement-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js'];
 required.forEach(file=>{if(!fs.existsSync(path.join(web,file)))errors.push(`Missing latest feature asset: ${file}`)});
 
 const device=read('device-name-runtime.js');
 for(const m of ['global-flex-runtime.js','loadGlobalFlex'])forbid(device,m,'device-name-runtime.js');
-for(const m of ['feature-recovery-runtime.js','child-card-templates-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js'])need(device,m,'device-name-runtime.js');
+for(const m of ['feature-recovery-runtime.js','child-card-templates-runtime.js','card-models-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js'])need(device,m,'device-name-runtime.js');
 
 const gestures=read('questions-gesture-runtime.js');
 need(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','questions-gesture-runtime.js');
@@ -29,23 +29,21 @@ for(const section of ['personal','child','login','wifi','qr','ration','mawkib','
 for(const m of ["addCardTool(types,'envelope'","envelope:{title:"])forbid(recovery,m,'feature-recovery-runtime.js');
 
 const library=read('card-template-library.js');
-for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','شهادات التقدير','child-clouds','child-future','cert-10','الوسام المركزي','الترويسة الأكاديمية','اللوحة الهندسية'])need(library,m,'card-template-library.js');
+for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','شهادات التقدير','personal-5','child-future','login-10','wifi-3','qr-4','cert-10','t10'])need(library,m,'card-template-library.js');
 forbid(library,"id:'envelope'",'card-template-library.js');
 const groupCount=id=>{const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`));return m?(m[1].match(/\{id:/g)||[]).length:0};
-for(const id of ['personal','login','wifi','qr'])if(groupCount(id)!==1)errors.push(`${id} templates: expected 1 original, got ${groupCount(id)}`);
-if(groupCount('child')!==10)errors.push(`child templates: expected 10, got ${groupCount('child')}`);
-if(groupCount('ration')!==10)errors.push(`ration templates: expected 10, got ${groupCount('ration')}`);
-if(groupCount('mawkib')!==4)errors.push(`mawkib templates: expected 4, got ${groupCount('mawkib')}`);
-if(groupCount('certificate')!==10)errors.push(`certificate templates: expected 10, got ${groupCount('certificate')}`);
-if(groupCount('thanks')!==6)errors.push(`thanks templates: expected 6, got ${groupCount('thanks')}`);
+for(const [id,count] of [['personal',5],['child',10],['login',10],['wifi',3],['qr',4],['ration',1],['mawkib',10],['certificate',10],['thanks',6]])if(groupCount(id)!==count)errors.push(`${id} templates: expected ${count}, got ${groupCount(id)}`);
 
 const child=read('child-card-templates-runtime.js');
 for(const m of ['child-clouds','child-hearts','child-nature','child-space','child-rainbow','child-garden','child-shapes','child-balloons','child-board','child-future','templateCss','installPicker'])need(child,m,'child-card-templates-runtime.js');
 const ids=child.match(/id:'child-[a-z]+'/g)||[];if(new Set(ids).size!==10)errors.push(`child templates expected 10 unique, got ${new Set(ids).size}`);
+const cardModels=read('card-models-runtime.js');
+for(const m of ['personal-5','login-10','wifi-3','qr-4','cssPersonal','cssLogin','cssWifi','cssQr','AbuBassamCardModels','printCss'])need(cardModels,m,'card-models-runtime.js');
+const standaloneModels=read('standalone-card-models-runtime.js');
+for(const m of ['MAWKIB_EXTRA_CSS','t5#front','t6#front','t7#front','t8#front','t9#front','t10#front','ration(doc)','o.value!==\'t1\'','mawkib(doc,win)'])need(standaloneModels,m,'standalone-card-models-runtime.js');
 
 const strict=read('strict-workflow-runtime.js');
-for(const m of ['abu-fold-btn','abu-child-collapsed','RATION_CSS','MAWKIB_CSS','.t10#front','.t4#front','foldIframeSection','المعلومات والبيانات','الطباعة والتصدير','certificates.html'])need(strict,m,'strict-workflow-runtime.js');
-const rationLayoutCount=(strict.match(/\.t\d+#front/g)||[]).length;if(rationLayoutCount<9)errors.push(`strict-workflow-runtime.js: insufficient ration layout variants (${rationLayoutCount})`);
+for(const m of ['abu-fold-btn','abu-child-collapsed','RATION_CSS','MAWKIB_CSS','foldIframeSection','المعلومات والبيانات','الطباعة والتصدير','certificates.html'])need(strict,m,'strict-workflow-runtime.js');
 const standaloneFold=read('standalone-fold-runtime.js');
 for(const m of ['__ABU_STANDALONE_FOLD_V1__','foldTemplate','foldThanksExport','النماذج','الطباعة والتصدير','ration-card.html','mawkib-cards.html','thanks-letter.html'])need(standaloneFold,m,'standalone-fold-runtime.js');
 
@@ -71,9 +69,9 @@ const reconcile=read('device-reconcile-runtime.js');for(const m of ['dedupe(rows
 const migration=fs.readFileSync(path.join(root,'supabase','migrations','202609210001_device_reconciliation.sql'),'utf8');
 for(const m of ['abu_bassam_register_device','abu_bassam_touch_device','abu_bassam_manage_device','role=\'owner\'','30 days','DEVICE_LIMIT_REACHED','unique index'])need(migration,m,'device migration');
 
-for(const file of ['feature-recovery-runtime.js','child-card-templates-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','question-type-runtime.js','envelope-preload-runtime.js','envelope-tools-runtime.js','envelope-agreement-runtime.js','card-template-library.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js']){
+for(const file of ['feature-recovery-runtime.js','child-card-templates-runtime.js','card-models-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','question-type-runtime.js','envelope-preload-runtime.js','envelope-tools-runtime.js','envelope-agreement-runtime.js','card-template-library.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js']){
  try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
 }
 for(const file of ['card-templates-v2.html','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html']){const source=read(file),scripts=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;let match,index=0;while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${file}#${index}`})}catch(error){errors.push(`${file} inline script ${index}: ${error.message}`)}}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Strict canonical audit passed: real section-specific templates (including six real thanks-letter layouts), compact foldable controls, envelope pages preserve their chosen size, certificates in Cards, envelopes in Questions & Envelopes, per-question type controls, subject-specific science/Islamic fields, and reconciled real-device naming.\n');
+process.stdout.write('Strict canonical audit passed: exact agreed model counts (personal 5, child 10, login 10, Wi-Fi 3, QR 4, ration 1, mawkib 10, certificates 10), real layout runtimes, foldable controls, Questions & Envelopes, and device reconciliation.\n');
