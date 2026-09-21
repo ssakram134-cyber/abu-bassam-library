@@ -53,10 +53,9 @@ jobs:
           CI: "1"
         run: npm run android:prebuild
 
-      - name: Build standalone CI APK
-        if: ${{ env.HAS_ANDROID_RELEASE_KEY != 'true' }}
+      - name: Build installable test APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Configure existing release key
         if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
@@ -77,12 +76,26 @@ jobs:
           ANDROID_KEYSTORE_TYPE: PKCS12
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Prepare distributable APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ] && ls android/app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+            cp "$(ls android/app/build/outputs/apk/release/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
+            printf 'signed-release\n' > dist/BUILD_TYPE.txt
+          else
+            cp "$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
+            printf 'installable-debug\n' > dist/BUILD_TYPE.txt
+          fi
+          test -s dist/Abu_Bassam_Library_4.3.2.apk
+          ls -lh dist/Abu_Bassam_Library_4.3.2.apk
+
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: abu-bassam-android-${{ github.sha }}
           path: |
-            android/app/build/outputs/apk/debug/*.apk
-            android/app/build/outputs/apk/release/*.apk
+            dist/Abu_Bassam_Library_4.3.2.apk
+            dist/BUILD_TYPE.txt
           if-no-files-found: error
           retention-days: 14
