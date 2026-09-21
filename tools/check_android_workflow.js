@@ -4,6 +4,8 @@ const root=path.resolve(__dirname,'..');
 const file=path.join(root,'.github','workflows','android.yml');
 const source=fs.readFileSync(file,'utf8');
 const required=[
+  'permissions:\n  contents: read',
+  'npm ci --no-audit --no-fund',
   'Build standalone APK with embedded JS bundle',
   './gradlew assembleRelease --no-daemon',
   'Verify standalone APK contains React Native bundle',
@@ -11,21 +13,21 @@ const required=[
   'apksigner',
   'Prepare distributable APK',
   'dist/Abu_Bassam_Library_4.3.2.apk',
-  'Upload APK artifacts'
+  'sha256sum dist/Abu_Bassam_Library_4.3.2.apk',
+  'Upload APK artifacts',
+  'retention-days: 14'
 ];
 const missing=required.filter(marker=>!source.includes(marker));
-if(missing.length){
-  process.stderr.write('Android workflow missing standalone APK safeguards:\n'+missing.map(x=>'- '+x).join('\n')+'\n');
-  process.exit(1);
-}
+if(missing.length){process.stderr.write('Android workflow missing safeguards:\n'+missing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 const forbidden=[
   './gradlew assembleDebug --no-daemon',
   'android/app/build/outputs/apk/debug/',
-  'installable-debug'
+  'installable-debug',
+  'contents: write',
+  'git push',
+  'Synchronize package lock',
+  'npm install --no-audit --no-fund'
 ];
 const bad=forbidden.filter(marker=>source.includes(marker));
-if(bad.length){
-  process.stderr.write('Android workflow still permits Metro-dependent debug APK output:\n'+bad.map(x=>'- '+x).join('\n')+'\n');
-  process.exit(1);
-}
-process.stdout.write('Android workflow check passed: distributable APK must be release-mode, signed, and contain assets/index.android.bundle.\n');
+if(bad.length){process.stderr.write('Android workflow contains unsafe/non-reproducible behavior:\n'+bad.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
+process.stdout.write('Android workflow check passed: read-only CI, locked dependencies, standalone release bundle, APK signature verification, SHA-256, and no repository self-mutation.\n');
