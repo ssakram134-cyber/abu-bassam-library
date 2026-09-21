@@ -108,7 +108,7 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
-  function loadGlobalFlex() { loadScript('abuGlobalFlexRuntime', 'global-flex-runtime.js', '__ABU_GLOBAL_FLEX_V1__'); }
+  function loadFeatureRecovery() { loadScript('abuFeatureRecoveryRuntime', 'feature-recovery-runtime.js', '__ABU_FEATURE_RECOVERY_V1__'); }
   function loadPermissionGuard() { loadScript('abuPermissionGuardRuntime', 'permission-guard-runtime.js', '__ABU_PERMISSION_GUARD_V1__'); }
   function loadSecurityExtras() { loadScript('abuSecurityExtrasRuntime', 'security-extras-runtime.js', '__ABU_SECURITY_EXTRAS_V1__', () => setTimeout(loadPermissionGuard, 20)); }
   function loadSecurity() { loadScript('abuAppSecurityRuntime', 'app-security-runtime.js', '__ABU_APP_SECURITY_V1__', () => setTimeout(loadSecurityExtras, 20)); }
@@ -117,12 +117,12 @@
   window.AbuBassamDeviceName = deviceName;
   window.addEventListener('DOMContentLoaded', () => {
     ensureIdentity();
-    loadGlobalFlex();
+    loadFeatureRecovery();
     loadSecurity();
     setTimeout(heartbeat, 800);
     setInterval(() => { if (document.visibilityState !== 'hidden') heartbeat(); }, 120000);
   });
-  if (document.readyState !== 'loading') { loadGlobalFlex(); loadSecurity(); }
+  if (document.readyState !== 'loading') { loadFeatureRecovery(); loadSecurity(); }
   window.addEventListener('online', heartbeat);
   document.addEventListener('abu-bassam-auth-changed', () => { heartbeat(); window.AbuBassamSecurity?.onSessionChanged?.(); });
 })();
