@@ -9,7 +9,7 @@ const read = (name) => fs.readFileSync(path.join(web, name), 'utf8');
 const need = (source, marker, label) => { if (!source.includes(marker)) errors.push(`${label}: missing ${marker}`); };
 const forbid = (source, marker, label) => { if (source.includes(marker)) errors.push(`${label}: forbidden ${marker}`); };
 
-for (const file of ['feature-recovery-runtime.js','card-templates-v2.html','card-template-library.js','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html','envelope-agreement-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js']) {
+for (const file of ['feature-recovery-runtime.js','child-card-templates-runtime.js','card-templates-v2.html','card-template-library.js','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html','envelope-agreement-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js']) {
   if (!fs.existsSync(path.join(web, file))) errors.push(`Missing latest feature asset: ${file}`);
 }
 
@@ -17,6 +17,7 @@ const device = read('device-name-runtime.js');
 forbid(device, 'global-flex-runtime.js', 'device-name-runtime.js');
 forbid(device, 'loadGlobalFlex', 'device-name-runtime.js');
 need(device, 'feature-recovery-runtime.js', 'device-name-runtime.js');
+need(device, 'child-card-templates-runtime.js', 'device-name-runtime.js');
 
 const gestures = read('questions-gesture-runtime.js');
 need(gestures, '__ABU_QUESTION_GESTURES_DISABLED__', 'questions-gesture-runtime.js');
@@ -45,18 +46,24 @@ for (const section of ['personal','child','login','wifi','qr','ration','mawkib',
 for (const marker of ["b.id='tabEnvelopes'","b.id='tabThanks'","p.id='prodPaneThanks'"]) forbid(recovery, marker, 'feature-recovery-runtime.js');
 
 const catalog = read('card-templates-v2.html');
-for (const marker of ['جميع النماذج المتفق عليها','card-template-library.js','كل قسم يعرض نماذجه الخاصة فقط','class="model"','openRoute','requestedSection','selectedGroup','visibleLib','هذه النماذج تخص هذا القسم فقط']) need(catalog, marker, 'card-templates-v2.html');
+for (const marker of ['جميع النماذج المتفق عليها','card-template-library.js','كل قسم يعرض نماذجه الخاصة فقط','class="model"','openRoute','requestedSection','selectedGroup','visibleLib','هذه النماذج تخص هذا القسم فقط','choose(type,model)','AbuBassamChildTemplates']) need(catalog, marker, 'card-templates-v2.html');
 const legacyCatalog = read('card-templates.html');
 need(legacyCatalog, 'card-templates-v2.html', 'card-templates.html');
 
 const library = read('card-template-library.js');
-for (const marker of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','بطاقة تسجيل الدخول / الإيميل','كارت Wi‑Fi','تكوين QR','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','env-9','t10']) need(library, marker, 'card-template-library.js');
+for (const marker of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','بطاقة تسجيل الدخول / الإيميل','كارت Wi‑Fi','تكوين QR','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','child-clouds','child-future','env-9','t10']) need(library, marker, 'card-template-library.js');
 const groupCount = id => { const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`)); return m ? (m[1].match(/\{id:/g)||[]).length : 0; };
-for (const id of ['personal','child','login','wifi','qr']) if (groupCount(id) !== 1) errors.push(`${id} templates: expected approved original model only, got ${groupCount(id)}`);
+for (const id of ['personal','login','wifi','qr']) if (groupCount(id) !== 1) errors.push(`${id} templates: expected approved original model only, got ${groupCount(id)}`);
+if (groupCount('child') !== 10) errors.push(`child templates: expected 10 real models, got ${groupCount('child')}`);
 if (groupCount('ration') !== 10) errors.push(`ration templates: expected 10, got ${groupCount('ration')}`);
 if (groupCount('mawkib') !== 4) errors.push(`mawkib templates: expected 4, got ${groupCount('mawkib')}`);
 if (groupCount('envelope') !== 9) errors.push(`envelope templates: expected 9, got ${groupCount('envelope')}`);
 if (groupCount('thanks') !== 6) errors.push(`thanks templates: expected 6, got ${groupCount('thanks')}`);
+
+const childTemplates = read('child-card-templates-runtime.js');
+for (const marker of ['__ABU_CHILD_TEMPLATES_V1__','AbuBassamChildTemplates','child-clouds','child-hearts','child-nature','child-space','child-rainbow','child-garden','child-shapes','child-balloons','child-board','child-future','templateCss','installPicker','AbuBassamTypography.printCss','CardsStudio.selectType','رقم هاتف ولي الأمر']) need(childTemplates, marker, 'child-card-templates-runtime.js');
+const childTemplateIds = childTemplates.match(/id:'child-[a-z]+'/g) || [];
+if (new Set(childTemplateIds).size !== 10) errors.push(`child-card-templates-runtime.js: expected 10 unique templates, got ${new Set(childTemplateIds).size}`);
 
 const ration = read('ration-card.html');
 for (const marker of ['البطاقة التموينية','اسم رب العائلة','رقم البطاقة التموينية','ملاحظة أسفل الكارت','85.6 × 54','CR80 — كارت مباشر','A4 — الوجه والظهر','value="t10"',"renderQr(q('rationNumber').value)",'يحتوي الباركود على رقم البطاقة التموينية فقط','حفظ PDF','حفظ الوجه والظهر','localStorage']) need(ration, marker, 'ration-card.html');
@@ -69,7 +76,7 @@ for (const marker of ['data-studio-mode="envelope"','design-studio-runtime.js','
 const envelopeAgreement = read('envelope-agreement-runtime.js');
 for (const marker of ['التاريخ:','اليوم:','ورق A5 — غلاف فقط','ورق A4 — غلاف فقط','ليست أظرفًا قياسية','DesignStudio.addText','__ABU_ENVELOPE_AGREEMENT_V1__']) need(envelopeAgreement, marker, 'envelope-agreement-runtime.js');
 
-for (const file of ['feature-recovery-runtime.js','envelope-agreement-runtime.js','card-template-library.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js']) {
+for (const file of ['feature-recovery-runtime.js','child-card-templates-runtime.js','envelope-agreement-runtime.js','card-template-library.js','questions-paper-runtime.js','questions-gesture-runtime.js','productivity-tools-runtime.js','device-name-runtime.js']) {
   try { new vm.Script(read(file), { filename: file }); }
   catch (error) { errors.push(`${file}: ${error.message}`); }
 }
@@ -79,4 +86,4 @@ for (const file of ['card-templates-v2.html','card-templates.html','ration-card.
 }
 
 if (errors.length) { process.stderr.write(errors.join('\n') + '\n'); process.exit(1); }
-process.stdout.write('Canonical audit checks passed: native question touch, no flex loader, per-section templates buttons for every approved badge/card section, filtered section catalogs, envelopes/thanks grouped in Barcode & Cards, complete agreed model counts, and non-overlapping mobile controls.\n');
+process.stdout.write('Canonical audit checks passed: native question touch, no flex loader, 10 real kindergarten/school badge layouts, per-section template buttons, filtered section catalogs, envelopes/thanks grouped in Barcode & Cards, complete agreed model counts, and non-overlapping mobile controls.\n');
