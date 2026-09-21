@@ -53,10 +53,6 @@ jobs:
           CI: "1"
         run: npm run android:prebuild
 
-      - name: Build installable test APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-
       - name: Configure existing release key
         if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
         env:
@@ -65,8 +61,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.p12
           printf '\napply from: file("../../scripts/android-release-signing.gradle")\n' >> android/app/build.gradle
 
-      - name: Build signed release APK
-        if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
+      - name: Build standalone APK with embedded JS bundle
         working-directory: android
         env:
           ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/android/app/release-key.p12
@@ -76,18 +71,32 @@ jobs:
           ANDROID_KEYSTORE_TYPE: PKCS12
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Verify standalone APK contains React Native bundle
+        shell: bash
+        run: |
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
+          test -n "$APK"
+          test -s "$APK"
+          unzip -l "$APK" | grep -q 'assets/index.android.bundle'
+          BUNDLE_SIZE="$(unzip -p "$APK" assets/index.android.bundle | wc -c)"
+          test "$BUNDLE_SIZE" -gt 1000
+          echo "Embedded JS bundle size: $BUNDLE_SIZE bytes"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$BUILD_TOOLS/apksigner" verify "$APK"
+
       - name: Prepare distributable APK
         shell: bash
         run: |
           mkdir -p dist
-          if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ] && ls android/app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
-            cp "$(ls android/app/build/outputs/apk/release/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
-            printf 'signed-release\n' > dist/BUILD_TYPE.txt
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
+          cp "$APK" "dist/Abu_Bassam_Library_4.3.2.apk"
+          if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ]; then
+            printf 'signed-release-with-embedded-js\n' > dist/BUILD_TYPE.txt
           else
-            cp "$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
-            printf 'installable-debug\n' > dist/BUILD_TYPE.txt
+            printf 'standalone-release-debug-key-with-embedded-js\n' > dist/BUILD_TYPE.txt
           fi
           test -s dist/Abu_Bassam_Library_4.3.2.apk
+          unzip -l dist/Abu_Bassam_Library_4.3.2.apk | grep -q 'assets/index.android.bundle'
           ls -lh dist/Abu_Bassam_Library_4.3.2.apk
 
       - name: Upload APK artifacts
