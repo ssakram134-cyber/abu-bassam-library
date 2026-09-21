@@ -9,7 +9,7 @@ const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: 
 const forbid=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
 
 const envelope=read('envelope-agreement-runtime.js');
-for(const marker of ['__ABU_ENVELOPE_AGREEMENT_V2__','patchTemplateApply','refreshAgreementFields','اليوم والتاريخ اختياريان ويمكن حذفهما'])need(envelope,marker,'envelope optional fields');
+for(const marker of ['__ABU_ENVELOPE_AGREEMENT_V3__','REMOVED_KEY','markRemoved','clearRemoved','patchTemplateApply','DesignStudio.remove=function','DesignStudio.reset=function','اليوم والتاريخ اختياريان ويمكن حذفهما'])need(envelope,marker,'envelope optional fields');
 forbid(envelope,'new MutationObserver','envelope optional fields');
 
 const productivity=read('productivity-tools-runtime.js');
@@ -27,4 +27,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 }
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: removable optional envelope fields, lazy startup frames, Cards envelope placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, lazy startup frames, Cards envelope placement, splash watchdog, and login guards.\n');
