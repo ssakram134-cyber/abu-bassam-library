@@ -52,7 +52,10 @@ for(const m of ['credentialFailure(message)','deviceOrPostAuthFailure(message)',
 const direction=read('login-input-direction-runtime.js');for(const m of ["setAttribute('dir','ltr')","setAttribute('lang','en')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')",'unicodeBidi'])need(direction,m,'login LTR');
 
 const patch=rootRead('scripts/patch-startup-stability.mjs');
-for(const m of ['STARTUP_WATCHDOG_MS','onLoadProgress','setWebReady(true)',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest','file:///android_asset/library/','scheduleRecovery'])need(patch,m,'startup/security patch');
+for(const m of ['STARTUP_WATCHDOG_MS','onLoadProgress','setWebReady(true)','onShouldStartLoadWithRequest','file:///android_asset/library/','scheduleRecovery'])need(patch,m,'startup/security patch source');
+const patchedIndex=rootRead('index.js');
+for(const m of ["originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest','file:///android_asset/library/','onLoadProgress','STARTUP_WATCHDOG_MS'])need(patchedIndex,m,'patched WebView security state');
+for(const m of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(patchedIndex,m,'patched WebView security state');
 
 for(const f of files.filter(x=>x.endsWith('.js'))){try{new vm.Script(read(f),{filename:f})}catch(e){errors.push(`${f}: ${e.message}`)}}
 for(const f of ['ration-card.html','mawkib-cards.html','thanks-letter.html','certificates.html','envelopes.html']){const s=read(f),rx=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=rx.exec(s))){i++;if(!m[1].trim())continue;try{new vm.Script(m[1],{filename:`${f}#${i}`})}catch(e){errors.push(`${f}#${i}: ${e.message}`)}}}
