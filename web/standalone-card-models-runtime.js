@@ -1,22 +1,50 @@
 (()=>{
 'use strict';
-if(window.__ABU_STANDALONE_CARD_MODELS_V1__)return;
-window.__ABU_STANDALONE_CARD_MODELS_V1__=true;
+if(window.__ABU_STANDALONE_CARD_MODELS_V2__)return;
+window.__ABU_STANDALONE_CARD_MODELS_V2__=true;
 const $=id=>document.getElementById(id);
-const MAWKIB_EXTRA_CSS=`
-.t5#front .logo{right:40%;top:6%;width:20%;height:30%}.t5#front .name{right:8%;left:8%;top:39%;text-align:center}.t5#front .tag{right:15%;left:15%;top:60%;text-align:center}.t5#front .foot{right:0;left:0;bottom:0}.t5#back .back-title{right:0;left:0;top:6%;text-align:center}.t5#back .qr{left:34%;top:23%;width:32%}.t5#back .info{right:8%;left:8%;top:62%;display:grid;grid-template-columns:1fr 1fr;gap:2%}
-.t6#front:after{content:'';position:absolute;right:0;top:0;bottom:0;width:28%;background:#bf9b4d;z-index:0}.t6#front .logo{right:6%;top:8%;width:17%;height:28%;border-color:#111}.t6#front .name{right:33%;left:6%;top:14%;text-align:right}.t6#front .tag{right:33%;left:6%;top:48%;text-align:right}.t6#front .foot{right:28%}.t6#back .qr{left:7%;top:22%;width:30%}.t6#back .info{right:7%;left:43%;top:20%;border-right:3px solid #bf9b4d;padding-right:3%}
-.t7#front .logo{right:34%;top:8%;width:32%;height:42%}.t7#front .name{right:8%;left:8%;top:54%;text-align:center}.t7#front .tag{right:12%;left:12%;top:73%;text-align:center;border:0}.t7#front .foot{height:13%}.t7#back .qr{left:7%;top:20%;width:34%}.t7#back .info{right:46%;left:6%;top:22%}.t7#back .back-title{right:46%;left:6%;top:8%;text-align:center}
-.t8#front:after{content:'';position:absolute;left:0;top:0;bottom:0;width:45%;background:#d0a64f;z-index:0}.t8#front .logo{right:6%;top:15%;width:22%;height:36%}.t8#front .name{right:50%;left:5%;top:16%;text-align:right}.t8#front .tag{right:50%;left:5%;top:53%;text-align:right;border:0}.t8#front .foot{right:45%;background:#082947}.t8#back .qr{left:auto;right:7%;top:24%;width:32%}.t8#back .info{right:44%;left:6%;top:20%}.t8#back .back-title{right:44%;left:6%;top:8%;text-align:center}
-.t9{box-shadow:inset 0 0 0 4px #bf9b4d,inset 0 0 0 8px #fff,inset 0 0 0 10px #082947}.t9#front .logo{right:8%;top:12%;width:18%;height:28%}.t9#front .name{right:31%;left:7%;top:13%;text-align:right}.t9#front .tag{right:12%;left:12%;top:55%;padding:4%;border:2px solid #bf9b4d;border-radius:12px;text-align:center}.t9#front .foot{right:10%;left:10%;bottom:4%;border-radius:8px}.t9#back .qr{left:8%;top:25%;width:28%}.t9#back .info{right:41%;left:8%;top:24%;display:grid;grid-template-columns:1fr 1fr;gap:3%}
-.t10#front:after{content:'';position:absolute;right:-15%;left:-15%;top:34%;height:27%;background:#bf9b4d;transform:rotate(-7deg);z-index:0}.t10#front .logo{right:6%;top:7%;width:18%;height:28%}.t10#front .name{right:29%;left:5%;top:10%;text-align:right}.t10#front .tag{right:10%;left:10%;top:44%;z-index:3;color:#082947;border:0;text-align:center}.t10#front .foot{background:#082947;color:#f7df9e}.t10#back .qr{left:8%;top:32%;width:28%;transform:rotate(4deg)}.t10#back .info{right:41%;left:7%;top:20%;border-right:3px solid #bf9b4d;padding-right:3%}
-`;
-const MAWKIB_NAMES={t5:'نموذج 5 — الشريط العلوي',t6:'نموذج 6 — العمود الجانبي',t7:'نموذج 7 — الشعار الكبير',t8:'نموذج 8 — التقسيم النصفي',t9:'نموذج 9 — الإطار الداخلي',t10:'نموذج 10 — التخطيط القطري'};
+const RATION_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
+const MAWKIB_IDS=new Set(['t1','t2','t3','t4']);
 function dispatch(select,value){select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}))}
-function ration(doc){let s=doc.getElementById('template');if(!s)return;[...s.options].forEach(o=>{if(o.value!=='t1')o.remove()});if(s.value!=='t1')dispatch(s,'t1');let label=s.closest('label');if(label)label.childNodes[0].nodeValue='النموذج المعتمد '}
-function mawkib(doc,win){let s=doc.getElementById('template');if(!s)return;Object.entries(MAWKIB_NAMES).forEach(([id,name])=>{if([...s.options].some(o=>o.value===id))return;let o=doc.createElement('option');o.value=id;o.textContent=name;s.appendChild(o)});let style=doc.getElementById('abuMawkibCanonicalModels');if(!style){style=doc.createElement('style');style.id='abuMawkibCanonicalModels';style.textContent=MAWKIB_EXTRA_CSS;doc.head.appendChild(style)}let hash=decodeURIComponent((win.location.hash||'').replace(/^#/,''));if(MAWKIB_NAMES[hash]||['t1','t2','t3','t4'].includes(hash))setTimeout(()=>dispatch(s,hash),30)}
-function apply(frame){try{let win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;let file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc);if(file==='mawkib-cards.html')mawkib(doc,win)}catch(e){}}
-function watch(){let frame=$('abuRecoveryFrame');if(!frame||frame.dataset.abuCanonicalModelWatch==='1')return;frame.dataset.abuCanonicalModelWatch='1';frame.addEventListener('load',()=>setTimeout(()=>apply(frame),100));setTimeout(()=>apply(frame),120)}
+function hash(win){return decodeURIComponent((win.location.hash||'').replace(/^#/,''))}
+function allCss(doc){return [...doc.querySelectorAll('style')].map(node=>node.textContent||'').join('\n')}
+function installRationExports(doc,win){
+  if(win.__ABU_RATION_EXPORT_FIX_V1__)return;
+  win.__ABU_RATION_EXPORT_FIX_V1__=true;
+  if(typeof win.printable==='function'){
+    const originalPrintable=win.printable;
+    win.printable=function(){
+      const html=String(originalPrintable());
+      const css=allCss(doc);
+      return html.includes('</head>')?html.replace('</head>','<style>'+css+'</style></head>'):html;
+    };
+  }
+  win.cardPng=async function(id){
+    const el=doc.getElementById(id);if(!el)throw new Error('CARD_NOT_FOUND');
+    const w=1712,h=1080,clone=el.cloneNode(true),css=allCss(doc);
+    clone.style.width=w+'px';clone.style.height=h+'px';clone.style.aspectRatio='auto';clone.style.boxShadow='none';
+    clone.querySelectorAll('.safe').forEach(n=>n.remove());
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;position:relative"><style>'+css+'</style>'+clone.outerHTML+'</div></foreignObject></svg>';
+    const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),img=new Image();
+    try{
+      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+      const canvas=doc.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d').drawImage(img,0,0,w,h);return canvas.toDataURL('image/png');
+    }finally{URL.revokeObjectURL(url)}
+  };
+}
+function ration(doc,win){
+  const select=doc.getElementById('template');if(!select)return;
+  const wanted=hash(win);if(RATION_IDS.has(wanted)&&[...select.options].some(o=>o.value===wanted))setTimeout(()=>dispatch(select,wanted),30);
+  installRationExports(doc,win);
+}
+function mawkib(doc,win){
+  const select=doc.getElementById('template');if(!select)return;
+  [...select.options].forEach(option=>{if(!MAWKIB_IDS.has(option.value))option.remove()});
+  if(!MAWKIB_IDS.has(select.value))dispatch(select,'t1');
+  const wanted=hash(win);if(MAWKIB_IDS.has(wanted))setTimeout(()=>dispatch(select,wanted),30);
+}
+function apply(frame){try{const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;const file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc,win);if(file==='mawkib-cards.html')mawkib(doc,win)}catch(e){}}
+function watch(){const frame=$('abuRecoveryFrame');if(!frame||frame.dataset.abuCanonicalModelWatch==='2')return;frame.dataset.abuCanonicalModelWatch='2';frame.addEventListener('load',()=>setTimeout(()=>apply(frame),100));setTimeout(()=>apply(frame),120)}
 function init(){watch();new MutationObserver(watch).observe(document.documentElement,{childList:true,subtree:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
