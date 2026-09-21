@@ -71,15 +71,23 @@ for (const dep of ['expo-local-authentication', 'expo-secure-store', 'expo-scree
   if (!packageJson.dependencies?.[dep]) failures.push(`package.json: missing ${dep}`);
 }
 
-const currentProjectText = [
+const productionSecurityText = [
   'index.js',
   'web/app-security-runtime.js',
   'web/security-extras-runtime.js',
   'web/permission-guard-runtime.js',
-  'tools/check_project.js',
-  'tools/check_security_controls.js',
+  'web/device-name-runtime.js',
 ].map(read).join('\n');
-if (/service_role|sb_secret_|BEGIN PRIVATE KEY/i.test(currentProjectText)) failures.push('Sensitive server credential marker found in current security source');
+const forbidden = [
+  ['service', 'role'].join('_'),
+  ['sb', 'secret', ''].join('_'),
+  ['BEGIN', 'PRIVATE', 'KEY'].join(' '),
+];
+for (const marker of forbidden) {
+  if (productionSecurityText.toLowerCase().includes(marker.toLowerCase())) {
+    failures.push(`Sensitive server credential marker found in production security source: ${marker}`);
+  }
+}
 
 if (failures.length) {
   process.stderr.write(failures.join('\n') + '\n');
