@@ -8,8 +8,9 @@
   function uuid() { return globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
   function platform() { const agent=navigator.userAgent||''; if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'; }
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
-  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.classList.add('hide');setTimeout(()=>{try{splash.remove()}catch(_){}},500)}
-  function installSplashWatchdog(){const run=()=>setTimeout(dismissSplash,220);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();setTimeout(dismissSplash,1800)}
+  function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
+  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true');try{splash.remove()}catch(_){}}
+  function installSplashWatchdog(){dismissSplash();signalBootReady();const run=()=>{dismissSplash();signalBootReady()};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();setTimeout(run,120);setTimeout(run,600);setTimeout(run,1500)}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
   function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
   async function heartbeat(){const identity=ensureIdentity(),cloud=window.AbuBassamCloud;if(!navigator.onLine||!cloud?.isConnected())return identity;const now=new Date().toISOString(),data={id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt||now,last_seen:now,app_version:APP_VERSION};try{await cloud.upsert('device',identity.id,data)}catch(_){}return identity}
@@ -31,7 +32,7 @@
   function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadSecurity()}
   installSplashWatchdog();
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
-  window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
-  if(document.readyState!=='loading')loadApprovedUi();
+  window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();signalBootReady();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
+  if(document.readyState!=='loading'){loadApprovedUi();signalBootReady()}
   window.addEventListener('online',heartbeat);document.addEventListener('abu-bassam-auth-changed',()=>{heartbeat();window.AbuBassamSecurity?.onSessionChanged?.()});
 })();
