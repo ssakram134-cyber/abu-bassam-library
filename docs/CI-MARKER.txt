@@ -1,1 +1,0 @@
-Strict templates/questions/devices implementation ready for CI review.
