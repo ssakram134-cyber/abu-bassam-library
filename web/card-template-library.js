@@ -29,7 +29,7 @@ window.AbuBassamCardTemplateLibrary=[
     {id:'cert-6',name:'6 — الزخرفة الناعمة'},{id:'cert-7',name:'7 — الهندسي الحديث'},{id:'cert-8',name:'8 — الإسلامي المزخرف'},{id:'cert-9',name:'9 — الكلاسيكي'},{id:'cert-10',name:'10 — الأطفال المشرق'}
   ]},
   {id:'thanks',title:'كتاب الشكر والتقدير',icon:'🏅',route:'thanks-letter.html',models:[
-    {id:'t1',name:'ذهبي رسمي'},{id:'t2',name:'أخضر'},{id:'t3',name:'خمري'},{id:'t4',name:'أزرق'},{id:'t5',name:'بنفسجي'},{id:'t6',name:'رسمي أبيض وأسود'}
+    {id:'t1',name:'1 — الإطار الملكي'},{id:'t2',name:'2 — الشريط الجانبي'},{id:'t3',name:'3 — الوسام المركزي'},{id:'t4',name:'4 — الترويسة الأكاديمية'},{id:'t5',name:'5 — اللوحة الهندسية'},{id:'t6',name:'6 — الرسمي المبسط'}
   ]}
 ];
 })();
