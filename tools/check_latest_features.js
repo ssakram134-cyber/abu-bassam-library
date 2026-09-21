@@ -9,7 +9,7 @@ const read = (name) => fs.readFileSync(path.join(web, name), 'utf8');
 const need = (source, marker, label) => { if (!source.includes(marker)) errors.push(`${label}: missing ${marker}`); };
 const forbid = (source, marker, label) => { if (source.includes(marker)) errors.push(`${label}: forbidden ${marker}`); };
 
-for (const file of ['feature-recovery-runtime.js','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html','envelope-agreement-runtime.js']) {
+for (const file of ['feature-recovery-runtime.js','card-templates-v2.html','card-template-library.js','ration-card.html','mawkib-cards.html','thanks-letter.html','envelopes.html','envelope-agreement-runtime.js']) {
   if (!fs.existsSync(path.join(web, file))) errors.push(`Missing latest feature asset: ${file}`);
 }
 
@@ -24,14 +24,18 @@ need(gestures, 'restoreNativeTouch', 'questions-gesture-runtime.js');
 const recovery = read('feature-recovery-runtime.js');
 for (const marker of [
   '#abuControlDock','.abu-control-dock','.top-actions{top:76px','.top-actions .icon-btn,.top-actions button{width:52px','font-size:24px','abuCardsTemplatesBtn',
+  'card-templates-v2.html','applyRequestedTemplate','#cardsCenter .cs-photo-actions{display:grid!important','grid-template-columns:repeat(2,minmax(0,1fr))!important',
+  '#cardsCenter .cs-type{min-height:84px','overflow-wrap:anywhere!important',
   "addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'thanks'",
   'ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','removeOldPlacements','recoveryMessage',
   "$('prodModeEnvelope')?.remove()","$('prodPaneEnvelope')?.remove()"
 ]) need(recovery, marker, 'feature-recovery-runtime.js');
 for (const marker of ["b.id='tabEnvelopes'","b.id='tabThanks'","p.id='prodPaneThanks'"]) forbid(recovery, marker, 'feature-recovery-runtime.js');
 
-const cards = read('card-templates.html');
-for (const marker of ['نماذج الباجات والكروت','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف','الشكر والتقدير','ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','الباج التعريفي','باج الروضة والمدرسة']) need(cards, marker, 'card-templates.html');
+const catalog = read('card-templates-v2.html');
+for (const marker of ['جميع النماذج المتفق عليها','card-template-library.js','النصوص الطويلة تلتف','class="model"','openRoute']) need(catalog, marker, 'card-templates-v2.html');
+const library = read('card-template-library.js');
+for (const marker of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','env-9','t10']) need(library, marker, 'card-template-library.js');
 
 const ration = read('ration-card.html');
 for (const marker of [
@@ -50,11 +54,11 @@ for (const marker of ['data-studio-mode="envelope"','design-studio-runtime.js','
 const envelopeAgreement = read('envelope-agreement-runtime.js');
 for (const marker of ['التاريخ:','اليوم:','ورق A5 — غلاف فقط','ورق A4 — غلاف فقط','ليست أظرفًا قياسية','DesignStudio.addText','__ABU_ENVELOPE_AGREEMENT_V1__']) need(envelopeAgreement, marker, 'envelope-agreement-runtime.js');
 
-for (const file of ['feature-recovery-runtime.js','envelope-agreement-runtime.js']) {
+for (const file of ['feature-recovery-runtime.js','envelope-agreement-runtime.js','card-template-library.js']) {
   try { new vm.Script(read(file), { filename: file }); }
   catch (error) { errors.push(`${file}: ${error.message}`); }
 }
-for (const file of ['card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html']) {
+for (const file of ['card-templates-v2.html','ration-card.html','mawkib-cards.html','thanks-letter.html']) {
   const source = read(file);
   const scripts = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
   let match, index = 0;
@@ -70,4 +74,4 @@ if (errors.length) {
   process.stderr.write(errors.join('\n') + '\n');
   process.exit(1);
 }
-process.stdout.write('Latest UX/features checks passed (native touch, hidden bottom dock, lowered and enlarged header controls, and agreed tools grouped inside Barcode & Cards only).\n');
+process.stdout.write('Latest UX/features checks passed (templates button, full agreed catalog, non-overlapping card controls/text, lowered header controls, and Barcode & Cards grouping).\n');
