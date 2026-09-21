@@ -42,7 +42,11 @@ await writeFile(indexPath, index, 'utf8');
 let recovery = await readFile(recoveryPath, 'utf8');
 const oldObserver = "function init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()}).observe(document.documentElement,{childList:true,subtree:true})}";
 const newObserver = "let recoveryTimer=0;function scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()},60)}\nfunction init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(scheduleRecovery).observe(document.documentElement,{childList:true,subtree:true})}";
-recovery = mustReplace(recovery, oldObserver, newObserver, 'debounced recovery observer');
+if (recovery.includes(oldObserver)) {
+  recovery = recovery.replace(oldObserver, newObserver);
+} else if (!recovery.includes('new MutationObserver(scheduleRecovery).observe(document.documentElement,{childList:true,subtree:true})')) {
+  throw new Error('Startup stability patch failed: debounced recovery observer');
+}
 await writeFile(recoveryPath, recovery, 'utf8');
 
 process.stdout.write('Startup stability patch applied: immediate web-ready bridge, no reload loop, local-only WebView navigation, and debounced recovery observer.\n');
