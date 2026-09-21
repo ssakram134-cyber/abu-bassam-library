@@ -8,6 +8,8 @@
   function uuid() { return globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
   function platform() { const agent=navigator.userAgent||''; if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'; }
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
+  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.classList.add('hide');setTimeout(()=>{try{splash.remove()}catch(_){}},500)}
+  function installSplashWatchdog(){const run=()=>setTimeout(dismissSplash,220);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();setTimeout(dismissSplash,1800)}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
   function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
   async function heartbeat(){const identity=ensureIdentity(),cloud=window.AbuBassamCloud;if(!navigator.onLine||!cloud?.isConnected())return identity;const now=new Date().toISOString(),data={id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt||now,last_seen:now,app_version:APP_VERSION};try{await cloud.upsert('device',identity.id,data)}catch(_){}return identity}
@@ -27,6 +29,7 @@
   function loadSecurityExtras(){loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__',()=>{setTimeout(loadPermissionGuard,20);setTimeout(loadLoginThrottleFix,35);setTimeout(loadLoginInputDirection,45)})}
   function loadSecurity(){loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40);setTimeout(loadLoginInputDirection,50)})}
   function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadSecurity()}
+  installSplashWatchdog();
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
   if(document.readyState!=='loading')loadApprovedUi();

@@ -58,6 +58,17 @@ window.AbuBassamCardTemplateLibrary=[
     {id:'t9',name:'9 — الإطار الداخلي والبيانات المربعة'},
     {id:'t10',name:'10 — التخطيط القطري الحديث'}
   ]},
+  {id:'envelope',title:'صناعة الظرف',icon:'✉️',route:'envelopes.html',models:[
+    {id:'env-1',name:'1 — الكحلي والذهبي'},
+    {id:'env-2',name:'2 — العنابي الرسمي'},
+    {id:'env-3',name:'3 — الأزرق الأكاديمي'},
+    {id:'env-4',name:'4 — الأخضر الهندسي'},
+    {id:'env-5',name:'5 — الملكي الذهبي'},
+    {id:'env-6',name:'6 — الذهبي البسيط'},
+    {id:'env-7',name:'7 — الأحمر الكلاسيكي'},
+    {id:'env-8',name:'8 — التدرج العصري'},
+    {id:'env-9',name:'9 — الإطار الهندسي'}
+  ]},
   {id:'certificate',title:'شهادات التقدير',icon:'🏆',route:'certificates.html',models:[
     {id:'cert-1',name:'1 — الإطار الملكي'},{id:'cert-2',name:'2 — الإطار المزدوج'},{id:'cert-3',name:'3 — الشريط العلوي والسفلي'},{id:'cert-4',name:'4 — الزوايا الهندسية'},{id:'cert-5',name:'5 — الإطار الدائري'},
     {id:'cert-6',name:'6 — الزخرفة الناعمة'},{id:'cert-7',name:'7 — الهندسي الحديث'},{id:'cert-8',name:'8 — الإسلامي المزخرف'},{id:'cert-9',name:'9 — الكلاسيكي'},{id:'cert-10',name:'10 — الأطفال المشرق'}
