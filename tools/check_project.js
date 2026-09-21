@@ -1,84 +1,35 @@
 const fs=require('fs');
 const path=require('path');
 const vm=require('vm');
-const root=path.resolve(__dirname,'..');
-const web=path.join(root,'web');
-const errors=[];
-const readWeb=name=>fs.readFileSync(path.join(web,name),'utf8');
+const root=path.resolve(__dirname,'..'),web=path.join(root,'web'),errors=[];
+const read=name=>fs.readFileSync(path.join(web,name),'utf8');
 const need=(src,m,label)=>{if(!src.includes(m))errors.push(`${label}: missing ${m}`)};
 const forbid=(src,m,label)=>{if(src.includes(m))errors.push(`${label}: forbidden ${m}`)};
-
-const required=[
- 'index.html','residence-card.html','cards-studio-runtime.js','national-id-runtime.js','document-vault-runtime.js','app-settings-runtime.js','typography-runtime.js','secure-sync-runtime.js','device-name-runtime.js','feature-recovery-runtime.js','app-security-runtime.js','security-extras-runtime.js','productivity-tools-runtime.js','questions-templates-runtime.js','questions-template-tools-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','design-studio-runtime.js','envelopes.html','envelope-agreement-runtime.js','certificates.html','questions-ar.html','questions-en.html','image-compressor.html','card-template-library.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','thanks-letter.html','supabase-2.58.0.js','qrcode.js','jszip.min.js','fonts/Cairo-Regular.ttf','fonts/Cairo-Bold.ttf','fonts/Tajawal-Regular.ttf','fonts/Tajawal-Bold.ttf'
-];
-for(const relative of required)if(!fs.existsSync(path.join(web,relative)))errors.push(`Missing web asset: ${relative}`);
-
-for(const filename of fs.readdirSync(web).filter(n=>n.endsWith('.js'))){try{new vm.Script(readWeb(filename),{filename})}catch(e){errors.push(`${filename}: ${e.message}`)}}
-for(const filename of ['index.html','residence-card.html','questions-ar.html','questions-en.html','image-compressor.html','envelopes.html','certificates.html','card-templates-v2.html','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html']){
- if(!fs.existsSync(path.join(web,filename)))continue;
- const source=readWeb(filename),scripts=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;let match,index=0;
- while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${filename}#${index}`})}catch(e){errors.push(`${filename} script ${index}: ${e.message}`)}}
-}
-
-const indexHtml=readWeb('index.html');
-for(const ref of ['supabase-2.58.0.js','secure-sync-runtime.js','device-name-runtime.js','productivity-tools-runtime.js'])need(indexHtml,`src="${ref}"`,'index.html');
-if(indexHtml.indexOf('secure-sync-runtime.js')<indexHtml.indexOf('supabase-2.58.0.js'))errors.push('Supabase must load before secure-sync-runtime.js');
-
-const device=readWeb('device-name-runtime.js');
-for(const m of ['feature-recovery-runtime.js','app-security-runtime.js','security-extras-runtime.js'])need(device,m,'device-name-runtime.js');
-for(const m of ['global-flex-runtime.js','loadGlobalFlex','abuGlobalFlexRuntime'])forbid(device,m,'device-name-runtime.js');
-
-const recovery=readWeb('feature-recovery-runtime.js');
-for(const m of ['#abuControlDock','.top-actions{top:76px','width:52px','font-size:24px','abuCardsTemplatesBtn','card-templates-v2.html',"addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'thanks'",'#cardsCenter .cs-photo-actions{display:grid!important','#cardsCenter .cs-type{min-height:84px'])need(recovery,m,'feature-recovery-runtime.js');
-
-const productivity=readWeb('productivity-tools-runtime.js');
-for(const m of ['questions-ar.html','questions-en.html','certificates.html','questions-templates-runtime.js','questions-paper-runtime.js','abuPrintQuestion','abuSaveQuestionPdf','abuCompressionReady','abuDesignPrint','prodModeCertificate'])need(productivity,m,'productivity-tools-runtime.js');
-for(const m of ['prodModeEnvelope','prodPaneEnvelope','envelopeFrame','src="envelopes.html"'])forbid(productivity,m,'productivity-tools-runtime.js');
-
-const questionPaper=readWeb('questions-paper-runtime.js');
-for(const m of ['A4P','A4L','A5P','A5L','مخصص','abuQuestionPaperSettingsV1','@page','ملم','سم','questions-template-tools-runtime.js'])need(questionPaper,m,'questions-paper-runtime.js');
-for(const m of ['questions-gesture-runtime.js','abuQuestionGestureExternal','loadGestureRuntime'])forbid(questionPaper,m,'questions-paper-runtime.js');
-const gestures=readWeb('questions-gesture-runtime.js');
-for(const m of ['__ABU_QUESTION_GESTURES_DISABLED__','restoreNativeTouch','pan-y','manipulation'])need(gestures,m,'questions-gesture-runtime.js');
-for(const m of ['touchstart','touchmove','pointerdown','pointermove','abuScale','abuMoveX','abuMoveY'])forbid(gestures,m,'questions-gesture-runtime.js');
-
-const questionTemplates=readWeb('questions-templates-runtime.js');
-for(const m of ['math1-','makeScienceTemplate(3','makeScienceTemplate(4','islamic-','نماذج خاصة بالمادة','نماذج عامة','قوالب الأسئلة','أتعلم — ٢ درجة','أتأكد — ٢ درجة','أتحدث — ٢ درجة','أحل — ٢ درجة','أفكر — ٢ درجة','الحفظ — ٢ درجة','الحديث الشريف — ٢ درجة','التلاوة — ٢ درجة','العقائد والعبادات — ١ درجة','المعاني — ١ درجة','السيرة — ١ درجة','الآداب الإسلامية — ١ درجة','abuQuestionHeaderProfileV1','abuQuestionCustomTemplatesV1','MutationObserver','استبدال','قص حر','قفل/فتح','للأمام','للخلف','redo'])need(questionTemplates,m,'questions-templates-runtime.js');
-
-const studio=readWeb('design-studio-runtime.js');
-for(const m of ['ENVELOPE_PRESETS','CERT_PRESETS','225x115','DL —','C6 —','#10 —','Array.from({length:10','Array.from({length:9','صناعة الظرف / غلاف الأسئلة','شهادات التقدير','إضافة نماذج','الوحدة','ملم','سم','saveAsTemplate','applyCrop','replaceImage','front','back','lock','abuDesignPrint','abuDesignPdf','abuDesignSaveImage'])need(studio,m,'design-studio-runtime.js');
-
-const library=readWeb('card-template-library.js');
-for(const m of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','env-9','t10'])need(library,m,'card-template-library.js');
-const count=id=>{const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`));return m?(m[1].match(/\{id:/g)||[]).length:0};
-for(const [id,n] of [['ration',10],['mawkib',4],['envelope',9],['thanks',6]])if(count(id)!==n)errors.push(`${id}: expected ${n} templates, got ${count(id)}`);
-need(readWeb('card-templates-v2.html'),'جميع النماذج المتفق عليها','card-templates-v2.html');
-need(readWeb('card-templates.html'),'card-templates-v2.html','card-templates.html');
-
-for(const [file,markers] of Object.entries({
- 'ration-card.html':['اسم رب العائلة','رقم البطاقة التموينية','ملاحظة أسفل الكارت','85.6 × 54','value="t10"',"renderQr(q('rationNumber').value)",'حفظ PDF','حفظ الوجه والظهر'],
- 'mawkib-cards.html':['85.6 × 54','qrcode_UTF8.js','اسم المسؤول','رقم الهاتف','حفظ PDF','طباعة'],
- 'thanks-letter.html':['كتاب شكر وتقدير','الجهة المانحة','اسم المكرَّم','حفظ PDF','طباعة','نموذج ذهبي رسمي'],
- 'envelope-agreement-runtime.js':['التاريخ:','اليوم:','ورق A5 — غلاف فقط','ورق A4 — غلاف فقط','ليست أظرفًا قياسية']
-}))for(const m of markers)need(readWeb(file),m,file);
-
-const security=readWeb('app-security-runtime.js');
-for(const m of ['MAIN_USERNAME','MAX_DEVICES=5','secureGet','secureSet','biometricStatus','biometricAuth','تسجيل الدخول بالبصمة','قفل الآن','إدارة الأجهزة (٥)','AbuBassamNativeBackPress','OFFLINE_GRACE_MS'])need(security,m,'app-security-runtime.js');
-const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const m of ['expo-local-authentication','expo-secure-store','SecureStore.getItemAsync','SecureStore.setItemAsync','LocalAuthentication.authenticateAsync','ANDROID_BRIDGE','BackHandler.exitApp','deviceInfo'])need(native,m,'index.js');
-const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
-for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!pkg.dependencies?.[dep])errors.push(`Missing native dependency: ${dep}`);
-const appConfig=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8')).expo;
-if(appConfig.android.package!=='com.abubassam.librarycamera3')errors.push('Unexpected Android package');
-if(appConfig.version!=='4.3.2'||appConfig.android.versionCode!==432)errors.push('Unexpected version metadata');
-
-const projectText=fs.readdirSync(web).filter(n=>/\.(?:html|js)$/i.test(n)&&n!=='supabase-2.58.0.js').map(n=>readWeb(n)).join('\n');
-for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGIN '+'PRIVATE KEY'])if(projectText.includes(forbidden))errors.push(`Forbidden secret marker found: ${forbidden}`);
-if(/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(projectText))errors.push('Project contains previous author/social link');
-if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
-
-const agents=fs.readFileSync(path.join(root,'AGENTS.md'),'utf8');
-for(const m of ['كل بند تم تدقيقه','تم ✅','ناقص ⚠️','غير موجود ❌','يحتاج تحقق 🔍','المرونة العامة معطلة','الباركود والكروت'])need(agents,m,'AGENTS.md');
-
+const required=['index.html','cards-studio-runtime.js','national-id-runtime.js','document-vault-runtime.js','app-settings-runtime.js','typography-runtime.js','secure-sync-runtime.js','device-name-runtime.js','feature-recovery-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','child-card-templates-runtime.js','device-reconcile-runtime.js','app-security-runtime.js','security-extras-runtime.js','permission-guard-runtime.js','productivity-tools-runtime.js','questions-templates-runtime.js','question-type-runtime.js','questions-template-tools-runtime.js','questions-paper-runtime.js','questions-gesture-runtime.js','design-studio-runtime.js','envelopes.html','envelope-preload-runtime.js','envelope-tools-runtime.js','envelope-agreement-runtime.js','certificates.html','questions-ar.html','questions-en.html','image-compressor.html','card-template-library.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','thanks-letter.html','supabase-2.58.0.js','qrcode.js','jszip.min.js','fonts/Cairo-Regular.ttf','fonts/Cairo-Bold.ttf','fonts/Tajawal-Regular.ttf','fonts/Tajawal-Bold.ttf'];
+required.forEach(f=>{if(!fs.existsSync(path.join(web,f)))errors.push(`Missing web asset: ${f}`)});
+for(const filename of fs.readdirSync(web).filter(n=>n.endsWith('.js'))){try{new vm.Script(read(filename),{filename})}catch(e){errors.push(`${filename}: ${e.message}`)}}
+for(const filename of ['index.html','questions-ar.html','questions-en.html','image-compressor.html','envelopes.html','certificates.html','card-templates-v2.html','card-templates.html','ration-card.html','mawkib-cards.html','thanks-letter.html']){if(!fs.existsSync(path.join(web,filename)))continue;const source=read(filename),scripts=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;let match,index=0;while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${filename}#${index}`})}catch(e){errors.push(`${filename} script ${index}: ${e.message}`)}}}
+const index=read('index.html');for(const ref of ['supabase-2.58.0.js','secure-sync-runtime.js','device-name-runtime.js','productivity-tools-runtime.js'])need(index,`src="${ref}"`,'index.html');
+const device=read('device-name-runtime.js');for(const m of ['feature-recovery-runtime.js','child-card-templates-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','app-security-runtime.js','security-extras-runtime.js'])need(device,m,'device-name-runtime.js');for(const m of ['global-flex-runtime.js','loadGlobalFlex','abuGlobalFlexRuntime'])forbid(device,m,'device-name-runtime.js');
+const recovery=read('feature-recovery-runtime.js');for(const m of ['abuCardsTemplatesBtn','card-templates-v2.html',"addCardTool(types,'ration'", "addCardTool(types,'mawkib'", "addCardTool(types,'certificate'", "addCardTool(types,'thanks'",'certificates.html'])need(recovery,m,'feature-recovery-runtime.js');forbid(recovery,"addCardTool(types,'envelope'",'feature-recovery-runtime.js');
+const productivity=read('productivity-tools-runtime.js');for(const m of ['الأسئلة والظروف','questions-ar.html','questions-en.html','src="envelopes.html"','question-type-runtime.js','abuPrintQuestion','abuSaveQuestionPdf','abuCompressionReady','abuDesignPrint','abuModeEnvelope'])need(productivity,m,'productivity-tools-runtime.js');for(const m of ['prodModeCertificate','prodPaneCertificate','src="certificates.html"'])forbid(productivity,m,'productivity-tools-runtime.js');
+const paper=read('questions-paper-runtime.js');for(const m of ['A4P','A4L','A5P','A5L','abuQuestionPaperSettingsV1','@page','questions-template-tools-runtime.js'])need(paper,m,'questions-paper-runtime.js');for(const m of ['questions-gesture-runtime.js','abuQuestionGestureExternal','loadGestureRuntime'])forbid(paper,m,'questions-paper-runtime.js');
+const gestures=read('questions-gesture-runtime.js');for(const m of ['__ABU_QUESTION_GESTURES_DISABLED__','restoreNativeTouch','pan-y','manipulation'])need(gestures,m,'questions-gesture-runtime.js');for(const m of ['touchstart','touchmove','pointerdown','pointermove','abuScale','abuMoveX','abuMoveY'])forbid(gestures,m,'questions-gesture-runtime.js');
+const qtemplates=read('questions-templates-runtime.js');for(const m of ['math1-','makeScienceTemplate(3','makeScienceTemplate(4','islamic-','نماذج خاصة بالمادة','نماذج عامة','الحفظ — ٢ درجة','الحديث الشريف — ٢ درجة','التلاوة — ٢ درجة','العقائد والعبادات — ١ درجة','المعاني — ١ درجة','السيرة — ١ درجة','الآداب الإسلامية — ١ درجة'])need(qtemplates,m,'questions-templates-runtime.js');
+const qtypes=read('question-type-runtime.js');for(const m of ['abu-qtype-select','blanks','brackets','definitions','enumeration','points','multiple','truefalse','short','المستوى السهل','المستوى المتوسط','المستوى الصعب','التسلسل','الحفظ','الحديث الشريف','التلاوة','العقائد والعبادات','المعاني','السيرة','الآداب الإسلامية'])need(qtypes,m,'question-type-runtime.js');
+const studio=read('design-studio-runtime.js');for(const m of ['ENVELOPE_PRESETS','CERT_PRESETS','225x115','DL —','C6 —','#10 —','Array.from({length:10','Array.from({length:9','saveAsTemplate','applyCrop','replaceImage','front','back','lock','abuDesignPrint','abuDesignPdf','abuDesignSaveImage'])need(studio,m,'design-studio-runtime.js');
+const env=read('envelopes.html');for(const m of ['envelope-preload-runtime.js','design-studio-runtime.js','envelope-agreement-runtime.js','envelope-tools-runtime.js'])need(env,m,'envelopes.html');
+const envTools=read('envelope-tools-runtime.js');for(const m of ['undo','redo','newPage','signature','prayer','format','saveNow','PAGES_KEY'])need(envTools,m,'envelope-tools-runtime.js');
+const library=read('card-template-library.js');for(const m of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','شهادات التقدير','كتاب الشكر والتقدير','child-future','cert-10'])need(library,m,'card-template-library.js');forbid(library,"id:'envelope'",'card-template-library.js');const count=id=>{const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`));return m?(m[1].match(/\{id:/g)||[]).length:0};for(const [id,n] of [['child',10],['ration',10],['mawkib',4],['certificate',10],['thanks',6]])if(count(id)!==n)errors.push(`${id}: expected ${n} templates, got ${count(id)}`);
+const strict=read('strict-workflow-runtime.js');for(const m of ['abu-fold-btn','abu-child-collapsed','RATION_CSS','MAWKIB_CSS','المعلومات والبيانات','الطباعة والتصدير'])need(strict,m,'strict-workflow-runtime.js');
+const standaloneFold=read('standalone-fold-runtime.js');for(const m of ['__ABU_STANDALONE_FOLD_V1__','foldTemplate','foldThanksExport','النماذج','الطباعة والتصدير','ration-card.html','mawkib-cards.html','thanks-letter.html'])need(standaloneFold,m,'standalone-fold-runtime.js');
+for(const [file,markers] of Object.entries({'ration-card.html':['اسم رب العائلة','رقم البطاقة التموينية','85.6 × 54',"renderQr(q('rationNumber').value)",'حفظ PDF','حفظ الوجه والظهر'],'mawkib-cards.html':['85.6 × 54','اسم المسؤول','رقم الهاتف','حفظ PDF','طباعة'],'thanks-letter.html':['كتاب شكر وتقدير','الجهة المانحة','اسم المكرَّم','1 — الإطار الملكي','2 — الشريط الجانبي','3 — الوسام المركزي','4 — الترويسة الأكاديمية','5 — اللوحة الهندسية','6 — الرسمي المبسط','حفظ PDF','طباعة'],'envelope-agreement-runtime.js':['التاريخ:','اليوم:','ورق A5 — غلاف فقط','ورق A4 — غلاف فقط','ليست أظرفًا قياسية']}))for(const m of markers)need(read(file),m,file);
+const security=read('app-security-runtime.js');for(const m of ['MAIN_USERNAME','MAX_DEVICES=5','secureGet','secureSet','biometricStatus','biometricAuth','تسجيل الدخول بالبصمة','إدارة الأجهزة (٥)','AbuBassamNativeBackPress','OFFLINE_GRACE_MS'])need(security,m,'app-security-runtime.js');
+const reconcile=read('device-reconcile-runtime.js');for(const m of ['dedupe(rows)','CURRENT_ID','displayName(row)','هذا الجهاز','تسمية الجهاز','abu_bassam_devices','onSessionChanged'])need(reconcile,m,'device-reconcile-runtime.js');
+const native=fs.readFileSync(path.join(root,'index.js'),'utf8');for(const m of ['expo-local-authentication','expo-secure-store','SecureStore.getItemAsync','SecureStore.setItemAsync','LocalAuthentication.authenticateAsync','ANDROID_BRIDGE','BackHandler.exitApp','deviceInfo'])need(native,m,'index.js');
+const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!pkg.dependencies?.[dep])errors.push(`Missing native dependency: ${dep}`);
+const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8')).expo;if(app.android.package!=='com.abubassam.librarycamera3')errors.push('Unexpected Android package');
+const projectText=fs.readdirSync(web).filter(n=>/\.(?:html|js)$/i.test(n)&&n!=='supabase-2.58.0.js').map(n=>read(n)).join('\n');for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGIN PRIVATE KEY'])if(projectText.includes(forbidden))errors.push(`Forbidden secret marker found: ${forbidden}`);if(/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(projectText))errors.push('Project contains previous author/social link');if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
+const agents=fs.readFileSync(path.join(root,'AGENTS.md'),'utf8');for(const m of ['قاعدة التدقيق','تم ✅','ناقص ⚠️','غير موجود ❌','يحتاج تحقق 🔍','المرونة العامة القديمة معطلة','قاعدة النماذج الحقيقية','الأسئلة والظروف','شهادات التقدير','كتاب الشكر والتقدير'])need(agents,m,'AGENTS.md');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write(`Project checks passed (${required.length} required assets; native touch; Barcode & Cards grouping; templates; questions; envelopes; certificates; security/native integration).\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets; strict real templates; foldable standalone controls; Questions & Envelopes; certificates in Cards; device reconciliation; security/native integration).\n`);

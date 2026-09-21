@@ -18,17 +18,18 @@ window.AbuBassamCardTemplateLibrary=[
   {id:'wifi',title:'كارت Wi‑Fi',icon:'📶',type:'wifi',models:[{id:'wifi-original',name:'النموذج الأصلي المعتمد'}]},
   {id:'qr',title:'تكوين QR',icon:'▦',type:'qr',models:[{id:'qr-original',name:'النموذج الأصلي المعتمد'}]},
   {id:'ration',title:'البطاقة التموينية',icon:'🧾',route:'ration-card.html',models:[
-    {id:'t1',name:'نموذج 1 — بني رسمي'},{id:'t2',name:'نموذج 2 — أخضر'},{id:'t3',name:'نموذج 3 — أزرق'},{id:'t4',name:'نموذج 4 — خمري'},{id:'t5',name:'نموذج 5 — بنفسجي'},
-    {id:'t6',name:'نموذج 6 — أخضر ذهبي'},{id:'t7',name:'نموذج 7 — أبيض وأسود'},{id:'t8',name:'نموذج 8 — ذهبي'},{id:'t9',name:'نموذج 9 — أزرق ذهبي'},{id:'t10',name:'نموذج 10 — تركوازي'}
+    {id:'t1',name:'1 — العنوان المركزي والصورة الرمزية'},{id:'t2',name:'2 — الشريط الجانبي'},{id:'t3',name:'3 — الإطار المزدوج'},{id:'t4',name:'4 — البطاقة المقسمة'},{id:'t5',name:'5 — الزوايا الهندسية'},
+    {id:'t6',name:'6 — الشريط العلوي'},{id:'t7',name:'7 — الرسمي المبسط'},{id:'t8',name:'8 — القوس السفلي'},{id:'t9',name:'9 — اللوحة الوسطية'},{id:'t10',name:'10 — الإطار العصري'}
   ]},
   {id:'mawkib',title:'كروت المواكب الحسينية',icon:'🏴',route:'mawkib-cards.html',models:[
-    {id:'t1',name:'أسود وذهبي'},{id:'t2',name:'أخضر وذهبي'},{id:'t3',name:'خمري وذهبي'},{id:'t4',name:'أزرق وذهبي'}
+    {id:'t1',name:'1 — الشعار الدائري والعنوان'},{id:'t2',name:'2 — الراية الجانبية'},{id:'t3',name:'3 — الإطار الحسيني'},{id:'t4',name:'4 — اللوحة الحديثة'}
   ]},
-  {id:'envelope',title:'صناعة الظرف / غلاف الأسئلة',icon:'✉️',route:'envelopes.html',models:[
-    {id:'env-1',name:'1 — الكحلي والذهبي'},{id:'env-2',name:'2 — العنابي الرسمي'},{id:'env-3',name:'3 — الأزرق الأكاديمي'},{id:'env-4',name:'4 — الأخضر الهندسي'},{id:'env-5',name:'5 — الملكي الذهبي'},{id:'env-6',name:'6 — الذهبي البسيط'},{id:'env-7',name:'7 — الأحمر الكلاسيكي'},{id:'env-8',name:'8 — التدرج العصري'},{id:'env-9',name:'9 — الإطار الهندسي'}
+  {id:'certificate',title:'شهادات التقدير',icon:'🏆',route:'certificates.html',models:[
+    {id:'cert-1',name:'1 — الإطار الملكي'},{id:'cert-2',name:'2 — الإطار المزدوج'},{id:'cert-3',name:'3 — الشريط العلوي والسفلي'},{id:'cert-4',name:'4 — الزوايا الهندسية'},{id:'cert-5',name:'5 — الإطار الدائري'},
+    {id:'cert-6',name:'6 — الزخرفة الناعمة'},{id:'cert-7',name:'7 — الهندسي الحديث'},{id:'cert-8',name:'8 — الإسلامي المزخرف'},{id:'cert-9',name:'9 — الكلاسيكي'},{id:'cert-10',name:'10 — الأطفال المشرق'}
   ]},
   {id:'thanks',title:'كتاب الشكر والتقدير',icon:'🏅',route:'thanks-letter.html',models:[
-    {id:'t1',name:'ذهبي رسمي'},{id:'t2',name:'أخضر'},{id:'t3',name:'خمري'},{id:'t4',name:'أزرق'},{id:'t5',name:'بنفسجي'},{id:'t6',name:'رسمي أبيض وأسود'}
+    {id:'t1',name:'1 — الإطار الملكي'},{id:'t2',name:'2 — الشريط الجانبي'},{id:'t3',name:'3 — الوسام المركزي'},{id:'t4',name:'4 — الترويسة الأكاديمية'},{id:'t5',name:'5 — اللوحة الهندسية'},{id:'t6',name:'6 — الرسمي المبسط'}
   ]}
 ];
 })();
