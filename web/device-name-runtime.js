@@ -108,8 +108,9 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
-  // Latest approved UX keeps the native touch behavior and loads only the recovery layer.
+  // Latest approved UX keeps the native touch behavior and loads only the approved recovery/template layers.
   function loadFeatureRecovery() { loadScript('abuFeatureRecoveryRuntime', 'feature-recovery-runtime.js', '__ABU_FEATURE_RECOVERY_V1__'); }
+  function loadChildTemplates() { loadScript('abuChildTemplatesRuntime', 'child-card-templates-runtime.js', '__ABU_CHILD_TEMPLATES_V1__'); }
   function loadPermissionGuard() { loadScript('abuPermissionGuardRuntime', 'permission-guard-runtime.js', '__ABU_PERMISSION_GUARD_V1__'); }
   function loadSecurityExtras() { loadScript('abuSecurityExtrasRuntime', 'security-extras-runtime.js', '__ABU_SECURITY_EXTRAS_V1__', () => setTimeout(loadPermissionGuard, 20)); }
   function loadSecurity() { loadScript('abuAppSecurityRuntime', 'app-security-runtime.js', '__ABU_APP_SECURITY_V1__', () => setTimeout(loadSecurityExtras, 20)); }
@@ -119,11 +120,12 @@
   window.addEventListener('DOMContentLoaded', () => {
     ensureIdentity();
     loadFeatureRecovery();
+    loadChildTemplates();
     loadSecurity();
     setTimeout(heartbeat, 800);
     setInterval(() => { if (document.visibilityState !== 'hidden') heartbeat(); }, 120000);
   });
-  if (document.readyState !== 'loading') { loadFeatureRecovery(); loadSecurity(); }
+  if (document.readyState !== 'loading') { loadFeatureRecovery(); loadChildTemplates(); loadSecurity(); }
   window.addEventListener('online', heartbeat);
   document.addEventListener('abu-bassam-auth-changed', () => { heartbeat(); window.AbuBassamSecurity?.onSessionChanged?.(); });
 })();
