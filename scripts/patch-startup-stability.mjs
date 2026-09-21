@@ -27,9 +27,9 @@ index = mustReplace(
 );
 index = mustReplace(
   index,
-  "        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onLoadEnd={() => setWebReady(true)}\n        onError={() => Alert.alert('تعذر فتح التطبيق', 'أعد تشغيل التطبيق وحاول مرة أخرى.')}",
-  "        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}\n        onLoad={() => setWebReady(true)}\n        onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.65) setWebReady(true); }}\n        onLoadEnd={() => setWebReady(true)}\n        onError={() => { setWebReady(true); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}",
-  'WebView readiness callbacks'
+  "        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['*']} javaScriptEnabled domStorageEnabled\n        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode=\"always\"\n        setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}\n        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onLoadEnd={() => setWebReady(true)}\n        onError={() => Alert.alert('تعذر فتح التطبيق', 'أعد تشغيل التطبيق وحاول مرة أخرى.')}",
+  "        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled\n        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode=\"never\"\n        setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}\n        onShouldStartLoadWithRequest={(request) => {\n          const url = String(request?.url || '');\n          if (url.startsWith('file:///android_asset/library/') || url === 'about:blank') return true;\n          if (/^(https?:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});\n          return false;\n        }}\n        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}\n        onLoad={() => setWebReady(true)}\n        onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.65) setWebReady(true); }}\n        onLoadEnd={() => setWebReady(true)}\n        onError={() => { setWebReady(true); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}",
+  'WebView startup/security callbacks'
 );
 await writeFile(indexPath, index, 'utf8');
 
@@ -39,4 +39,4 @@ const newObserver = "let recoveryTimer=0;function scheduleRecovery(){clearTimeou
 recovery = mustReplace(recovery, oldObserver, newObserver, 'debounced recovery observer');
 await writeFile(recoveryPath, recovery, 'utf8');
 
-process.stdout.write('Startup stability patch applied: WebView watchdog/readiness fallbacks and debounced recovery observer.\n');
+process.stdout.write('Startup stability patch applied: watchdog/readiness fallbacks, local-only WebView navigation, and debounced recovery observer.\n');
