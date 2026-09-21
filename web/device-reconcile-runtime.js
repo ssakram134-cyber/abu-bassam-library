@@ -4,7 +4,7 @@ if(window.__ABU_DEVICE_RECONCILE_V1__)return;
 window.__ABU_DEVICE_RECONCILE_V1__=true;
 const $=id=>document.getElementById(id);
 const CURRENT_ID=()=>window.AbuBassamDevices?.ensure?.().id||'';
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function time(v){let n=Date.parse(v||0);return Number.isFinite(n)?n:0}
 function displayName(row){let name=String(row?.device_name||'').trim(),model=String(row?.model||'').trim();if(!name||name==='جهاز المكتبة'||/^android$/i.test(name))return model||name||'جهاز';return name}
 function signature(row){let name=String(row.device_name||'').trim().toLowerCase(),model=String(row.model||'').trim().toLowerCase(),platform=String(row.platform||'').trim().toLowerCase();return name&&model?`${name}|${model}|${platform}`:''}
