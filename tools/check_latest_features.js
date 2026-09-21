@@ -35,21 +35,24 @@ for (const marker of ['prodModeEnvelope','prodPaneEnvelope','envelopeFrame','src
 const recovery = read('feature-recovery-runtime.js');
 for (const marker of [
   '#abuControlDock','.abu-control-dock','.top-actions{top:76px','.top-actions .icon-btn,.top-actions button{width:52px','font-size:24px','abuCardsTemplatesBtn',
-  'card-templates-v2.html','applyRequestedTemplate','#cardsCenter .cs-photo-actions{display:grid!important','grid-template-columns:repeat(2,minmax(0,1fr))!important',
+  'abuSectionTemplatesBtn','abuSectionTemplatesLocalBtn','openSectionTemplates','installIframeTemplateButton','SECTION_TEMPLATES','FILE_TO_SECTION',
+  'card-templates-v2.html#','applyRequestedTemplate','#cardsCenter .cs-photo-actions{display:grid!important','grid-template-columns:repeat(2,minmax(0,1fr))!important',
   '#cardsCenter .cs-type{min-height:84px','overflow-wrap:anywhere!important',
   "addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'thanks'",
   'ration-card.html','mawkib-cards.html','envelopes.html','thanks-letter.html','recoveryMessage'
 ]) need(recovery, marker, 'feature-recovery-runtime.js');
+for (const section of ['personal','child','login','wifi','qr','ration','mawkib','envelope','thanks']) need(recovery, `${section}:{title:`, `feature-recovery-runtime.js section ${section}`);
 for (const marker of ["b.id='tabEnvelopes'","b.id='tabThanks'","p.id='prodPaneThanks'"]) forbid(recovery, marker, 'feature-recovery-runtime.js');
 
 const catalog = read('card-templates-v2.html');
-for (const marker of ['جميع النماذج المتفق عليها','card-template-library.js','النصوص الطويلة تلتف','class="model"','openRoute']) need(catalog, marker, 'card-templates-v2.html');
+for (const marker of ['جميع النماذج المتفق عليها','card-template-library.js','كل قسم يعرض نماذجه الخاصة فقط','class="model"','openRoute','requestedSection','selectedGroup','visibleLib','هذه النماذج تخص هذا القسم فقط']) need(catalog, marker, 'card-templates-v2.html');
 const legacyCatalog = read('card-templates.html');
 need(legacyCatalog, 'card-templates-v2.html', 'card-templates.html');
 
 const library = read('card-template-library.js');
-for (const marker of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','env-9','t10']) need(library, marker, 'card-template-library.js');
+for (const marker of ['AbuBassamCardTemplateLibrary','الباج التعريفي','باج الروضة والمدرسة','بطاقة تسجيل الدخول / الإيميل','كارت Wi‑Fi','تكوين QR','البطاقة التموينية','كروت المواكب الحسينية','صناعة الظرف / غلاف الأسئلة','كتاب الشكر والتقدير','env-9','t10']) need(library, marker, 'card-template-library.js');
 const groupCount = id => { const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`)); return m ? (m[1].match(/\{id:/g)||[]).length : 0; };
+for (const id of ['personal','child','login','wifi','qr']) if (groupCount(id) !== 1) errors.push(`${id} templates: expected approved original model only, got ${groupCount(id)}`);
 if (groupCount('ration') !== 10) errors.push(`ration templates: expected 10, got ${groupCount('ration')}`);
 if (groupCount('mawkib') !== 4) errors.push(`mawkib templates: expected 4, got ${groupCount('mawkib')}`);
 if (groupCount('envelope') !== 9) errors.push(`envelope templates: expected 9, got ${groupCount('envelope')}`);
@@ -76,4 +79,4 @@ for (const file of ['card-templates-v2.html','card-templates.html','ration-card.
 }
 
 if (errors.length) { process.stderr.write(errors.join('\n') + '\n'); process.exit(1); }
-process.stdout.write('Canonical audit checks passed: native question touch, no flex loader, envelopes/thanks grouped in Barcode & Cards, complete templates catalog, non-overlapping mobile controls, ration/Mawkib/thanks/envelope assets verified.\n');
+process.stdout.write('Canonical audit checks passed: native question touch, no flex loader, per-section templates buttons for every approved badge/card section, filtered section catalogs, envelopes/thanks grouped in Barcode & Cards, complete agreed model counts, and non-overlapping mobile controls.\n');
