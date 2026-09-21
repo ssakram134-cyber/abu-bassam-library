@@ -16,13 +16,14 @@
   function loadScript(id,src,guard,onload){if(document.getElementById(id)||(guard&&window[guard])){if(onload)onload();return}const script=document.createElement('script');script.id=id;script.src=src;if(onload)script.onload=onload;(document.head||document.documentElement).appendChild(script)}
   function loadFeatureRecovery(){loadScript('abuFeatureRecoveryRuntime','feature-recovery-runtime.js','__ABU_FEATURE_RECOVERY_V1__')}
   function loadChildTemplates(){loadScript('abuChildTemplatesRuntime','child-card-templates-runtime.js','__ABU_CHILD_TEMPLATES_V1__')}
+  function loadCardModels(){loadScript('abuCardModelsRuntime','card-models-runtime.js','__ABU_CARD_MODELS_V1__')}
   function loadStrictWorkflow(){loadScript('abuStrictWorkflowRuntime','strict-workflow-runtime.js','__ABU_STRICT_WORKFLOW_V1__')}
   function loadStandaloneFold(){loadScript('abuStandaloneFoldRuntime','standalone-fold-runtime.js','__ABU_STANDALONE_FOLD_V1__')}
   function loadDeviceReconcile(){loadScript('abuDeviceReconcileRuntime','device-reconcile-runtime.js','__ABU_DEVICE_RECONCILE_V1__')}
   function loadPermissionGuard(){loadScript('abuPermissionGuardRuntime','permission-guard-runtime.js','__ABU_PERMISSION_GUARD_V1__')}
   function loadSecurityExtras(){loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__',()=>setTimeout(loadPermissionGuard,20))}
   function loadSecurity(){loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40)})}
-  function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadStrictWorkflow();loadStandaloneFold();loadSecurity()}
+  function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStrictWorkflow();loadStandaloneFold();loadSecurity()}
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
   if(document.readyState!=='loading')loadApprovedUi();
