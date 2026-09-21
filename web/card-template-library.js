@@ -2,7 +2,18 @@
 'use strict';
 window.AbuBassamCardTemplateLibrary=[
   {id:'personal',title:'الباج التعريفي',icon:'🪪',type:'personal',models:[{id:'personal-original',name:'النموذج الأصلي المعتمد'}]},
-  {id:'child',title:'باج الروضة والمدرسة',icon:'🎒',type:'child',models:[{id:'child-original',name:'النموذج الأصلي المعتمد'}]},
+  {id:'child',title:'باج الروضة والمدرسة',icon:'🎒',type:'child',models:[
+    {id:'child-clouds',name:'النموذج 1 — الغيوم والمرح'},
+    {id:'child-hearts',name:'النموذج 2 — القلوب اللطيفة'},
+    {id:'child-nature',name:'النموذج 3 — الطبيعة والكتاب'},
+    {id:'child-space',name:'النموذج 4 — الفضاء والنجوم'},
+    {id:'child-rainbow',name:'النموذج 5 — قوس قزح'},
+    {id:'child-garden',name:'النموذج 6 — المدرسة والحديقة'},
+    {id:'child-shapes',name:'النموذج 7 — الأشكال التعليمية'},
+    {id:'child-balloons',name:'النموذج 8 — البالونات والاحتفال'},
+    {id:'child-board',name:'النموذج 9 — السبورة والطباشير'},
+    {id:'child-future',name:'النموذج 10 — المستقبل المشرق'}
+  ]},
   {id:'login',title:'بطاقة تسجيل الدخول / الإيميل',icon:'🔐',type:'login',models:[{id:'login-original',name:'النموذج الأصلي المعتمد'}]},
   {id:'wifi',title:'كارت Wi‑Fi',icon:'📶',type:'wifi',models:[{id:'wifi-original',name:'النموذج الأصلي المعتمد'}]},
   {id:'qr',title:'تكوين QR',icon:'▦',type:'qr',models:[{id:'qr-original',name:'النموذج الأصلي المعتمد'}]},
