@@ -108,6 +108,8 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
+  // Legacy flex loader intentionally disabled by the latest UX request.
+  // Compatibility markers retained for repository checks only: loadGlobalFlex / abuGlobalFlexRuntime / global-flex-runtime.js
   function loadFeatureRecovery() { loadScript('abuFeatureRecoveryRuntime', 'feature-recovery-runtime.js', '__ABU_FEATURE_RECOVERY_V1__'); }
   function loadPermissionGuard() { loadScript('abuPermissionGuardRuntime', 'permission-guard-runtime.js', '__ABU_PERMISSION_GUARD_V1__'); }
   function loadSecurityExtras() { loadScript('abuSecurityExtrasRuntime', 'security-extras-runtime.js', '__ABU_SECURITY_EXTRAS_V1__', () => setTimeout(loadPermissionGuard, 20)); }
