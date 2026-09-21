@@ -53,9 +53,11 @@ jobs:
           CI: "1"
         run: npm run android:prebuild
 
-      - name: Build installable test APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Configure fallback release signing
+        if: ${{ env.HAS_ANDROID_RELEASE_KEY != 'true' }}
+        run: |
+          test -s android/app/debug.keystore
+          printf '\napply from: file("../../scripts/android-ci-debug-release-signing.gradle")\n' >> android/app/build.gradle
 
       - name: Configure existing release key
         if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
@@ -63,10 +65,10 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.p12
+          test -s android/app/release-key.p12
           printf '\napply from: file("../../scripts/android-release-signing.gradle")\n' >> android/app/build.gradle
 
-      - name: Build signed release APK
-        if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
+      - name: Build standalone release APK
         working-directory: android
         env:
           ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/android/app/release-key.p12
@@ -76,17 +78,34 @@ jobs:
           ANDROID_KEYSTORE_TYPE: PKCS12
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Verify standalone JS bundle is packaged
+        shell: bash
+        run: |
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
+          test -s "$APK"
+          unzip -t "$APK"
+          unzip -l "$APK" | grep -F 'assets/index.android.bundle'
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
+
       - name: Prepare distributable APK
         shell: bash
         run: |
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
           mkdir -p dist
-          if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ] && ls android/app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
-            cp "$(ls android/app/build/outputs/apk/release/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
-            printf 'signed-release\n' > dist/BUILD_TYPE.txt
+          cp "$APK" "dist/Abu_Bassam_Library_4.3.2.apk"
+          if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ]; then
+            printf 'production-signed-release\n' > dist/BUILD_TYPE.txt
           else
-            cp "$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)" "dist/Abu_Bassam_Library_4.3.2.apk"
-            printf 'installable-debug\n' > dist/BUILD_TYPE.txt
+            printf 'debug-signed-release-standalone\n' > dist/BUILD_TYPE.txt
           fi
+          printf 'assets/index.android.bundle\n' > dist/BUNDLE_VERIFIED.txt
           test -s dist/Abu_Bassam_Library_4.3.2.apk
           ls -lh dist/Abu_Bassam_Library_4.3.2.apk
 
@@ -97,5 +116,6 @@ jobs:
           path: |
             dist/Abu_Bassam_Library_4.3.2.apk
             dist/BUILD_TYPE.txt
+            dist/BUNDLE_VERIFIED.txt
           if-no-files-found: error
           retention-days: 14
