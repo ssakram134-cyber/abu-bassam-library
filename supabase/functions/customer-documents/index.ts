@@ -4,16 +4,22 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const BUCKET = 'abu-bassam-customers-private';
+const MAX_FILE = 25 * 1024 * 1024;
+const SAFE_EDITED = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif','application/pdf']);
+const SAFE_ORIGINAL = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif']);
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-id, x-device-secret',
   'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
 };
-function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } }); }
+function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control':'no-store' } }); }
 function userClient(req: Request) { const authorization=req.headers.get('Authorization')||''; return createClient(SUPABASE_URL,ANON_KEY,{global:{headers:{Authorization:authorization}},auth:{persistSession:false}}); }
 function adminClient(){ return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}}); }
 function creds(req: Request){ return {deviceId:req.headers.get('x-device-id')||'',secret:req.headers.get('x-device-secret')||''}; }
 function safeName(value:string){ return String(value||'document').replace(/[\\/:*?"<>|\r\n]/g,'_').slice(0,180)||'document'; }
+function normalizedMime(value:string){ return String(value||'').split(';',1)[0].trim().toLowerCase(); }
+function revision(){ return `${Date.now()}-${crypto.randomUUID().replaceAll('-','')}`; }
+async function removeQuiet(admin:ReturnType<typeof adminClient>, paths:string[]){ const clean=[...new Set(paths.filter(Boolean))]; if(clean.length)await admin.storage.from(BUCKET).remove(clean).catch(()=>null); }
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
@@ -29,62 +35,62 @@ Deno.serve(async(req:Request)=>{
       const file=form.get('file');
       const originalFile=form.get('original_file');
       if(!(file instanceof File))return json({error:'FILE_REQUIRED'},400);
-      if(file.size>25*1024*1024)return json({error:'FILE_TOO_LARGE'},413);
-      if(originalFile instanceof File&&originalFile.size>25*1024*1024)return json({error:'ORIGINAL_TOO_LARGE'},413);
+      if(file.size<1||file.size>MAX_FILE)return json({error:'FILE_SIZE_INVALID'},413);
+      if(originalFile instanceof File&&(originalFile.size<1||originalFile.size>MAX_FILE))return json({error:'ORIGINAL_SIZE_INVALID'},413);
+
       const customerId=String(form.get('customer_id')||''),documentId=String(form.get('document_id')||crypto.randomUUID());
       const personScope=String(form.get('person_scope')||'customer'),personName=String(form.get('person_name')||''),documentType=String(form.get('document_type')||'other'),documentLabel=String(form.get('document_label')||''),side=String(form.get('side')||'single');
-      const fileName=safeName(String(form.get('file_name')||file.name||'document')),mime=String(file.type||form.get('mime')||'application/octet-stream'),sortOrder=Number(form.get('sort_order')||0)||0;
+      const fileName=safeName(String(form.get('file_name')||file.name||'document')),mime=normalizedMime(String(file.type||form.get('mime')||'')),sortOrder=Number(form.get('sort_order')||0)||0;
+      if(!SAFE_EDITED.has(mime))return json({error:'MIME_NOT_ALLOWED'},415);
       let editMeta:{}|Record<string,unknown>={}; try{editMeta=JSON.parse(String(form.get('edit_meta')||'{}'))}catch{}
 
-      // Detect whether this is an edit of an existing record. Rollback must never
-      // delete a customer's pre-existing document just because a replacement failed.
       const {data:existingAccess}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       const existing=Array.isArray(existingAccess)?existingAccess[0]:existingAccess;
-      const hadExisting=!!existing?.storage_path;
+      const {data:planned,error:planError}=await user.rpc('abu_bassam_customer_document_upload_plan',{p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId,p_document_id:documentId});
+      if(planError)return json({error:planError.message},403);
+      const plan=Array.isArray(planned)?planned[0]:planned;
+      if(!plan?.base_storage_path)return json({error:'UPLOAD_PLAN_FAILED'},500);
 
-      const {data:prepared,error:prepareError}=await user.rpc('abu_bassam_customer_prepare_document',{p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId,p_document_id:documentId,p_person_scope:personScope,p_person_name:personName,p_document_type:documentType,p_document_label:documentLabel,p_side:side,p_file_name:fileName,p_mime:mime,p_size_bytes:file.size,p_sort_order:sortOrder});
-      if(prepareError)return json({error:prepareError.message},403);
-      const row=Array.isArray(prepared)?prepared[0]:prepared;
-      if(!row?.storage_path)return json({error:'PREPARE_FAILED'},500);
+      const rev=revision();
+      const editedPath=`${plan.base_storage_path}.edited.${rev}`;
+      let originalPath:string|null=null,originalMime:string|null=null,originalSize=0;
+      const uploaded:string[]=[];
 
-      const rollbackNew=async(paths:string[])=>{
-        if(hadExisting)return;
-        const clean=[...new Set(paths.filter(Boolean))];
-        if(clean.length)await admin.storage.from(BUCKET).remove(clean).catch(()=>null);
-        await user.rpc('abu_bassam_customer_document_delete',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId}).catch(()=>null);
-      };
-
-      // Preserve the source image before replacing/creating the edited rendition.
-      // This prevents an original-upload failure from destroying an existing edited file.
-      let originalPath:string|null=null,originalMime:string|null=null,originalSize=0,originalUploaded=false;
       if(originalFile instanceof File){
-        originalPath=`${row.storage_path}.original`; originalMime=String(originalFile.type||'image/jpeg'); originalSize=originalFile.size;
-        const {error:originalError}=await admin.storage.from(BUCKET).upload(originalPath,originalFile,{upsert:false,contentType:originalMime,cacheControl:'3600'});
-        if(originalError&&!/already exists/i.test(originalError.message||'')){
-          await rollbackNew([]);
-          return json({error:originalError.message},500);
-        }
-        originalUploaded=!originalError;
+        originalMime=normalizedMime(originalFile.type||'');
+        if(!SAFE_ORIGINAL.has(originalMime))return json({error:'ORIGINAL_MIME_NOT_ALLOWED'},415);
+        originalSize=originalFile.size; originalPath=`${plan.base_storage_path}.original.${rev}`;
+        const {error}=await admin.storage.from(BUCKET).upload(originalPath,originalFile,{upsert:false,contentType:originalMime,cacheControl:'3600'});
+        if(error)return json({error:error.message},500); uploaded.push(originalPath);
+      }else if(existing?.original_storage_path){
+        const {data:oldOriginal,error:oldError}=await admin.storage.from(BUCKET).download(String(existing.original_storage_path));
+        if(oldError||!oldOriginal)return json({error:oldError?.message||'ORIGINAL_COPY_FAILED'},500);
+        originalMime=normalizedMime(String(existing.original_mime||oldOriginal.type||'image/jpeg'));
+        if(!SAFE_ORIGINAL.has(originalMime))return json({error:'ORIGINAL_MIME_NOT_ALLOWED'},415);
+        originalSize=oldOriginal.size; originalPath=`${plan.base_storage_path}.original.${rev}`;
+        const {error}=await admin.storage.from(BUCKET).upload(originalPath,oldOriginal,{upsert:false,contentType:originalMime,cacheControl:'3600'});
+        if(error)return json({error:error.message},500); uploaded.push(originalPath);
       }
 
-      const {error:uploadError}=await admin.storage.from(BUCKET).upload(row.storage_path,file,{upsert:true,contentType:mime,cacheControl:'3600'});
-      if(uploadError){
-        await rollbackNew(originalUploaded&&originalPath?[originalPath]:[]);
-        if(hadExisting&&originalUploaded&&originalPath&&!existing?.original_storage_path)await admin.storage.from(BUCKET).remove([originalPath]).catch(()=>null);
-        return json({error:uploadError.message},500);
-      }
+      const {error:uploadError}=await admin.storage.from(BUCKET).upload(editedPath,file,{upsert:false,contentType:mime,cacheControl:'3600'});
+      if(uploadError){await removeQuiet(admin,uploaded);return json({error:uploadError.message},500)}
+      uploaded.push(editedPath);
 
-      const metaArgs={p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId,p_original_storage_path:originalPath,p_original_mime:originalMime,p_original_size_bytes:originalSize,p_edit_meta:editMeta};
-      let {error:metaError}=await user.rpc('abu_bassam_customer_document_set_edit_meta',metaArgs);
-      if(metaError){
-        // One retry handles a transient database/network failure without leaving a half-saved new record.
-        ({error:metaError}=await user.rpc('abu_bassam_customer_document_set_edit_meta',metaArgs));
-      }
-      if(metaError){
-        await rollbackNew([row.storage_path,...(originalUploaded&&originalPath?[originalPath]:[])]);
-        return json({error:metaError.message},500);
-      }
-      return json({ok:true,document_id:row.document_id||documentId,owner_device_id:row.owner_device_id,file_name:fileName,mime,original_saved:!!(originalPath||existing?.original_storage_path)});
+      const commitArgs={
+        p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId,p_document_id:documentId,
+        p_storage_path:editedPath,p_original_storage_path:originalPath,
+        p_person_scope:personScope,p_person_name:personName,p_document_type:documentType,p_document_label:documentLabel,p_side:side,
+        p_file_name:fileName,p_mime:mime,p_size_bytes:file.size,p_sort_order:sortOrder,
+        p_original_mime:originalMime,p_original_size_bytes:originalSize,p_edit_meta:editMeta
+      };
+      let {data:committed,error:commitError}=await user.rpc('abu_bassam_customer_document_commit_v3',commitArgs);
+      if(commitError){({data:committed,error:commitError}=await user.rpc('abu_bassam_customer_document_commit_v3',commitArgs))}
+      if(commitError){await removeQuiet(admin,uploaded);return json({error:commitError.message},500)}
+
+      const oldPaths=[String(plan.existing_storage_path||''),String(plan.existing_original_storage_path||'')].filter(p=>p&&!uploaded.includes(p));
+      await removeQuiet(admin,oldPaths);
+      const row=Array.isArray(committed)?committed[0]:committed;
+      return json({ok:true,document_id:row?.document_id||documentId,owner_device_id:row?.owner_device_id||plan.owner_device_id,file_name:fileName,mime,original_saved:!!originalPath});
     }
 
     if(action==='download'&&req.method==='GET'){
@@ -94,11 +100,13 @@ Deno.serve(async(req:Request)=>{
       const row=Array.isArray(access)?access[0]:access;
       if(!row?.storage_path)return json({error:'DOCUMENT_NOT_FOUND'},404);
       const useOriginal=version==='original'&&row.original_storage_path;
-      const path=useOriginal?row.original_storage_path:row.storage_path;
-      const mime=useOriginal?(row.original_mime||row.mime):row.mime;
+      const path=String(useOriginal?row.original_storage_path:row.storage_path||'');
+      const mime=normalizedMime(String(useOriginal?(row.original_mime||''):row.mime||''));
+      const allowed=useOriginal?SAFE_ORIGINAL:SAFE_EDITED;
+      if(!allowed.has(mime))return json({error:'UNSAFE_STORED_MIME'},415);
       const {data:blob,error:downloadError}=await admin.storage.from(BUCKET).download(path);
       if(downloadError||!blob)return json({error:downloadError?.message||'DOWNLOAD_FAILED'},404);
-      const headers=new Headers(cors);headers.set('Content-Type',mime||blob.type||'application/octet-stream');headers.set('Content-Disposition',`inline; filename="${safeName(row.file_name||'document')}"`);headers.set('Cache-Control','private, no-store');
+      const headers=new Headers(cors);headers.set('Content-Type',mime);headers.set('X-Content-Type-Options','nosniff');headers.set('Content-Disposition',`inline; filename="${safeName(row.file_name||'document')}"`);headers.set('Cache-Control','private, no-store');
       return new Response(blob,{status:200,headers});
     }
 
@@ -108,10 +116,9 @@ Deno.serve(async(req:Request)=>{
       const before=Array.isArray(access)?access[0]:access;
       const {data:path,error:deleteError}=await user.rpc('abu_bassam_customer_document_delete',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       if(deleteError)return json({error:deleteError.message},403);
-      const paths=[String(path||before?.storage_path||'')]; if(before?.original_storage_path)paths.push(String(before.original_storage_path));
-      const clean=paths.filter(Boolean); if(clean.length)await admin.storage.from(BUCKET).remove(clean);
+      await removeQuiet(admin,[String(path||before?.storage_path||''),String(before?.original_storage_path||'')]);
       return json({ok:true});
     }
     return json({error:'UNSUPPORTED_ACTION'},400);
-  }catch(error){return json({error:String(error?.message||error||'SERVER_ERROR')},500)}
+  }catch(error){return json({error:String((error as Error)?.message||error||'SERVER_ERROR')},500)}
 });
