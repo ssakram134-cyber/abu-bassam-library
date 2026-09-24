@@ -29,9 +29,10 @@
   function loadLoginInputDirection(){loadScript('abuLoginInputDirectionRuntime','login-input-direction-runtime.js','__ABU_LOGIN_INPUT_DIRECTION_V1__')}
   function loadPasswordPolicy(){loadScript('abuPasswordPolicyRuntime','password-policy-runtime.js','__ABU_PASSWORD_POLICY_V1__')}
   function loadSettingsCorrections(){loadScript('abuSettingsCorrectionsRuntime','settings-corrections-runtime.js','__ABU_SETTINGS_CORRECTIONS_V1__')}
+  function loadWifiSyncGuard(){loadScript('abuWifiSyncGuardRuntime','wifi-sync-guard-runtime.js','__ABU_WIFI_SYNC_GUARD_V1__')}
   function loadSecurityExtras(){loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__',()=>{setTimeout(loadPermissionGuard,20);setTimeout(loadLoginThrottleFix,35);setTimeout(loadLoginInputDirection,45);setTimeout(loadPasswordPolicy,55)})}
   function loadSecurity(){loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40);setTimeout(loadLoginInputDirection,50);setTimeout(loadPasswordPolicy,90)})}
-  function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadSecurity();loadSettingsCorrections()}
+  function loadApprovedUi(){loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadWifiSyncGuard();loadSecurity();loadSettingsCorrections()}
   installSplashWatchdog();
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();signalBootReady();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
