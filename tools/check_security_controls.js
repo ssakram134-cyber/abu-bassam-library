@@ -10,10 +10,11 @@ need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-ca
 forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"']);
 need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'MAX_DEVICES=5','abu_bassam_register_device','abu_bassam_manage_device','abu_bassam_remove_device','SECONDARY_DEFAULT','OWNER_PERMISSIONS','toggleBiometric','appearanceSync','اضغط مرة ثانية للخروج']);
 need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','abuBassamEmergencySnapshotV1','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'خصوصية عالية','تسجيل الخروج']);
+need('web/password-policy-runtime.js',['__ABU_PASSWORD_POLICY_V1__','v.length<12','\\p{L}','\\p{N}',"c.auth.updateUser({password:next})","c.auth.signOut({scope:'others'})",'extras.changePassword=changePassword']);
 need('web/login-throttle-fix-runtime.js',['__ABU_LOGIN_THROTTLE_FIX_V2__','loginBusy','legacyInstalled','credentialFailure(message)','deviceOrPostAuthFailure(message)','recordCredentialFailure','attributeFilter']);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('lang','en')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
 need('web/permission-guard-runtime.js',['__ABU_PERMISSION_GUARD_V1__',"return'print'","return'export'","return'appearance'","return'sync'","return'edit'",'beforeinput','stopImmediatePropagation']);
-need('web/device-name-runtime.js',['app-security-runtime.js','security-extras-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-reconcile-runtime.js','AbuBassamDeviceRegistry']);
+need('web/device-name-runtime.js',['app-security-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-reconcile-runtime.js','AbuBassamDeviceRegistry']);
 need('web/device-reconcile-runtime.js',['__ABU_DEVICE_RECONCILE_V2__','abu_bassam_owner_devices','abu_bassam_owner_device_count','abu_bassam_set_device_limit','abu_bassam_manage_device','abu_bassam_remove_device','secureGet','refreshLimitUi','sec.renderDevices=render','sec.permissionsDevice=permissionsDevice']);
 forbid('web/device-name-runtime.js',["from('abu_bassam_devices')","cloud.list('device')"]);
 forbid('web/device-reconcile-runtime.js',["from('abu_bassam_devices')"]);
@@ -23,10 +24,10 @@ need('supabase/migrations/202609240008_private_tables_deny_all_and_device_index_
 need('supabase/migrations/202609240009_strict_device_registration_identity.sql',['abu_bassam_devices_one_owner_per_user','pg_advisory_xact_lock',"if v_row.active=false then raise exception 'DEVICE_DISABLED'",'if v_row.secret_hash<>v_hash then raise exception',"v_role:=case when v_count=0 then 'owner' else 'secondary' end"]);
 forbid('supabase/migrations/202609240009_strict_device_registration_identity.sql',['lower(trim(coalesce(device_name','active=true where user_id=v_uid and device_id=p_device_id']);
 
-for(const file of ['web/device-name-runtime.js','web/device-reconcile-runtime.js']){try{new Function(read(file))}catch(e){failures.push(`${file}: JavaScript syntax error: ${e.message}`)}}
+for(const file of ['web/device-name-runtime.js','web/device-reconcile-runtime.js','web/password-policy-runtime.js']){try{new Function(read(file))}catch(e){failures.push(`${file}: JavaScript syntax error: ${e.message}`)}}
 const packageJson=JSON.parse(read('package.json'));
 for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!packageJson.dependencies?.[dep])failures.push(`package.json: missing ${dep}`);
-const production=['index.js','web/app-security-runtime.js','web/security-extras-runtime.js','web/permission-guard-runtime.js','web/login-throttle-fix-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'].map(read).join('\n');
+const production=['index.js','web/app-security-runtime.js','web/security-extras-runtime.js','web/password-policy-runtime.js','web/permission-guard-runtime.js','web/login-throttle-fix-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'].map(read).join('\n');
 for(const marker of [['service','role'].join('_'),['sb','secret',''].join('_'),['BEGIN','PRIVATE','KEY'].join(' ')])if(production.toLowerCase().includes(marker.toLowerCase()))failures.push(`Sensitive server credential marker found in production security source: ${marker}`);
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Security/control checks passed: biometrics, SecureStore, private-table deny policies, strict device identity without role inheritance/reactivation, owner-verified device RPCs, guarded permissions, single-attempt login repair, LTR credentials, and local-only WebView navigation.\n');
+process.stdout.write('Security/control checks passed: biometrics, SecureStore, strong password changes, private-table deny policies, strict device identity without role inheritance/reactivation, owner-verified device RPCs, guarded permissions, login throttling, LTR credentials, and local-only WebView navigation.\n');
