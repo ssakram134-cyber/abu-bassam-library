@@ -18,15 +18,17 @@ function bindOperationToDevice(operation){
   if(keys.length>1200)keys.slice(0,keys.length-1200).forEach(key=>delete scope[key]);
   try{localStorage.setItem(SCOPE_KEY,JSON.stringify(scope))}catch(_){}
 }
-function loadSecondaryPrivacy(){
-  if(window.__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__||document.getElementById('abuSecondaryNotificationPrivacyRuntime'))return;
-  const script=document.createElement('script');script.id='abuSecondaryNotificationPrivacyRuntime';script.src='secondary-notification-privacy-runtime.js';script.async=false;script.onerror=()=>console.warn('secondary-notification-privacy-runtime.js failed to load');document.body.appendChild(script);
+function loadScript(id,src,guard){
+  if(window[guard]||document.getElementById(id))return;
+  const script=document.createElement('script');script.id=id;script.src=src;script.async=false;script.onerror=()=>console.warn(src+' failed to load');(document.body||document.documentElement).appendChild(script);
 }
+function loadSecondaryPrivacy(){loadScript('abuSecondaryNotificationPrivacyRuntime','secondary-notification-privacy-runtime.js','__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__')}
+function loadCorrections(){loadScript('abuNotificationCenterCorrectionsRuntime','notification-center-corrections-runtime.js','__ABU_NOTIFICATION_CENTER_CORRECTIONS_V2__')}
 function rootOriginal(fn){let current=fn,guard=0;while(current&&current.__abuOriginal&&guard++<12)current=current.__abuOriginal;return current||fn}
 function install(){
   const ops=window.AbuBassamOps,center=window.AbuBassamNotifications;
   if(!ops||!center||typeof ops.add!=='function'||typeof ops.list!=='function'||typeof center.fromOperation!=='function')return false;
-  loadSecondaryPrivacy();
+  loadSecondaryPrivacy();loadCorrections();
   if(ops.add.__abuStableNotifyBridge)return true;
   const original=rootOriginal(ops.add);
   const wrapped=function(input,...rest){
@@ -49,6 +51,6 @@ function install(){
   return true;
 }
 let attempts=0;const timer=setInterval(()=>{attempts++;install();if(attempts>50)clearInterval(timer)},120);
-setTimeout(()=>{clearInterval(timer);install();loadSecondaryPrivacy()},7000);
+setTimeout(()=>{clearInterval(timer);install();loadSecondaryPrivacy();loadCorrections()},7000);
 if(document.readyState!=='loading')install();else document.addEventListener('DOMContentLoaded',install,{once:true});
 })();
