@@ -64,7 +64,7 @@ function apply(closeAfter=true){
   if(closeAfter)close();
 }
 function loadSupport(){
-  [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
+  [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
 }
 function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
 window.AbuQuestionPaper={open,close,preset,apply,deletePage,state:()=>({...state})};
