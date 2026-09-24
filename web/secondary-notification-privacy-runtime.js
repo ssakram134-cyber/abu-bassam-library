@@ -18,7 +18,7 @@ function belongsToCurrentDevice(notification,scope,id){
     return !!ownerId&&ownerId===id;
   }
   const nDevice=String(notification.deviceId||'').trim();
-  return !nDevice||nDevice===id;
+  return !!nDevice&&nDevice===id;
 }
 function updateBadge(list){const unread=list.filter(n=>!n.read).length,badge=document.getElementById('abuNotificationBadge'),button=document.getElementById('abuNotificationBell');if(badge){badge.textContent=unread>99?'99+':String(unread);badge.style.display=unread?'grid':'none'}if(button)button.setAttribute('aria-label',unread?`الإشعارات، ${unread} غير مقروء`:'الإشعارات')}
 function clean(){
