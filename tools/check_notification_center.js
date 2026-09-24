@@ -13,8 +13,12 @@ need(loader,'notification-center-runtime.js','notification runtime is not loaded
 need(loader,'notification-ops-bridge-runtime.js','stable operations bridge is not loaded');
 need(bridge,'__abuOriginal','bridge must bypass the temporary pre-id wrapper');
 need(bridge,'ops.list?.()?.[0]','bridge must read the persisted operation id');
-need(privacy,"!=='operation'",'legacy operation cloud traffic must be intercepted');
-need(privacy,"role()!=='secondary'",'secondary local log isolation');
+need(bridge,'abuBassamOperationDeviceScopeV1','operation ownership map');
+need(bridge,'bindOperationToDevice','new operations must be bound to their originating device');
+need(privacy,"!==\'operation\'",'legacy operation cloud traffic must be intercepted');
+need(privacy,"role()!==\'secondary\'",'secondary local log isolation');
+need(privacy,'ownerId===id','secondary logs must be filtered by exact device id');
+need(privacy,'abuBassamOperationDeviceScopeV1','secondary logs must use the ownership map');
 need(runtime,'abuNotificationBell','bell button');
 need(runtime,'abuNotificationBadge','unread badge');
 need(runtime,'markAll','mark all read');
