@@ -3,6 +3,7 @@
 if(window.__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__)return;
 window.__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__=true;
 const STORE='abuBassamNotificationsV1';
+const AUDIT_QUEUE='abuBassamAuditQueueV1';
 const SCOPE_KEY='abuBassamOperationDeviceScopeV1';
 function role(){return window.AbuBassamSecurity?.role?.()||''}
 function deviceId(){const d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{};return String(d.device_id||d.id||localStorage.getItem('abuBassamLockedDeviceIdV3')||'').trim()}
@@ -23,10 +24,16 @@ function updateBadge(list){const unread=list.filter(n=>!n.read).length,badge=doc
 function clean(){
   if(role()!=='secondary')return false;
   const id=deviceId();if(!id)return false;
-  const list=read(STORE,[]),scope=read(SCOPE_KEY,{});if(!Array.isArray(list))return false;
-  const own=list.filter(n=>belongsToCurrentDevice(n,scope,id));
-  if(own.length!==list.length)write(STORE,own);
-  updateBadge(own);
+  const scope=read(SCOPE_KEY,{});
+  const list=read(STORE,[]);if(Array.isArray(list)){
+    const own=list.filter(n=>belongsToCurrentDevice(n,scope,id));
+    if(own.length!==list.length)write(STORE,own);
+    updateBadge(own);
+  }
+  const queue=read(AUDIT_QUEUE,[]);if(Array.isArray(queue)){
+    const ownQueue=queue.filter(n=>belongsToCurrentDevice(n,scope,id));
+    if(ownQueue.length!==queue.length)write(AUDIT_QUEUE,ownQueue);
+  }
   return true;
 }
 function guardFromOperation(){
@@ -43,11 +50,11 @@ function guardFromOperation(){
 }
 function boot(){
   let attempts=0;const timer=setInterval(()=>{attempts++;guardFromOperation();clean();if((window.AbuBassamNotifications&&role())||attempts>120)clearInterval(timer)},120);
-  [300,900,1800,3500,7000].forEach(ms=>setTimeout(()=>{guardFromOperation();clean()},ms));
-  setInterval(()=>{if(role()==='secondary'){guardFromOperation();clean()}},2000);
-  window.addEventListener('online',()=>setTimeout(clean,500));
+  [100,300,900,1800,3500,7000].forEach(ms=>setTimeout(()=>{guardFromOperation();clean()},ms));
+  setInterval(()=>{if(role()==='secondary'){guardFromOperation();clean()}},1500);
+  window.addEventListener('online',()=>setTimeout(clean,100));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(clean,100)});
-  window.addEventListener('storage',event=>{if(event.key===STORE||event.key===SCOPE_KEY)setTimeout(clean,0)});
+  window.addEventListener('storage',event=>{if(event.key===STORE||event.key===AUDIT_QUEUE||event.key===SCOPE_KEY)setTimeout(clean,0)});
 }
 window.AbuBassamSecondaryNotificationPrivacy={clean,guardFromOperation,deviceId};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
