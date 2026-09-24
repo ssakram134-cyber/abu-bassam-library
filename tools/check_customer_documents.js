@@ -1,0 +1,36 @@
+const fs=require('fs');
+function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
+function need(src,t,label){if(!src.includes(t))throw new Error(`customer documents check failed: ${label}`)}
+const ui=read('web/customer-documents-runtime.js');
+const loader=read('web/productivity-tools-runtime.js');
+const migration=read('supabase/migrations/202609240004_customer_documents.sql');
+const edge=read('supabase/functions/customer-documents/index.ts');
+new Function(ui);
+need(loader,'customer-documents-runtime.js','runtime loader');
+need(ui,'مستمسكات الزبائن','customer documents center');
+need(ui,'كل فرع مستقل تمامًا','branch isolation notice');
+need(ui,"p_device_secret",'device secret required');
+need(ui,"role()==='owner'",'owner-only cross-branch UI');
+need(ui,"national_front",'national ID front');
+need(ui,"national_back",'national ID back');
+need(ui,"residence_front",'residence front');
+need(ui,"residence_back",'residence back');
+need(ui,"personal_photo",'personal photo');
+need(ui,"مستمسكات الزوجة",'spouse documents');
+need(ui,"مستمسكات طفل",'children documents');
+need(ui,"appointment_order",'appointment orders');
+need(ui,"admin_letter",'administrative letters');
+need(ui,"الكاميرا الذكية",'smart camera entry');
+need(ui,"تحرير/الوطنية",'send to national ID editor');
+need(ui,"دمج A4",'A4 merge');
+need(ui,"abu_bassam_customer_transfer",'owner branch transfer');
+need(migration,"v_device.role='owner' or c.owner_device_id=p_device_id",'secondary customer row isolation');
+need(migration,"v_device.role<>'owner' and v_doc.owner_device_id<>p_device_id",'secondary document isolation');
+need(migration,'revoke all on public.abu_bassam_customers from anon,authenticated','no direct customer table reads');
+need(migration,'revoke all on public.abu_bassam_customer_documents from anon,authenticated','no direct document table reads');
+need(migration,"'abu-bassam-customers-private'",'private customer bucket');
+need(edge,"verify",'edge source present');
+need(edge,"x-device-id",'edge device identity');
+need(edge,"x-device-secret",'edge device secret');
+need(edge,"abu_bassam_customer_document_access",'download authorization');
+console.log('customer documents branch isolation checks passed');
