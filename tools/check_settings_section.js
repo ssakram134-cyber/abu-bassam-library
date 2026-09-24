@@ -18,7 +18,7 @@ for(const marker of [
   'لا يوجد تسجيل دخول مباشر إلى Google','connectionClass()','wifiOnly()',
   "DocumentVault.syncNow=function",'abuBassamActivePrinterProfileV1',
   'transform:translate(${x}mm,${y}mm)','p.borderless?0',
-  'AbuBassamSettingsEnhancements.applyPrinter=applyPrinterSafe'
+  'e.applyPrinter=applyPrinterSafe'
 ])need(fix,marker,'settings corrections');
 const reset=(fix.match(/const RESET_KEYS=\[([^\]]*)\]/)||[])[1]||'';
 if(/SyncPolicy|WhatsApp|WA_KEY|AUTO_SYNC/i.test(reset))errors.push('settings reset: must not clear sync or WhatsApp settings');
