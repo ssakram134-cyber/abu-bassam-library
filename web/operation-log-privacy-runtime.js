@@ -9,21 +9,19 @@ let cleaned=false;
 function role(){return window.AbuBassamSecurity?.role?.()||''}
 function device(){return window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{}}
 function deviceId(){const d=device();return String(d.device_id||d.id||localStorage.getItem('abuBassamLockedDeviceIdV3')||'').trim()}
-function deviceName(){const d=device();return String(d.device_name||d.name||(typeof window.AbuBassamDeviceName==='function'?window.AbuBassamDeviceName():'')).trim()}
 function readOps(){try{const x=JSON.parse(localStorage.getItem(OPS_KEY)||'[]');return Array.isArray(x)?x:[]}catch(_){return[]}}
 function writeOps(list){try{localStorage.setItem(OPS_KEY,JSON.stringify((Array.isArray(list)?list:[]).slice(0,500)))}catch(_){}}
 function readScope(){try{const value=JSON.parse(localStorage.getItem(SCOPE_KEY)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch(_){return{}}}
 function writeScope(scope){try{localStorage.setItem(SCOPE_KEY,JSON.stringify(scope&&typeof scope==='object'?scope:{}))}catch(_){}}
 function cleanSecondaryLocal(){
   if(cleaned||role()!=='secondary')return false;
-  const id=deviceId(),name=deviceName();
-  if(!id&&!name)return false;
+  const id=deviceId();
+  if(!id)return false;
   const scope=readScope(),before=readOps();
   const own=before.filter(item=>{
     const opId=String(item?.id||'').trim();
     const ownerId=opId?String(scope[opId]||'').trim():'';
-    if(ownerId)return !!id&&ownerId===id;
-    return !!name&&String(item?.deviceName||'').trim()===name;
+    return !!ownerId&&ownerId===id;
   });
   const keptIds=new Set(own.map(item=>String(item?.id||'')).filter(Boolean));
   Object.keys(scope).forEach(key=>{if(!keptIds.has(key)&&scope[key]===id)delete scope[key]});
