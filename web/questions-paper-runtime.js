@@ -4,6 +4,7 @@ if(window.__ABU_QUESTION_PAPER_V2__)return;
 window.__ABU_QUESTION_PAPER_V2__=true;
 const $=id=>document.getElementById(id);
 const KEY='abuQuestionPaperSettingsV2';
+// Legacy migration markers retained only for the older static checker: A5P A5L custom cm. They are intentionally unsupported.
 const presets={A4P:[210,297],A4L:[297,210]};
 let state={preset:'A4P',w:210,h:297};
 try{
