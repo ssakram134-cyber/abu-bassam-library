@@ -39,7 +39,7 @@ for(const marker of [
   "deviceName||d.name||'هذا الجهاز'"
 ])need(runtime,marker,'operation log');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
-for(const marker of ['__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__','api.scrub(item)','localStorage.removeItem(\'abuBassamOpsV3\')','localStorage.removeItem(\'abuBassamOpsV2\')'])need(scrub,marker,'operation storage scrub');
+for(const marker of ['__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__','api.scrub(item)',"localStorage.removeItem('abuBassamOpsV3')","localStorage.removeItem('abuBassamOpsV2')"])need(scrub,marker,'operation storage scrub');
 for(const marker of ['operation-log-corrections-runtime.js','loadOperationLogCorrections()','operation-log-storage-migration-runtime.js','loadOperationLogStorageMigration'])need(loader,marker,'operation log loader');
 for(const marker of [
   "coalesce(v_actor.secret_hash,'')=''",
