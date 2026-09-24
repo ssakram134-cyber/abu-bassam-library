@@ -29,7 +29,7 @@ need(migration,"v_device.role<>'owner' and v_doc.owner_device_id<>p_device_id",'
 need(migration,'revoke all on public.abu_bassam_customers from anon,authenticated','no direct customer table reads');
 need(migration,'revoke all on public.abu_bassam_customer_documents from anon,authenticated','no direct document table reads');
 need(migration,"'abu-bassam-customers-private'",'private customer bucket');
-need(edge,"verify",'edge source present');
+need(edge,"SUPABASE_SERVICE_ROLE_KEY",'server-only file gateway');
 need(edge,"x-device-id",'edge device identity');
 need(edge,"x-device-secret",'edge device secret');
 need(edge,"abu_bassam_customer_document_access",'download authorization');
