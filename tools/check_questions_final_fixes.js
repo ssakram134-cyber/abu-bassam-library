@@ -6,7 +6,8 @@ const web=path.join(root,'web');
 const errors=[];
 const read=f=>fs.readFileSync(path.join(web,f),'utf8');
 const need=(s,m,l)=>{if(!s.includes(m))errors.push(`${l}: missing ${m}`)};
-for(const f of ['questions-completion-runtime.js','questions-final-fixes-runtime.js','questions-en-fixes-runtime.js','questions-paper-runtime.js','productivity-tools-runtime.js']){
+const forbid=(s,m,l)=>{if(s.includes(m))errors.push(`${l}: forbidden ${m}`)};
+for(const f of ['questions-completion-runtime.js','questions-final-fixes-runtime.js','questions-en-fixes-runtime.js','questions-paper-runtime.js','productivity-tools-runtime.js','questions-template-tools-runtime.js','questions-templates-runtime.js']){
   const p=path.join(web,f);if(!fs.existsSync(p)){errors.push(`Missing ${f}`);continue}
   try{new vm.Script(read(f),{filename:f})}catch(e){errors.push(`${f}: syntax ${e.message}`)}
 }
@@ -33,5 +34,15 @@ if(fs.existsSync(path.join(web,'productivity-tools-runtime.js'))){
   for(const m of ['A4 فقط','injectEnglishRuntime','questions-en-fixes-runtime.js','injectCurrentQuestionRuntime','script.async=false'])need(p,m,'question host');
   if(p.includes('A4/A5/مخصص'))errors.push('question host still advertises A5/custom paper');
 }
+if(fs.existsSync(path.join(web,'questions-template-tools-runtime.js'))){
+  const s=read('questions-template-tools-runtime.js');
+  for(const m of ['async function reload()','await AbuQuestionCompletion.save(false)','const changed=ordered.some','if(changed)ordered.forEach','if(write(a))reload()'])need(s,m,'template tools');
+  forbid(s,'setTimeout(()=>location.reload(),120)','template tools');
+}
+if(fs.existsSync(path.join(web,'questions-templates-runtime.js'))){
+  const s=read('questions-templates-runtime.js');
+  for(const m of ["year:'٢٠٢٦ - ٢٠٢٧'",'اليوم / ${esc(profile.day',"document.querySelectorAll('.header')","new CustomEvent('abuQuestionSubjectChanged'",'AbuQuestionFinalFixes?.optimizeImage','isPng?\'image/png\':\'image/jpeg\'','return save(PROFILE_KEY,profile)','if(!save(CUSTOM_KEY,next))'])need(s,m,'question templates');
+  forbid(s,'attributes:true','question templates observer');
+}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Question final-fix checks passed: Arabic/English A4-only, deterministic drafts, safe images, stable touch/undo controls and overflow cleanup.\n');
+process.stdout.write('Question final-fix checks passed: Arabic/English A4-only, deterministic drafts, safe images, stable touch/undo, safe template management/profile storage and overflow cleanup.\n');
