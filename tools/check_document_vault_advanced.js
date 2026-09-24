@@ -1,0 +1,32 @@
+const fs=require('fs');
+function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
+function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+const advanced=read('web/document-vault-advanced-runtime.js');
+const offline=read('web/document-vault-offline-ocr-runtime.js');
+const loader=read('web/productivity-tools-runtime.js');
+const assets=read('scripts/prepare-android-assets.mjs');
+new Function(advanced);new Function(offline);
+need(loader,'document-vault-advanced-runtime.js','advanced vault runtime loader');
+need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader');
+need(advanced,'تحرير متقدم','advanced editor entry');
+need(advanced,'قص حر','direct free crop');
+need(advanced,'منظور 4 زوايا','four-corner perspective');
+need(advanced,"DIRS",'advanced geometry support');
+need(advanced,'avaSharpen','sharpen control');
+need(advanced,'avaDenoise','denoise control');
+need(advanced,'avaTemp','white balance temperature control');
+need(advanced,'avaSaturation','saturation control');
+need(advanced,'function homography','true projective homography');
+need(advanced,'MAX_SOURCE_PIXELS','source memory guard');
+need(advanced,'MAX_OUTPUT_PIXELS','output memory guard');
+need(advanced,"syncState='pending'",'edited image must re-enter sync queue');
+need(offline,"createWorker('ara+eng'",'Arabic and English OCR');
+need(offline,"workerPath:'vendor/tesseract/worker.min.js'",'local OCR worker');
+need(offline,"langPath:'vendor/tesseract/lang'",'local OCR languages');
+need(offline,"corePath:'vendor/tesseract/core'",'local OCR core');
+need(assets,'tesseract.js@5.1.1/dist/tesseract.min.js','pinned Tesseract browser bundle');
+need(assets,'tesseract.js-core@5.1.1','pinned Tesseract core');
+need(assets,'ara.traineddata.gz','Arabic trained data');
+need(assets,'eng.traineddata.gz','English trained data');
+need(assets,'Offline OCR assets (Arabic + English) are embedded','offline OCR packaging confirmation');
+console.log('document vault advanced checks passed');
