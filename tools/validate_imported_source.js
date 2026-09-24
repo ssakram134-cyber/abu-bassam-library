@@ -7,7 +7,7 @@ function fail(message){console.error('Source import rejected: '+message);process
 function readJson(rel){const file=path.join(root,rel);if(!fs.existsSync(file))fail(`missing ${rel}`);try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(e){fail(`invalid JSON in ${rel}: ${e.message}`)}}
 function walk(dir,out=[]){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isSymbolicLink())fail(`symbolic link is not allowed: ${path.relative(root,p)}`);if(entry.isDirectory()){if(!['node_modules','.git','dist','android','ios'].includes(entry.name))walk(p,out)}else out.push(p)}return out}
 
-for(const rel of ['package.json','package-lock.json','app.json','index.js','web/index.html'])if(!fs.existsSync(path.join(root,rel)))fail(`missing ${rel}`);
+for(const rel of ['package.json','package-lock.json','app.json','index.js','web/index.html','scripts/build-android-local.mjs'])if(!fs.existsSync(path.join(root,rel)))fail(`missing ${rel}`);
 const pkg=readJson('package.json');
 const lock=readJson('package-lock.json');
 const app=readJson('app.json').expo||{};
@@ -18,7 +18,10 @@ if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Androi
 if(Number(app.android?.versionCode)!==432)fail('unexpected Android versionCode');
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
 if(pkg.engines?.node!=='>=20 <25')fail('Node engine must remain >=20 <25');
-if(pkg.scripts?.['build:apk:local']!=='node scripts/build-android-local.mjs')fail('local APK build command is missing or changed');
+if(pkg.scripts?.['build:apk:local']!=='node scripts/build-android-local.mjs')fail('local APK test build command is missing or changed');
+if(pkg.scripts?.['build:apk:release']!=='node scripts/build-android-local.mjs --require-release-key')fail('strict production APK build command is missing or changed');
+const buildScript=fs.readFileSync(path.join(root,'scripts','build-android-local.mjs'),'utf8');
+for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'",'Production release signing is required.','SIGNING_CERTIFICATE.txt'])if(!buildScript.includes(marker))fail(`local APK signing safeguard missing: ${marker}`);
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);
 
 const forbiddenNames=new Set(['.env','.env.local','.env.production','.npmrc','local.properties','google-services.json']);
