@@ -15,7 +15,7 @@ need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAtt
 need('web/permission-guard-runtime.js',['__ABU_PERMISSION_GUARD_V1__',"return'print'","return'export'","return'appearance'","return'sync'","return'edit'",'beforeinput','stopImmediatePropagation']);
 need('web/device-name-runtime.js',['app-security-runtime.js','security-extras-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-reconcile-runtime.js','AbuBassamDeviceRegistry']);
 need('web/device-reconcile-runtime.js',['__ABU_DEVICE_RECONCILE_V2__','abu_bassam_owner_devices','abu_bassam_owner_device_count','abu_bassam_set_device_limit','abu_bassam_manage_device','abu_bassam_remove_device','secureGet','refreshLimitUi','sec.renderDevices=render','sec.permissionsDevice=permissionsDevice']);
-forbid('web/device-name-runtime.js',["from('abu_bassam_devices')",'cloud.list(\'device\'']);
+forbid('web/device-name-runtime.js',["from('abu_bassam_devices')","cloud.list('device')"]);
 forbid('web/device-reconcile-runtime.js',["from('abu_bassam_devices')"]);
 need('supabase/migrations/202609240006_device_registry_privacy_boundary.sql',['revoke all on table public.abu_bassam_devices from PUBLIC, anon, authenticated','abu_bassam_owner_device_count','abu_bassam_owner_devices',"v_actor.role<>'owner'","v_actor.secret_hash<>v_hash"]);
 need('supabase/migrations/202609240007_device_secret_representation.sql',["alter column secret_hash type text",'abu_bassam_devices_secret_hash_valid',"secret_hash ~ '^[0-9a-f]{64}$'",'abu_bassam_remove_device',"v_actor.secret_hash<>v_hash"]);
