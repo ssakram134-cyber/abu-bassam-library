@@ -1,133 +1,164 @@
-name: Import Abu Bassam source ZIP
+name: Review source ZIP import
 
 on:
   workflow_dispatch:
     inputs:
-      zip_file:
-        description: "Source ZIP filename in repository root"
-        required: false
-        default: "Abu_Bassam_Library_v4.3.2_Audited_Source.zip"
-  push:
-    paths:
-      - "Abu_Bassam_Library*_Source.zip"
+      source_zip:
+        description: "ZIP path already uploaded to this repository"
+        required: true
+        default: "Abu_Bassam_Library_4.3.2_Source.zip"
 
 permissions:
   contents: write
+  pull-requests: write
+
+concurrency:
+  group: source-import-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  import_source:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+  import-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - name: Checkout repository
+      - name: Checkout trusted current repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Locate source ZIP
-        id: source
+      - name: Capture trusted validator before extraction
         shell: bash
         run: |
           set -euo pipefail
-          INPUT_ZIP="${{ github.event.inputs.zip_file || '' }}"
-          if [ -n "$INPUT_ZIP" ] && [ -f "$INPUT_ZIP" ]; then
-            ZIP_FILE="$INPUT_ZIP"
+          mkdir -p "$RUNNER_TEMP/abu-trusted"
+          cp tools/validate_imported_source.js "$RUNNER_TEMP/abu-trusted/validate_imported_source.js"
+
+      - name: Preflight ZIP without executing imported code
+        env:
+          SOURCE_ZIP: ${{ inputs.source_zip }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$SOURCE_ZIP" || { echo "ZIP not found: $SOURCE_ZIP" >&2; exit 1; }
+          python3 - "$SOURCE_ZIP" <<'PY'
+          import pathlib, stat, sys, zipfile
+          archive=pathlib.Path(sys.argv[1])
+          forbidden_names={'.env','.env.local','.env.production','.npmrc','local.properties','google-services.json'}
+          forbidden_ext={'.jks','.keystore','.p12','.pfx','.pem','.key'}
+          count=0
+          total=0
+          with zipfile.ZipFile(archive) as z:
+              for item in z.infolist():
+                  count+=1
+                  if count>5000: raise SystemExit('Archive rejected: more than 5000 entries')
+                  name=item.filename.replace('\\','/')
+                  p=pathlib.PurePosixPath(name)
+                  if not name or p.is_absolute() or '..' in p.parts:
+                      raise SystemExit(f'Archive rejected: unsafe path {name!r}')
+                  mode=(item.external_attr >> 16) & 0o170000
+                  if mode==stat.S_IFLNK:
+                      raise SystemExit(f'Archive rejected: symbolic link {name!r}')
+                  if item.file_size>100*1024*1024:
+                      raise SystemExit(f'Archive rejected: file too large {name!r}')
+                  total+=item.file_size
+                  if total>500*1024*1024:
+                      raise SystemExit('Archive rejected: uncompressed size exceeds 500 MB')
+                  base=p.name.lower()
+                  ext=pathlib.PurePosixPath(base).suffix.lower()
+                  if base in forbidden_names or ext in forbidden_ext:
+                      raise SystemExit(f'Archive rejected: secret/signing file {name!r}')
+          print(f'ZIP preflight passed: {count} entries, {total/1024/1024:.1f} MB')
+          PY
+
+      - name: Extract into isolated directory
+        env:
+          SOURCE_ZIP: ${{ inputs.source_zip }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/abu-import"
+          mkdir -p "$RUNNER_TEMP/abu-import"
+          python3 - "$SOURCE_ZIP" "$RUNNER_TEMP/abu-import" <<'PY'
+          import pathlib, sys, zipfile
+          src=pathlib.Path(sys.argv[1]); dst=pathlib.Path(sys.argv[2])
+          with zipfile.ZipFile(src) as z: z.extractall(dst)
+          PY
+
+      - name: Locate and validate imported source using trusted validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMPORT="$RUNNER_TEMP/abu-import"
+          if [ -f "$IMPORT/package.json" ] && [ -d "$IMPORT/web" ]; then
+            SRC="$IMPORT"
           else
-            ZIP_FILE="$(find . -maxdepth 1 -type f -name 'Abu_Bassam_Library*_Source.zip' -printf '%T@ %f\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+            mapfile -t candidates < <(find "$IMPORT" -mindepth 1 -maxdepth 2 -type f -name package.json -printf '%h\n' | sort -u)
+            if [ "${#candidates[@]}" -ne 1 ]; then
+              echo "Expected exactly one source root, found ${#candidates[@]}" >&2
+              exit 1
+            fi
+            SRC="${candidates[0]}"
           fi
-          if [ -z "${ZIP_FILE:-}" ] || [ ! -f "$ZIP_FILE" ]; then
-            echo "No source ZIP is present; nothing to import."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          test -d "$SRC/web" || { echo "Imported source has no web directory" >&2; exit 1; }
+          echo "SOURCE_ROOT=$SRC" >> "$GITHUB_ENV"
+          node "$RUNNER_TEMP/abu-trusted/validate_imported_source.js" "$SRC"
+
+      - name: Verify lockfile without lifecycle scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_ROOT"
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Import source while preserving trusted workflow boundary
+        env:
+          SOURCE_ZIP: ${{ inputs.source_zip }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'node_modules/' \
+            --exclude 'dist/' \
+            --exclude 'android/' \
+            --exclude 'ios/' \
+            --exclude '*.jks' --exclude '*.keystore' --exclude '*.p12' --exclude '*.pfx' --exclude '*.pem' --exclude '*.key' \
+            "$SOURCE_ROOT/" ./
+          rm -rf node_modules dist android ios
+          rm -f "$SOURCE_ZIP"
+          node "$RUNNER_TEMP/abu-trusted/validate_imported_source.js" .
+
+      - name: Create review branch
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No source changes detected."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
-          sha256sum "$ZIP_FILE"
-
-      - name: Extract and validate application identity
-        if: steps.source.outputs.skip != 'true'
-        id: validate
-        shell: bash
-        run: |
-          set -euo pipefail
-          ZIP_FILE="${{ steps.source.outputs.zip_file }}"
-          WORK_DIR="$RUNNER_TEMP/abu-bassam-import"
-          rm -rf "$WORK_DIR"
-          mkdir -p "$WORK_DIR"
-          unzip -q "$ZIP_FILE" -d "$WORK_DIR"
-
-          APP_JSON="$(find "$WORK_DIR" -maxdepth 5 -type f -name app.json -print -quit)"
-          test -n "$APP_JSON" || { echo "::error::app.json not found in source ZIP"; exit 1; }
-          APP_DIR="$(dirname "$APP_JSON")"
-          test -f "$APP_DIR/package.json" || { echo "::error::package.json not found beside app.json"; exit 1; }
-          test -f "$APP_DIR/package-lock.json" || { echo "::error::package-lock.json missing"; exit 1; }
-
-          node - "$APP_JSON" <<'NODE'
-          const fs = require('fs');
-          const file = process.argv[2];
-          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const expo = data.expo || {};
-          if (expo.android?.package !== 'com.abubassam.librarycamera3') {
-            throw new Error('Wrong Android package: ' + (expo.android?.package || 'missing'));
-          }
-          if (expo.slug !== 'abu-bassam-library') {
-            throw new Error('Wrong Expo slug: ' + (expo.slug || 'missing'));
-          }
-          console.log('Validated:', expo.name, expo.version, expo.android.package);
-          NODE
-
-          echo "app_dir=$APP_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Copy clean source into repository
-        if: steps.source.outputs.skip != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP_DIR="${{ steps.validate.outputs.app_dir }}"
-          rsync -a \
-            --exclude='.git/' \
-            --exclude='.github/workflows/' \
-            --exclude='output/' \
-            --exclude='tools/__pycache__/' \
-            --exclude='*.pyc' \
-            "$APP_DIR/" ./
-
-          cat >> .gitignore <<'EOF'
-          # Local QA/generated outputs
-          output/
-          tools/__pycache__/
-          *.pyc
-          EOF
-
-          rm -f "${{ steps.source.outputs.zip_file }}"
-
-      - name: Set up Node
-        if: steps.source.outputs.skip != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Verify imported source
-        if: steps.source.outputs.skip != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm ci
-          npm run check:web
-
-      - name: Commit verified source
-        if: steps.source.outputs.skip != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
+          BRANCH="source-import-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git commit -m "Import verified Abu Bassam Library source"
-          git push origin HEAD:main
+          git commit -m "Review imported Abu Bassam source ZIP"
+          git push --set-upstream origin "$BRANCH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request instead of writing to main
+        if: steps.branch.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Review imported Abu Bassam source" \
+            --body "Automated source import passed archive preflight and trusted static validation. Review the diff and normal project checks before merging. This workflow never writes imported source directly to main."
