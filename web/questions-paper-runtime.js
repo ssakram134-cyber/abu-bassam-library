@@ -24,6 +24,7 @@ function sync(){if($('abuPaperPreset'))$('abuPaperPreset').value=state.preset}
 function open(){sync();$('abuPaperModal')?.classList.add('show')}
 function close(){$('abuPaperModal')?.classList.remove('show')}
 function preset(){let v=$('abuPaperPreset')?.value==='A4L'?'A4L':'A4P';state.preset=v;state.w=presets[v][0];state.h=presets[v][1];apply()}
+function deletePage(btn){const page=btn?.closest?.('.a4-page');if(!page)return;const pages=document.querySelectorAll('.a4-page');if(pages.length<=1){alert('يجب أن تبقى صفحة A4 واحدة على الأقل.');return}try{window.saveState?.()}catch(e){}page.remove();try{window.fitToScreen?.();window.scheduleQuestionDraft?.()}catch(e){}}
 function tagPages(){document.querySelectorAll('.a4-page').forEach(p=>{p.dataset.paperPreset=state.preset;p.dataset.paperW=String(state.w);p.dataset.paperH=String(state.h)})}
 function installFit(){
   window.fitToScreen=function(){
@@ -65,7 +66,7 @@ function apply(closeAfter=true){
 function loadSupport(){
   [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
 }
-function init(){ensure();sync();apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
-window.AbuQuestionPaper={open,close,preset,apply,state:()=>({...state})};
+function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
+window.AbuQuestionPaper={open,close,preset,apply,deletePage,state:()=>({...state})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
