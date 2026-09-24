@@ -69,7 +69,7 @@ need(workflow,"draggable=\"true\"",'merge reorder by drag');
 need(quality,"الصورة مظلمة",'automatic darkness warning');
 need(quality,"التباين منخفض",'automatic contrast warning');
 need(quality,"التفاصيل/الوضوح منخفض",'automatic sharpness warning');
-need(quality,"data-image-quality",'quality state marker');
+need(quality,"dataset.imageQuality",'quality state marker');
 need(workflowMigration,"total_size_bytes",'customer total size metadata');
 need(workflowMigration,"last_activity",'last activity metadata');
 need(workflowMigration,"c.notes ilike",'search notes server-side');
