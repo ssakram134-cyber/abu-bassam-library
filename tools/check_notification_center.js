@@ -14,10 +14,13 @@ need(loader,'operation-log-privacy-runtime.js','operation privacy runtime is not
 need(loader,'notification-center-runtime.js','notification runtime is not loaded');
 need(loader,'notification-ops-bridge-runtime.js','stable operations bridge is not loaded');
 need(bridge,'secondary-notification-privacy-runtime.js','secondary notification privacy runtime is not loaded by the bridge');
-need(bridge,'__abuOriginal','bridge must bypass the temporary pre-id wrapper');
+need(bridge,'script.async=false','secondary notification privacy must preserve load order');
+need(bridge,'rootOriginal','bridge must unwrap temporary notification wrappers');
+need(bridge,'__abuOriginal','bridge must retain the raw operation writer');
 need(bridge,'ops.list?.()?.[0]','bridge must read the persisted operation id');
 need(bridge,'abuBassamOperationDeviceScopeV1','operation ownership map');
 need(bridge,'bindOperationToDevice','new operations must be bound to their originating device');
+need(bridge,'attempts>50','bridge must survive startup wrapper races');
 need(privacy,"!=='operation'",'legacy operation cloud traffic must be intercepted');
 need(privacy,"role()!=='secondary'",'secondary local log isolation');
 need(privacy,'ownerId===id','secondary logs must be filtered by exact device id');
@@ -28,6 +31,8 @@ need(secondaryPrivacy,"role()!=='secondary'",'secondary notification inbox must 
 need(secondaryPrivacy,'ownerId===id','operation notifications must match exact device id');
 need(secondaryPrivacy,"notification.source==='branch-audit'",'branch audit rows must never appear in a secondary inbox');
 need(secondaryPrivacy,'abuBassamOperationDeviceScopeV1','notification privacy must use the ownership map');
+need(secondaryPrivacy,'abuBassamAuditQueueV1','secondary audit queue must be privacy filtered');
+need(secondaryPrivacy,'ownQueue','foreign queued audit events must be purged before upload');
 need(runtime,'abuNotificationBell','bell button');
 need(runtime,'abuNotificationBadge','unread badge');
 need(runtime,'markAll','mark all read');
