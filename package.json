@@ -8,7 +8,7 @@
     "android": "node scripts/patch-startup-stability.mjs && expo run:android",
     "android:prebuild": "node scripts/patch-startup-stability.mjs && expo prebuild --platform android --clean && npm run assets:android",
     "assets:android": "node scripts/prepare-android-assets.mjs",
-    "check:web": "node scripts/patch-startup-stability.mjs && node tools/check_project.js && node tools/check_security_controls.js && node tools/check_latest_features.js && node tools/check_runtime_regressions.js && node tools/check_android_workflow.js && node tools/check_advanced_photo_print.js",
+    "check:web": "node scripts/patch-startup-stability.mjs && node tools/check_project.js && node tools/check_security_controls.js && node tools/check_latest_features.js && node tools/check_runtime_regressions.js && node tools/check_android_workflow.js && node tools/check_advanced_photo_print.js && node tools/check_no_global_flex.js",
     "ios": "expo run:ios"
   },
   "engines": {
