@@ -10,7 +10,7 @@ need(runtime,'abuNotificationBell','bell button');
 need(runtime,'abuNotificationBadge','unread badge');
 need(runtime,'markAll','mark all read');
 need(runtime,'clearRead','clear read notifications');
-need(runtime,"['all','unread','print','files','security','sync','settings','cards','system']".slice(1,-1),'category tabs marker');
+for(const token of ["['all','الكل']","['unread','غير المقروء']","['print','الطباعة']","['files','الملفات']","['security','الأمان']","['sync','المزامنة']","['settings','الإعدادات']","['cards','الكروت']","['system','النظام']"]) need(runtime,token,`category ${token}`);
 need(runtime,'تقارير الفرعين','owner branch report tab');
 need(runtime,"role()==='owner'",'owner role gate');
 need(runtime,'abu_bassam_owner_activity_report','owner-only report RPC');
