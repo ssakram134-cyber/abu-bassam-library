@@ -7,11 +7,39 @@ import { spawnSync } from 'node:child_process';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const win = process.platform === 'win32';
+const requireReleaseKey = process.argv.includes('--require-release-key');
+const signingVars = ['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'];
 
 function run(cmd, args, cwd = root, env = process.env) {
   const r = spawnSync(cmd, args, { cwd, env, stdio: 'inherit', shell: win });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed with exit code ${r.status}`);
+}
+
+function capture(cmd, args, cwd = root, env = process.env) {
+  const r = spawnSync(cmd, args, { cwd, env, encoding: 'utf8', shell: win });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed with exit code ${r.status}: ${(r.stderr || r.stdout || '').trim()}`);
+  return String(r.stdout || '');
+}
+
+function signingConfigured() {
+  return signingVars.every(name => String(process.env[name] || '').trim());
+}
+
+function validateSigningConfiguration() {
+  const configured = signingConfigured();
+  if (requireReleaseKey && !configured) {
+    const missing = signingVars.filter(name => !String(process.env[name] || '').trim());
+    throw new Error(`Production release signing is required. Missing: ${missing.join(', ')}`);
+  }
+  if (configured && !fs.existsSync(process.env.ANDROID_KEYSTORE_FILE)) {
+    throw new Error(`ANDROID_KEYSTORE_FILE does not exist: ${process.env.ANDROID_KEYSTORE_FILE}`);
+  }
+  if (configured && !fs.statSync(process.env.ANDROID_KEYSTORE_FILE).isFile()) {
+    throw new Error('ANDROID_KEYSTORE_FILE must point to a regular file');
+  }
+  return configured;
 }
 
 function findApk(dir) {
@@ -29,8 +57,8 @@ function findApk(dir) {
   return null;
 }
 
-function ensureReleaseSigningHook() {
-  if (!process.env.ANDROID_KEYSTORE_FILE) return;
+function ensureReleaseSigningHook(configured) {
+  if (!configured) return;
   const gradle = path.join(root, 'android', 'app', 'build.gradle');
   const hook = 'apply from: file("../../scripts/android-release-signing.gradle")';
   let src = fs.readFileSync(gradle, 'utf8');
@@ -78,6 +106,9 @@ function verifySignature(apk) {
   const apksigner = findApksigner();
   if (!apksigner) throw new Error('Android SDK apksigner was not found; cannot verify APK signature');
   run(apksigner, ['verify', '--verbose', apk]);
+  const cert = capture(apksigner, ['verify', '--print-certs', apk]);
+  if (!/Signer #1 certificate/i.test(cert)) throw new Error('APK signer certificate details were not produced');
+  return cert;
 }
 
 function sha256(file) {
@@ -85,12 +116,16 @@ function sha256(file) {
 }
 
 try {
+  const customSigning = validateSigningConfiguration();
+  console.log(`Signing mode: ${customSigning ? 'production/custom key' : 'test/default key'}`);
+  if (!customSigning && !requireReleaseKey) console.warn('WARNING: local test build only; do not distribute as production release.');
+
   console.log('1/6 Checking project...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'check:web']);
 
   console.log('2/6 Generating Android project and offline assets...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'android:prebuild'], root, { ...process.env, CI: '1' });
-  ensureReleaseSigningHook();
+  ensureReleaseSigningHook(customSigning);
 
   console.log('3/6 Building release APK...');
   const androidDir = path.join(root, 'android');
@@ -102,8 +137,8 @@ try {
   if (!apk || !fs.statSync(apk).size) throw new Error('Release APK was not produced');
   verifyBundle(apk);
 
-  console.log('5/6 Verifying APK signature...');
-  verifySignature(apk);
+  console.log('5/6 Verifying APK signature and certificate...');
+  const certificate = verifySignature(apk);
 
   console.log('6/6 Preparing distributable files...');
   const dist = path.join(root, 'dist');
@@ -112,7 +147,9 @@ try {
   fs.copyFileSync(apk, out);
   const hash = sha256(out);
   fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  Abu_Bassam_Library_4.3.2.apk\n`);
-  fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), process.env.ANDROID_KEYSTORE_FILE ? 'local-release-custom-key\n' : 'local-release-default-signing\n');
+  fs.writeFileSync(path.join(dist, 'SIGNING_CERTIFICATE.txt'), certificate);
+  fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), customSigning ? 'signed-production-release-with-embedded-js\n' : 'local-test-release-default-key-with-embedded-js\n');
+  if (requireReleaseKey && !customSigning) throw new Error('Refusing to mark an unsigned/test APK as a production release');
   console.log(`APK ready: ${out}`);
   console.log(`SHA-256: ${hash}`);
 } catch (error) {
