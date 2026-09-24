@@ -30,6 +30,8 @@ function cleanSecondaryLocal(){
   cleaned=true;
   return true;
 }
+function forceClean(){cleaned=false;return cleanSecondaryLocal()}
+function delayedClean(){[250,800,1800,3500,7000].forEach(ms=>setTimeout(forceClean,ms))}
 function wrapBuilder(target,state={kind:''}){
   if(!target||typeof target!=='object')return target;
   return new Proxy(target,{
@@ -53,7 +55,7 @@ function wrapBuilder(target,state={kind:''}){
   })
 }
 function installClientBoundary(){const cloud=window.AbuBassamCloud,c=cloud?.client;if(!c||typeof c.from!=='function')return false;if(c.from.__abuOperationPrivacy)return true;const original=c.from.bind(c);const wrapped=function(table){const b=original(table);return String(table)===TABLE?wrapBuilder(b,{kind:''}):b};wrapped.__abuOperationPrivacy=true;wrapped.__abuOriginal=original;c.from=wrapped;return true}
-function boot(){let attempts=0;const timer=setInterval(()=>{attempts++;const a=installClientBoundary();cleanSecondaryLocal();if(a){try{window.AbuBassamOps?.sync?.()}catch(_){}if(cleaned||role()==='owner'||attempts>80)clearInterval(timer)}else if(attempts>120)clearInterval(timer)},120);window.addEventListener('online',()=>{installClientBoundary();cleaned=false;cleanSecondaryLocal()})}
-window.AbuBassamOperationPrivacy={install:installClientBoundary,clean:()=>{cleaned=false;return cleanSecondaryLocal()},deviceId};
+function boot(){let attempts=0;const timer=setInterval(()=>{attempts++;const a=installClientBoundary();forceClean();if(a){try{window.AbuBassamOps?.sync?.()}catch(_){}if(role()==='owner'||attempts>80)clearInterval(timer)}else if(attempts>120)clearInterval(timer)},120);delayedClean();window.addEventListener('online',()=>{installClientBoundary();forceClean();delayedClean()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')forceClean()})}
+window.AbuBassamOperationPrivacy={install:installClientBoundary,clean:forceClean,deviceId};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
