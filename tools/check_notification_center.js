@@ -2,10 +2,14 @@ const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`notification check failed: ${label}`)}
 const runtime=read('web/notification-center-runtime.js');
+const bridge=read('web/notification-ops-bridge-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const migration=read('supabase/migrations/202609240002_notification_audit_center.sql');
-new Function(runtime);
+new Function(runtime);new Function(bridge);
 need(loader,'notification-center-runtime.js','notification runtime is not loaded');
+need(loader,'notification-ops-bridge-runtime.js','stable operations bridge is not loaded');
+need(bridge,'__abuOriginal','bridge must bypass the temporary pre-id wrapper');
+need(bridge,'ops.list?.()?.[0]','bridge must read the persisted operation id');
 need(runtime,'abuNotificationBell','bell button');
 need(runtime,'abuNotificationBadge','unread badge');
 need(runtime,'markAll','mark all read');
