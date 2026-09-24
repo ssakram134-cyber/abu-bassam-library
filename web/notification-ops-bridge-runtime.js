@@ -20,15 +20,15 @@ function bindOperationToDevice(operation){
 }
 function loadSecondaryPrivacy(){
   if(window.__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__||document.getElementById('abuSecondaryNotificationPrivacyRuntime'))return;
-  const script=document.createElement('script');script.id='abuSecondaryNotificationPrivacyRuntime';script.src='secondary-notification-privacy-runtime.js';script.onerror=()=>console.warn('secondary-notification-privacy-runtime.js failed to load');document.body.appendChild(script);
+  const script=document.createElement('script');script.id='abuSecondaryNotificationPrivacyRuntime';script.src='secondary-notification-privacy-runtime.js';script.async=false;script.onerror=()=>console.warn('secondary-notification-privacy-runtime.js failed to load');document.body.appendChild(script);
 }
+function rootOriginal(fn){let current=fn,guard=0;while(current&&current.__abuOriginal&&guard++<12)current=current.__abuOriginal;return current||fn}
 function install(){
   const ops=window.AbuBassamOps,center=window.AbuBassamNotifications;
   if(!ops||!center||typeof ops.add!=='function'||typeof ops.list!=='function'||typeof center.fromOperation!=='function')return false;
   loadSecondaryPrivacy();
   if(ops.add.__abuStableNotifyBridge)return true;
-  const current=ops.add;
-  const original=current.__abuOriginal||current;
+  const original=rootOriginal(ops.add);
   const wrapped=function(input,...rest){
     const previousId=ops.list?.()?.[0]?.id||'';
     const result=original.call(this,input,...rest);
@@ -48,7 +48,7 @@ function install(){
   ops.add=wrapped;
   return true;
 }
-const timer=setInterval(()=>{if(install())clearInterval(timer)},120);
-setTimeout(()=>{clearInterval(timer);loadSecondaryPrivacy()},15000);
+let attempts=0;const timer=setInterval(()=>{attempts++;install();if(attempts>50)clearInterval(timer)},120);
+setTimeout(()=>{clearInterval(timer);install();loadSecondaryPrivacy()},7000);
 if(document.readyState!=='loading')install();else document.addEventListener('DOMContentLoaded',install,{once:true});
 })();
