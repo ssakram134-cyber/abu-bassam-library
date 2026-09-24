@@ -8,7 +8,7 @@ create table if not exists public.abu_bassam_account_settings (
 );
 
 alter table public.abu_bassam_account_settings enable row level security;
-revoke all on public.abu_bassam_account_settings from anon;
+revoke all on public.abu_bassam_account_settings from anon,authenticated;
 grant select on public.abu_bassam_account_settings to authenticated;
 
 drop policy if exists abu_bassam_account_settings_select_own on public.abu_bassam_account_settings;
@@ -123,6 +123,9 @@ begin
   return v_row;
 end $$;
 
+revoke all on function public.abu_bassam_get_device_limit() from PUBLIC,anon;
+revoke all on function public.abu_bassam_set_device_limit(text,text,integer) from PUBLIC,anon;
+revoke all on function public.abu_bassam_register_device(text,text,text,text,text,text) from PUBLIC,anon;
 grant execute on function public.abu_bassam_get_device_limit() to authenticated;
 grant execute on function public.abu_bassam_set_device_limit(text,text,integer) to authenticated;
 grant execute on function public.abu_bassam_register_device(text,text,text,text,text,text) to authenticated;
