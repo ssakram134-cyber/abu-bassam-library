@@ -5,6 +5,7 @@ window.__ABU_STANDALONE_CARD_MODELS_V2__=true;
 const $=id=>document.getElementById(id);
 const RATION_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
 const MAWKIB_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
+const STUDENT_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
 function dispatch(select,value){select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}))}
 function hash(win){return decodeURIComponent((win.location.hash||'').replace(/^#/,''))}
 function allCss(doc){return [...doc.querySelectorAll('style')].map(node=>node.textContent||'').join('\n')}
@@ -32,16 +33,11 @@ function installRationExports(doc,win){
     }finally{URL.revokeObjectURL(url)}
   };
 }
-function ration(doc,win){
-  const select=doc.getElementById('template');if(!select)return;
-  const wanted=hash(win);if(RATION_IDS.has(wanted)&&[...select.options].some(o=>o.value===wanted))setTimeout(()=>dispatch(select,wanted),30);
-  installRationExports(doc,win);
-}
-function mawkib(doc,win){
-  const select=doc.getElementById('template');if(!select)return;
-  const wanted=hash(win);if(MAWKIB_IDS.has(wanted)&&[...select.options].some(o=>o.value===wanted))setTimeout(()=>dispatch(select,wanted),30);
-}
-function apply(frame){try{const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;const file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc,win);if(file==='mawkib-cards.html')mawkib(doc,win)}catch(e){}}
+function selectByHash(doc,win,valid){const select=doc.getElementById('template');if(!select)return;const wanted=hash(win);if(valid.has(wanted)&&[...select.options].some(o=>o.value===wanted))setTimeout(()=>dispatch(select,wanted),30)}
+function ration(doc,win){selectByHash(doc,win,RATION_IDS);installRationExports(doc,win)}
+function mawkib(doc,win){selectByHash(doc,win,MAWKIB_IDS)}
+function student(doc,win){selectByHash(doc,win,STUDENT_IDS)}
+function apply(frame){try{const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;const file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc,win);if(file==='mawkib-cards.html')mawkib(doc,win);if(file==='student-thanks-cards.html')student(doc,win)}catch(e){}}
 function watch(){const frame=$('abuRecoveryFrame');if(!frame||frame.dataset.abuCanonicalModelWatch==='2')return;frame.dataset.abuCanonicalModelWatch='2';frame.addEventListener('load',()=>setTimeout(()=>apply(frame),100));setTimeout(()=>apply(frame),120)}
 function init(){watch();new MutationObserver(watch).observe(document.documentElement,{childList:true,subtree:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
