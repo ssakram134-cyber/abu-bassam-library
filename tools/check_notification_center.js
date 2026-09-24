@@ -13,7 +13,7 @@ need(loader,'notification-center-runtime.js','notification runtime is not loaded
 need(loader,'notification-ops-bridge-runtime.js','stable operations bridge is not loaded');
 need(bridge,'__abuOriginal','bridge must bypass the temporary pre-id wrapper');
 need(bridge,'ops.list?.()?.[0]','bridge must read the persisted operation id');
-need(privacy,"kind==='operation'",'legacy operation cloud traffic must be intercepted');
+need(privacy,"!=='operation'",'legacy operation cloud traffic must be intercepted');
 need(privacy,"role()!=='secondary'",'secondary local log isolation');
 need(runtime,'abuNotificationBell','bell button');
 need(runtime,'abuNotificationBadge','unread badge');
