@@ -4,7 +4,7 @@ if(window.__ABU_STANDALONE_CARD_MODELS_V2__)return;
 window.__ABU_STANDALONE_CARD_MODELS_V2__=true;
 const $=id=>document.getElementById(id);
 const RATION_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
-const MAWKIB_IDS=new Set(['t1','t2','t3','t4']);
+const MAWKIB_IDS=new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10']);
 function dispatch(select,value){select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}))}
 function hash(win){return decodeURIComponent((win.location.hash||'').replace(/^#/,''))}
 function allCss(doc){return [...doc.querySelectorAll('style')].map(node=>node.textContent||'').join('\n')}
@@ -39,9 +39,7 @@ function ration(doc,win){
 }
 function mawkib(doc,win){
   const select=doc.getElementById('template');if(!select)return;
-  [...select.options].forEach(option=>{if(!MAWKIB_IDS.has(option.value))option.remove()});
-  if(!MAWKIB_IDS.has(select.value))dispatch(select,'t1');
-  const wanted=hash(win);if(MAWKIB_IDS.has(wanted))setTimeout(()=>dispatch(select,wanted),30);
+  const wanted=hash(win);if(MAWKIB_IDS.has(wanted)&&[...select.options].some(o=>o.value===wanted))setTimeout(()=>dispatch(select,wanted),30);
 }
 function apply(frame){try{const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;const file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc,win);if(file==='mawkib-cards.html')mawkib(doc,win)}catch(e){}}
 function watch(){const frame=$('abuRecoveryFrame');if(!frame||frame.dataset.abuCanonicalModelWatch==='2')return;frame.dataset.abuCanonicalModelWatch='2';frame.addEventListener('load',()=>setTimeout(()=>apply(frame),100));setTimeout(()=>apply(frame),120)}
