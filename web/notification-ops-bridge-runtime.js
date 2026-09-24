@@ -18,9 +18,14 @@ function bindOperationToDevice(operation){
   if(keys.length>1200)keys.slice(0,keys.length-1200).forEach(key=>delete scope[key]);
   try{localStorage.setItem(SCOPE_KEY,JSON.stringify(scope))}catch(_){}
 }
+function loadSecondaryPrivacy(){
+  if(window.__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__||document.getElementById('abuSecondaryNotificationPrivacyRuntime'))return;
+  const script=document.createElement('script');script.id='abuSecondaryNotificationPrivacyRuntime';script.src='secondary-notification-privacy-runtime.js';script.onerror=()=>console.warn('secondary-notification-privacy-runtime.js failed to load');document.body.appendChild(script);
+}
 function install(){
   const ops=window.AbuBassamOps,center=window.AbuBassamNotifications;
   if(!ops||!center||typeof ops.add!=='function'||typeof ops.list!=='function'||typeof center.fromOperation!=='function')return false;
+  loadSecondaryPrivacy();
   if(ops.add.__abuStableNotifyBridge)return true;
   const current=ops.add;
   const original=current.__abuOriginal||current;
@@ -44,6 +49,6 @@ function install(){
   return true;
 }
 const timer=setInterval(()=>{if(install())clearInterval(timer)},120);
-setTimeout(()=>clearInterval(timer),15000);
+setTimeout(()=>{clearInterval(timer);loadSecondaryPrivacy()},15000);
 if(document.readyState!=='loading')install();else document.addEventListener('DOMContentLoaded',install,{once:true});
 })();
