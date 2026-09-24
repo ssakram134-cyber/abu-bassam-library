@@ -18,7 +18,7 @@ const paper=read('questions-paper-runtime.js');
 for(const m of ['__ABU_QUESTION_PAPER_V2__','A4P','A4L','A4 فقط','210,297','297,210','window.fitToScreen','window.checkAutoFlow','questions-completion-runtime.js'])need(paper,m,'paper');
 for(const m of ['<option value="A5P"','<option value="A5L"','<option value="custom"'])forbid(paper,m,'paper A4-only UI');
 const completion=read('questions-completion-runtime.js');
-for(const m of ['__ABU_QUESTIONS_COMPLETION_V2__','اليوم /','التاريخ /','اسم\\s*التلميذ','abuAnswerToggle','abu-answer-box','IndexedDB','AbuBassamQuestionDraftV2','pointerdown','setPointerCapture','stableRebind','removeQuestionLibraryBranding','math1:[','science3:[','general:[','رياضيات الأول — نموذج ١٠','علوم الثالث — نموذج ١٠','نموذج عام ١٠'])need(completion,m,'completion');
+for(const m of ['__ABU_QUESTIONS_COMPLETION_V2__','اليوم /','التاريخ /','اسم\\s*التلميذ','abuAnswerToggle','abu-answer-box','indexedDB','AbuBassamQuestionDraftV2','pointerdown','setPointerCapture','stableRebind','removeQuestionLibraryBranding','math1:[','science3:[','general:[','رياضيات الأول — نموذج ١٠','علوم الثالث — نموذج ١٠','نموذج عام ١٠'])need(completion,m,'completion');
 for(const m of ['touchstart','touchmove'])forbid(completion,m,'completion pointer stability');
 const mathExtras=(completion.match(/رياضيات الأول — نموذج [٤٥٦٧٨٩١٠]+/g)||[]).length;
 const scienceExtras=(completion.match(/علوم الثالث — نموذج [٧٨٩١٠]+/g)||[]).length;
