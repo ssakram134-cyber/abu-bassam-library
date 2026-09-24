@@ -62,7 +62,7 @@ if (!index.includes('const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i
           if (encodedNameMatch) {
             try { requestedName = decodeURIComponent(encodedNameMatch[1]); } catch (_) { requestedName = encodedNameMatch[1]; }
           }
-          const fallbackName = \\`${'${'}safeName(prefix || 'Abu_Bassam_Page')}_${'${'}index + 1}_${'${'}Date.now()}\\`;
+          const fallbackName = safeName(prefix || 'Abu_Bassam_Page') + '_' + (index + 1) + '_' + Date.now();
           const finalName = safeName(requestedName || fallbackName);
           const dot = finalName.lastIndexOf('.');
           const displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
@@ -72,7 +72,7 @@ if (!index.includes('const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i
         } catch (_) { failed += 1; }
       }
       if (!saved) throw new Error('تعذر حفظ الصور المحددة');
-      Alert.alert('تم الحفظ في المعرض', failed ? \\`تم حفظ ${'${'}saved} صورة وتعذر حفظ ${'${'}failed}.\\` : \\`تم حفظ ${'${'}saved} صورة داخل المجلد الذي اخترته.\\`);
+      Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
     } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
   }, []);
 
