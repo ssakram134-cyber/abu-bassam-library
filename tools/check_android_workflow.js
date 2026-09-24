@@ -40,7 +40,7 @@ const fallbackRequired=[
   ['assets/index.android.bundle',local,'embedded JS verification'],
   ["['verify', '--verbose', apk]",local,'APK signature verification'],
   ['ANDROID_HOME || process.env.ANDROID_SDK_ROOT',local,'Android SDK discovery'],
-  ['android\', \'local.properties',local,'local.properties SDK fallback'],
+  ["path.join(root, 'android', 'local.properties')",local,'local.properties SDK fallback'],
   ['Abu_Bassam_Library_4.3.2.apk',local,'distribution APK name'],
   ['SHA256.txt',local,'SHA-256 output'],
   ['BUILD_TYPE.txt',local,'build type output']
