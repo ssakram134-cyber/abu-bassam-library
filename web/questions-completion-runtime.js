@@ -10,7 +10,7 @@ const IDB_KEY='ar';
 const META_KEY='abuBassamQuestionDraftArabicV2Meta';
 let answersVisible=localStorage.getItem('abuQuestionAnswersVisibleV1')==='1';
 let saveTimer=0;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 function profile(){try{return Object.assign({day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'},JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}'))}catch(e){return{day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'}}}
 function addCss(){if($('abuQuestionsCompletionStyle'))return;const s=document.createElement('style');s.id='abuQuestionsCompletionStyle';s.textContent=`
 .abu-answer-box{display:none;margin-top:9px;padding:9px;border:1px dashed #0f766e;border-radius:10px;background:#ecfdf5;color:#134e4a;font-size:12px}.abu-answer-box b{display:block;margin-bottom:5px}.abu-show-answers .abu-answer-box{display:block}.abu-answer-toggle{background:#7c3aed!important}.abu-question-overflow:after{content:'⚠ محتوى الصفحة أكبر من مساحة A4';position:absolute;left:14px;bottom:8px;background:#fee2e2;color:#991b1b;border-radius:9px;padding:5px 8px;font:800 9px Tajawal;z-index:500}.abu-extra-template{border-color:#7c3aed55!important}.abu-extra-template .abu-tpreview{border-color:#7c3aed55!important;background:linear-gradient(135deg,#faf5ff,#f0fdf4)!important}.abu-extra-template button{background:#6d28d9!important}@media print{.abu-question-overflow:after{display:none!important}.abu-answer-box{display:none!important}.abu-show-answers .abu-answer-box{display:block!important}}
@@ -21,8 +21,10 @@ function removeQuestionLibraryBranding(){
 }
 function normalizeHeaders(){
   const p=profile();document.querySelectorAll('.a4-page .header').forEach(header=>{
-    header.innerHTML=header.innerHTML.replace(/اسم\s*التلميذ\s*[:：\/]?/g,'التاريخ /');
-    const boxes=header.querySelectorAll('.header-box');const right=boxes[boxes.length-1];if(!right)return;
+    const before=header.innerHTML;const after=before.replace(/اسم\s*التلميذ\s*[:：\/]?/g,'التاريخ /');if(after!==before)header.innerHTML=after;
+    const boxes=header.querySelectorAll('.header-box');const left=boxes[0],right=boxes[boxes.length-1];
+    if(left&&/مدرسة الجود الابتدائية/.test(left.textContent||''))left.innerHTML=left.innerHTML.replace('مدرسة الجود الابتدائية',esc(p.school));
+    if(!right)return;
     if(!/التاريخ/.test(right.textContent||''))right.insertAdjacentHTML('beforeend',`<br><span class="abu-header-date">التاريخ / ${esc(p.date||'................')}</span>`);
     if(!/اليوم/.test(right.textContent||''))right.insertAdjacentHTML('beforeend',`<br><span class="abu-header-day">اليوم / ${esc(p.day||'................')}</span>`);
   });
@@ -66,7 +68,7 @@ function stableRebind(){
     const buttons=[...wrapper.querySelectorAll('.img-btn')],img=wrapper.querySelector('img');
     buttons.forEach(btn=>{if((btn.textContent||'').includes('❌'))btn.onclick=()=>{try{window.saveState?.()}catch(_){}wrapper.remove();queueDraft()};if(img&&(btn.textContent||'').includes('✂'))btn.onclick=()=>{try{window.saveState?.()}catch(_){}img.style.objectFit=img.style.objectFit==='cover'?'contain':'cover';btn.style.backgroundColor=img.style.objectFit==='cover'?'#4CAF50':'white';queueDraft()}})
   });
-  document.querySelectorAll('.btn-del-page').forEach(button=>{button.onclick=()=>{const page=button.closest('.a4-page');if(!page||page.id==='main-page')return;try{window.saveState?.()}catch(_){}page.remove();window.fitToScreen?.();queueDraft()}})
+  document.querySelectorAll('.btn-del-page').forEach(button=>{button.onclick=()=>window.deletePage?.(button)})
 }
 function installStableDrag(){window.setupDragAndResize=stableSetup;window.rebindAllDraggables=stableRebind;stableRebind()}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(IDB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(IDB_STORE))r.result.createObjectStore(IDB_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -77,7 +79,7 @@ function queueDraft(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveDurab
 async function restoreDurableIfNeeded(){const row=await idbGet();if(!row?.html)return;const meta=Number(localStorage.getItem(META_KEY)||0);let local='';try{local=localStorage.getItem('abuBassamQuestionDraftArabicV1')||''}catch(e){}if(!local||Number(row.updatedAt)>meta+1000){const c=$('pages-container');if(c){c.innerHTML=row.html;stableRebind();normalizeHeaders();enhanceAnswers();window.fitToScreen?.()}}}
 function q(index,title,body,type='short'){return `<div class="question-container q${((index-1)%15)+1}" data-question-type="${type}"><div class="action-btns"><button onclick="moveUp(this)">⬆️</button><button onclick="moveDown(this)">⬇️</button><button onclick="duplicateQ(this)">📋</button><button onclick="deleteQ(this)">🗑️</button></div><div class="q-title" contenteditable="true"><span>✦</span> ${esc(title)}</div><div class="text-area" contenteditable="true">${body}</div></div>`}
 function header(meta,title){const p=profile();return `<div class="header"><div class="header-box" contenteditable="true">إدارة: .........................<br>${esc(p.school)}<br>${esc(p.schoolType)}</div><div class="header-center" contenteditable="true"><span class="title">${esc(title)}</span><br>${esc(p.role)}<br>للعام ${esc(p.year)}</div><div class="header-box" contenteditable="true">${meta.grade?'الصف / '+esc(meta.grade)+'<br>':''}${meta.subject?'المادة / '+esc(meta.subject)+'<br>':''}معلم المادة / ${esc(p.teacher)}<br>التاريخ / ${esc(p.date||'................')}<br>اليوم / ${esc(p.day||'................')}</div></div>`}
-function page(meta,title,note,questions){return `<div class="a4-page"><button class="btn-del-page" onclick="deletePage?.(this)">حذف الصفحة</button>${header(meta,title)}<div class="note-wrapper"><button class="del-note-btn" onclick="hideElement(this)">✖</button><div class="note-bar" contenteditable="true">${esc(note)}</div></div><div class="questions-area">${questions.join('')}</div></div>`}
+function page(meta,title,note,questions){return `<div class="a4-page" id="main-page"><button class="btn-del-page" onclick="deletePage(this)">حذف الصفحة</button>${header(meta,title)}<div class="note-wrapper"><button class="del-note-btn" onclick="hideElement(this)">✖</button><div class="note-bar" contenteditable="true">${esc(note)}</div></div><div class="questions-area">${questions.join('')}</div></div>`}
 const EXTRA={
  math1:[
   ['رياضيات الأول — نموذج ٤',[['الأعداد والترتيب — ٢ درجة','رتب: ٨، ٢، ٥، ١ من الأصغر إلى الأكبر.'],['المقارنة — ٢ درجة','ضع > أو < أو = : ٧ ( ) ٣ ، ٤ ( ) ٤ ، ٢ ( ) ٦.'],['الجمع — ٢ درجة','٣ + ٤ = ( ) ، ٢ + ٦ = ( ).'],['الطرح — ٢ درجة','٩ - ٣ = ( ) ، ٧ - ٢ = ( ).'],['مسألة — ٢ درجة','مع سارة ٥ أقلام، اشترت ٣ أخرى. كم أصبح لديها؟']]],
@@ -101,7 +103,10 @@ const EXTRA={
   ['نموذج عام ١٠',[['أساسيات — ٢ درجة','أجب عن سؤالين مباشرين.'],['فهم — ٣ درجات','اشرح الفكرة الرئيسة بأسلوبك.'],['تطبيق — ٢ درجة','اذكر مثالًا من الحياة اليومية.'],['تفكير — ٣ درجات','اقترح حلًا أو استنتاجًا مناسبًا.']]]
  ]
 };
-function subjectKey(){try{return window.AbuQuestionTypes?.subject?.()||'math1'}catch(e){return'math1'}}
+function subjectKey(){
+  const text=String($('abuSubjects')?.querySelector('button.on')?.textContent||'');if(text.includes('الثالث'))return'science3';if(text.includes('الرابع'))return'science4';if(text.includes('الإسلامية'))return'islamic';if(text.includes('الرياضيات'))return'math1';
+  try{return window.AbuQuestionTypes?.subject?.()||'math1'}catch(e){return'math1'}
+}
 function metaFor(key){return key==='math1'?{grade:'الأول الابتدائي',subject:'الرياضيات'}:key==='science3'?{grade:'الثالث الابتدائي',subject:'العلوم'}:{grade:'................',subject:'................'}}
 function extraCard(key,index,item){const id=`abu-extra-${key}-${index}`;return `<div class="abu-tcard abu-extra-template" data-extra-template="${id}"><div class="abu-tpreview"><b>${esc(item[0])}</b><span>تخطيط وأسئلة مستقلة</span></div><b>${esc(item[0])}</b><button type="button" onclick="AbuQuestionCompletion.applyExtra('${key}',${index})">استخدام النموذج</button></div>`}
 function injectExtraTemplates(){
@@ -112,7 +117,7 @@ function injectExtraTemplates(){
 function applyExtra(key,index){const item=EXTRA[key]?.[index];if(!item)return;const meta=metaFor(key);const questions=item[1].map((row,i)=>q(i+1,row[0],row[1])).join('');const html=page(meta,item[0],'أجب عن جميع الأسئلة مع مراعاة وضوح الخط.',[questions]);const c=$('pages-container');if(!c)return;try{window.saveState?.()}catch(_){}c.innerHTML=html;normalizeHeaders();enhanceAnswers();stableRebind();window.AbuQuestionTypes?.enhance?.();window.fitToScreen?.();window.checkAutoFlow?.();queueDraft();$('abuQTemplateModal')?.classList.remove('show')}
 function wrapTemplates(){if(!window.AbuQuestionTemplates||AbuQuestionTemplates.__abuCompletionWrapped)return false;const origOpen=AbuQuestionTemplates.openTemplates?.bind(AbuQuestionTemplates),origApply=AbuQuestionTemplates.applyTemplate?.bind(AbuQuestionTemplates);if(origOpen)AbuQuestionTemplates.openTemplates=function(...args){const r=origOpen(...args);setTimeout(injectExtraTemplates,20);return r};if(origApply)AbuQuestionTemplates.applyTemplate=function(...args){const r=origApply(...args);setTimeout(()=>{normalizeHeaders();enhanceAnswers();stableRebind();window.fitToScreen?.();window.checkAutoFlow?.();queueDraft()},30);return r};AbuQuestionTemplates.__abuCompletionWrapped=true;return true}
 function watch(){
-  const c=$('pages-container');if(c){c.addEventListener('input',queueDraft,true);c.addEventListener('change',queueDraft,true);new MutationObserver(()=>{normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();setTimeout(stableRebind,0);queueDraft()}).observe(c,{childList:true,subtree:true,characterData:true,attributes:true})}
+  const c=$('pages-container');if(c){c.addEventListener('input',queueDraft,true);c.addEventListener('change',queueDraft,true);new MutationObserver(()=>{normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();setTimeout(stableRebind,0);queueDraft()}).observe(c,{childList:true,subtree:true,characterData:true})}
   const modal=$('abuQTemplateModal');if(modal)new MutationObserver(()=>setTimeout(injectExtraTemplates,0)).observe(modal,{childList:true,subtree:true})
 }
 async function init(){addCss();installAnswerButton();normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();installStableDrag();watch();await restoreDurableIfNeeded();let tries=0,t=setInterval(()=>{tries++;if(wrapTemplates()||tries>40)clearInterval(t)},100);setTimeout(injectExtraTemplates,500)}
