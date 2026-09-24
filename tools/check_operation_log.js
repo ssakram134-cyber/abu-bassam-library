@@ -4,8 +4,10 @@ const vm=require('vm');
 const root=path.resolve(__dirname,'..');
 const runtimePath=path.join(root,'web','operation-log-corrections-runtime.js');
 const loaderPath=path.join(root,'web','device-name-runtime.js');
+const migrationPath=path.join(root,'supabase','migrations','202609240011_strict_activity_device_secret.sql');
 const runtime=fs.readFileSync(runtimePath,'utf8');
 const loader=fs.readFileSync(loaderPath,'utf8');
+const migration=fs.readFileSync(migrationPath,'utf8');
 const errors=[];
 const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
@@ -35,5 +37,13 @@ for(const marker of [
 ])need(runtime,marker,'operation log');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
 for(const marker of ['operation-log-corrections-runtime.js','loadOperationLogCorrections()'])need(loader,marker,'operation log loader');
+for(const marker of [
+  "coalesce(v_actor.secret_hash,'')=''",
+  'v_actor.secret_hash<>v_hash',
+  "coalesce(v_device.secret_hash,'')=''",
+  'v_device.secret_hash<>v_hash',
+  'revoke all on function public.abu_bassam_owner_activity_report',
+  'revoke all on function public.abu_bassam_record_device_activity'
+])need(migration,marker,'activity secret migration');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Operation log checks passed: secure audit refresh, branch/device/date/status filters, exact device names, selected export, A4/PDF printing, local-only clear, and sensitive-customer redaction.\n');
+process.stdout.write('Operation log checks passed: secure audit refresh, strict device secrets, branch/device/date/status filters, exact device names, selected export, A4/PDF printing, local-only clear, and sensitive-customer redaction.\n');
