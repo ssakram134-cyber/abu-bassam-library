@@ -4,16 +4,18 @@ function need(src,t,label){if(!src.includes(t))throw new Error(`customer documen
 function forbid(src,t,label){if(src.includes(t))throw new Error(`customer documents check failed: forbidden ${label}`)}
 const ui=read('web/customer-documents-runtime.js');
 const workflow=read('web/customer-documents-workflow-runtime.js');
+const quality=read('web/customer-image-quality-runtime.js');
 const frame=read('web/customer-camera-frame-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const patch=read('scripts/patch-customer-camera.mjs');
 const migration=read('supabase/migrations/202609240004_customer_documents.sql');
 const workflowMigration=read('supabase/migrations/202609240005_customer_documents_workflow.sql');
 const edge=read('supabase/functions/customer-documents/index.ts');
-new Function(ui);new Function(workflow);new Function(frame);
+new Function(ui);new Function(workflow);new Function(quality);new Function(frame);
 need(loader,'customer-documents-runtime.js','runtime loader');
 need(loader,'customer-camera-frame-runtime.js','camera frame runtime loader');
 need(loader,'customer-documents-workflow-runtime.js','workflow runtime loader');
+need(loader,'customer-image-quality-runtime.js','image quality runtime loader');
 need(ui,'مستمسكات الزبائن','customer documents center');
 need(ui,'كل فرع مستقل تمامًا','branch isolation notice');
 need(ui,"p_device_secret",'device secret required');
@@ -64,6 +66,10 @@ need(workflow,"عنوان الصفحة",'merge page title');
 need(workflow,"ملاحظة",'merge page note');
 need(workflow,"علامة مائية",'merge watermark');
 need(workflow,"draggable=\"true\"",'merge reorder by drag');
+need(quality,"الصورة مظلمة",'automatic darkness warning');
+need(quality,"التباين منخفض",'automatic contrast warning');
+need(quality,"التفاصيل/الوضوح منخفض",'automatic sharpness warning');
+need(quality,"data-image-quality",'quality state marker');
 need(workflowMigration,"total_size_bytes",'customer total size metadata');
 need(workflowMigration,"last_activity",'last activity metadata');
 need(workflowMigration,"c.notes ilike",'search notes server-side');
@@ -81,4 +87,4 @@ need(edge,"abu_bassam_customer_document_access_v2",'private download authorizati
 need(edge,"original_file",'edge original image upload');
 need(edge,"version==='original'",'edge original image download');
 forbid(workflow,'سلة محذوفات','recycle bin');
-console.log('customer documents workflow and branch isolation checks passed');
+console.log('customer documents workflow, quality and branch isolation checks passed');
