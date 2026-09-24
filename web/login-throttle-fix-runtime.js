@@ -16,7 +16,7 @@ function setMessage(message){const el=$('abuLoginError');if(el)el.textContent=me
 function formatSeconds(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
 function clearFailures(){localStorage.removeItem(ATTEMPT_KEY);localStorage.removeItem(LOGIN_LOCK_KEY);localStorage.removeItem(BLOCK_COUNT_KEY)}
 function credentialFailure(message){return /اسم المستخدم أو كلمة المرور غير صحيحة|اسم المستخدم غير صحيح|invalid login credentials/i.test(String(message||''))}
-function deviceOrPostAuthFailure(message){return /DEVICE_|هذا الجهاز|تعذر تسجيل الجهاز|غير مصرح له بالدخول|الحد الأقصى: ٥ أجهزة|تعذر الاتصال بالإنترنت|خدمة الدخول غير جاهزة/i.test(String(message||''))}
+function deviceOrPostAuthFailure(message){return /DEVICE_|هذا الجهاز|تعذر تسجيل الجهاز|غير مصرح له بالدخول|الحد الأقصى|وصل الحساب إلى الحد الأقصى|تعذر الاتصال بالإنترنت|خدمة الدخول غير جاهزة|طبقة الأمان في Android/i.test(String(message||''))}
 function recordCredentialFailure(message){
   const attempts=Number(localStorage.getItem(ATTEMPT_KEY)||0)+1;
   if(attempts<5){localStorage.setItem(ATTEMPT_KEY,String(attempts));setMessage(`${message} • المتبقي قبل الانتظار: ${5-attempts}`);return}
