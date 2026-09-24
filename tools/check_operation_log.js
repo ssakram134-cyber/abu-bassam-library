@@ -21,8 +21,8 @@ for(const marker of [
   'opsV2To',
   'opsV2Device',
   'opsV2Status',
-  "option value=\"device\"",
-  "option value=\"alpha\"",
+  'option value="device"',
+  'option value="alpha"',
   'opsV2SelectAll',
   'PDF A4',
   '@page{size:A4 portrait',
@@ -33,7 +33,7 @@ for(const marker of [
   'setInterval(patch,2500)',
   "deviceName||d.name||'هذا الجهاز'"
 ])need(runtime,marker,'operation log');
-for(const marker of ["upsert('operation'",'removeKind(\'operation\')','deviceName||\'أكرم\''])no(runtime,marker,'operation log privacy');
+for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
 for(const marker of ['operation-log-corrections-runtime.js','loadOperationLogCorrections()'])need(loader,marker,'operation log loader');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Operation log checks passed: secure audit refresh, branch/device/date/status filters, exact device names, selected export, A4/PDF printing, local-only clear, and sensitive-customer redaction.\n');
