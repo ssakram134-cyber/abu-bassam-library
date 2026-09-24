@@ -22,6 +22,7 @@ function frameLoaded(frame){return !!(frame&&frame.getAttribute('src')&&frame.ge
 function ensureFrame(id,src){const frame=$(id);if(!frame)return null;const current=String(frame.getAttribute('src')||'');if(current==='about:blank'||!current){frame.src=src}return frame}
 function ensureQuestionFrame(){const frame=$('questionsFrame');if(!frame)return null;const wanted=wantedQuestionSrc();frame.dataset.src=wanted;if(!frameLoaded(frame)||!String(frame.getAttribute('src')||'').endsWith(wanted))frame.src=wanted;return frame}
 function ensureCompressorFrame(){return ensureFrame('compressorFrame','image-compressor.html')}
+function loadAdvancedRuntime(){if(window.__ABU_PHOTO_PRINT_ADVANCED_V1__||document.getElementById('abuPhotoPrintAdvancedRuntime'))return;const script=document.createElement('script');script.id='abuPhotoPrintAdvancedRuntime';script.src='photo-print-advanced-runtime.js';script.onerror=()=>console.warn('photo-print-advanced-runtime.js failed to load');document.body.appendChild(script)}
 
 function injectArabicRuntimes(){const frame=$('questionsFrame');if(!frame||language!=='ar'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc)return;[['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js'],['abuQuestionTypesExternal','question-type-runtime.js']].forEach(([id,src])=>{if(doc.getElementById(id))return;const script=doc.createElement('script');script.id=id;script.src=src;doc.head.appendChild(script)})}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات الأسئلة',false)}}
 function updateLanguageUi(){
@@ -40,7 +41,7 @@ function setLanguage(value){
   }
 }
 function build(){
-  if($('questionsCenter'))return;
+  if($('questionsCenter')){loadAdvancedRuntime();return;}
   addCss();
   const app=document.querySelector('.app'),preview=document.querySelector('.app .preview');if(!app)return;
   const questions=document.createElement('section');questions.id='questionsCenter';questions.innerHTML=mainHtml();
@@ -49,6 +50,7 @@ function build(){
   window.addEventListener('message',handleMessage);
   $('questionsFrame')?.addEventListener('load',()=>{if(language==='ar')setTimeout(injectArabicRuntimes,60)});
   updateLanguageUi();
+  loadAdvancedRuntime();
 }
 function handleMessage(event){
   const data=event.data;if(!data||typeof data!=='object'||typeof data.type!=='string')return;
