@@ -37,6 +37,48 @@ index = mustReplace(
   "        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled\n        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode=\"never\"\n        setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}\n        onShouldStartLoadWithRequest={(request) => {\n          const url = String(request?.url || '');\n          if (url.startsWith('file:///android_asset/library/') || url === 'about:blank') return true;\n          if (/^(https?:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});\n          return false;\n        }}\n        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}\n        onLoad={() => setWebReady(true)}\n        onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}\n        onLoadEnd={() => setWebReady(true)}\n        onError={() => { setWebReady(true); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}",
   'WebView startup/security callbacks'
 );
+
+if (!index.includes('const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);')) {
+  const savePagesPattern = /  const savePagesToGallery = useCallback\(async \(\{ prefix, pages, mime \}\) => \{[\s\S]*?\n  \}, \[\]\);\n\n  const printPages/;
+  if (!savePagesPattern.test(index)) throw new Error('Startup stability patch failed: named compressed image saving');
+  index = index.replace(savePagesPattern, `  const savePagesToGallery = useCallback(async ({ prefix, pages, mime }) => {
+    try {
+      const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
+      if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صور للحفظ');
+      if (imagePages.length > 20) throw new Error('عدد الصور أكبر من الحد المسموح');
+      const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
+      const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+      if (!permission.granted) return;
+      let saved = 0, failed = 0;
+      for (let index = 0; index < imagePages.length; index += 1) {
+        try {
+          const raw = String(imagePages[index] || '');
+          if (!raw.startsWith('data:image/')) throw new Error('صيغة الصورة غير مدعومة');
+          const parsed = splitDataUrl(raw);
+          const itemMime = String(parsed.mime || mime || 'image/jpeg');
+          if (!itemMime.startsWith('image/')) throw new Error('صيغة الصورة غير مدعومة');
+          const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);
+          let requestedName = '';
+          if (encodedNameMatch) {
+            try { requestedName = decodeURIComponent(encodedNameMatch[1]); } catch (_) { requestedName = encodedNameMatch[1]; }
+          }
+          const fallbackName = \\`${'${'}safeName(prefix || 'Abu_Bassam_Page')}_${'${'}index + 1}_${'${'}Date.now()}\\`;
+          const finalName = safeName(requestedName || fallbackName);
+          const dot = finalName.lastIndexOf('.');
+          const displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
+          const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, itemMime);
+          await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+          saved += 1;
+        } catch (_) { failed += 1; }
+      }
+      if (!saved) throw new Error('تعذر حفظ الصور المحددة');
+      Alert.alert('تم الحفظ في المعرض', failed ? \\`تم حفظ ${'${'}saved} صورة وتعذر حفظ ${'${'}failed}.\\` : \\`تم حفظ ${'${'}saved} صورة داخل المجلد الذي اخترته.\\`);
+    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
+  }, []);
+
+  const printPages`);
+}
+
 await writeFile(indexPath, index, 'utf8');
 
 let recovery = await readFile(recoveryPath, 'utf8');
@@ -49,4 +91,4 @@ if (recovery.includes(oldObserver)) {
 }
 await writeFile(recoveryPath, recovery, 'utf8');
 
-process.stdout.write('Startup stability patch applied: immediate web-ready bridge, no reload loop, local-only WebView navigation, and debounced recovery observer.\n');
+process.stdout.write('Startup stability patch applied: immediate web-ready bridge, local-only WebView navigation, named mixed-format compressed image saving, and debounced recovery observer.\n');
