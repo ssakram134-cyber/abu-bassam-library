@@ -53,7 +53,7 @@ need(workflow,"cwfTemp",'temperature image editor');
 need(workflow,"cwfCrop",'touch crop editor');
 need(workflow,"before=!W.editor.before",'before/after image comparison');
 need(workflow,"original_file",'private original image preservation');
-need(workflow,"version='original'",'restore/re-edit original');
+need(workflow,"download(id,'original')",'restore/re-edit original');
 need(workflow,"2x1",'2x1 merge template');
 need(workflow,"1x2",'1x2 merge template');
 need(workflow,"3x1",'3x1 merge template');
