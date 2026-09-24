@@ -147,6 +147,9 @@ begin
     from public.abu_bassam_devices d where d.user_id=v_uid order by (case when d.role='owner' then 0 else 1 end),d.device_name;
 end $$;
 
+revoke all on function public.abu_bassam_record_device_activity(text,text,text,text,text,text,text,text,text,timestamptz) from PUBLIC,anon;
+revoke all on function public.abu_bassam_owner_activity_report(text,text,timestamptz,timestamptz,text,text,integer) from PUBLIC,anon;
+revoke all on function public.abu_bassam_owner_activity_devices(text,text) from PUBLIC,anon;
 grant execute on function public.abu_bassam_record_device_activity(text,text,text,text,text,text,text,text,text,timestamptz) to authenticated;
 grant execute on function public.abu_bassam_owner_activity_report(text,text,timestamptz,timestamptz,text,text,integer) to authenticated;
 grant execute on function public.abu_bassam_owner_activity_devices(text,text) to authenticated;
