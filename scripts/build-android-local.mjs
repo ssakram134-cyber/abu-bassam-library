@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
 const win = process.platform === 'win32';
 
 function run(cmd, args, cwd = root, env = process.env) {
@@ -45,29 +47,65 @@ function verifyBundle(apk) {
   }
 }
 
+function sdkRoot() {
+  const fromEnv = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+  const local = path.join(root, 'android', 'local.properties');
+  if (!fs.existsSync(local)) return '';
+  const text = fs.readFileSync(local, 'utf8');
+  const m = text.match(/^sdk\.dir=(.+)$/m);
+  if (!m) return '';
+  const value = m[1].trim().replace(/\\\\/g, '\\').replace(/\\:/g, ':');
+  return fs.existsSync(value) ? value : '';
+}
+
+function findApksigner() {
+  const sdk = sdkRoot();
+  if (!sdk) return '';
+  const buildTools = path.join(sdk, 'build-tools');
+  if (!fs.existsSync(buildTools)) return '';
+  const dirs = fs.readdirSync(buildTools)
+    .filter(name => fs.statSync(path.join(buildTools, name)).isDirectory())
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  for (let i = dirs.length - 1; i >= 0; i--) {
+    const candidate = path.join(buildTools, dirs[i], win ? 'apksigner.bat' : 'apksigner');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return '';
+}
+
+function verifySignature(apk) {
+  const apksigner = findApksigner();
+  if (!apksigner) throw new Error('Android SDK apksigner was not found; cannot verify APK signature');
+  run(apksigner, ['verify', '--verbose', apk]);
+}
+
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
 try {
-  console.log('1/5 Checking project...');
+  console.log('1/6 Checking project...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'check:web']);
 
-  console.log('2/5 Generating Android project and offline assets...');
+  console.log('2/6 Generating Android project and offline assets...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'android:prebuild'], root, { ...process.env, CI: '1' });
   ensureReleaseSigningHook();
 
-  console.log('3/5 Building release APK...');
+  console.log('3/6 Building release APK...');
   const androidDir = path.join(root, 'android');
   const gradle = win ? 'gradlew.bat' : './gradlew';
   run(gradle, ['assembleRelease', '--no-daemon'], androidDir);
 
-  console.log('4/5 Verifying embedded JS bundle...');
+  console.log('4/6 Verifying embedded JS bundle...');
   const apk = findApk(path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release'));
   if (!apk || !fs.statSync(apk).size) throw new Error('Release APK was not produced');
   verifyBundle(apk);
 
-  console.log('5/5 Preparing distributable files...');
+  console.log('5/6 Verifying APK signature...');
+  verifySignature(apk);
+
+  console.log('6/6 Preparing distributable files...');
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist, { recursive: true });
   const out = path.join(dist, 'Abu_Bassam_Library_4.3.2.apk');
