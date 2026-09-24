@@ -19,6 +19,7 @@ forbid('web/device-name-runtime.js',["from('abu_bassam_devices')","cloud.list('d
 forbid('web/device-reconcile-runtime.js',["from('abu_bassam_devices')"]);
 need('supabase/migrations/202609240006_device_registry_privacy_boundary.sql',['revoke all on table public.abu_bassam_devices from PUBLIC, anon, authenticated','abu_bassam_owner_device_count','abu_bassam_owner_devices',"v_actor.role<>'owner'","v_actor.secret_hash<>v_hash"]);
 need('supabase/migrations/202609240007_device_secret_representation.sql',["alter column secret_hash type text",'abu_bassam_devices_secret_hash_valid',"secret_hash ~ '^[0-9a-f]{64}$'",'abu_bassam_remove_device',"v_actor.secret_hash<>v_hash"]);
+need('supabase/migrations/202609240008_private_tables_deny_all_and_device_index_cleanup.sql',['drop index if exists public.abu_bassam_devices_user_device_uidx','abu_bassam_devices_deny_select','abu_bassam_customers_deny_select','abu_bassam_customer_documents_deny_select','abu_bassam_device_activity_deny_select','using (false)','with check (false)']);
 
 for(const file of ['web/device-name-runtime.js','web/device-reconcile-runtime.js']){try{new Function(read(file))}catch(e){failures.push(`${file}: JavaScript syntax error: ${e.message}`)}}
 const packageJson=JSON.parse(read('package.json'));
@@ -26,4 +27,4 @@ for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-c
 const production=['index.js','web/app-security-runtime.js','web/security-extras-runtime.js','web/permission-guard-runtime.js','web/login-throttle-fix-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'].map(read).join('\n');
 for(const marker of [['service','role'].join('_'),['sb','secret',''].join('_'),['BEGIN','PRIVATE','KEY'].join(' ')])if(production.toLowerCase().includes(marker.toLowerCase()))failures.push(`Sensitive server credential marker found in production security source: ${marker}`);
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Security/control checks passed: biometrics, SecureStore, privacy, owner-verified device RPCs, registry table lockout, guarded permissions, single-attempt login repair, LTR credentials, and local-only WebView navigation.\n');
+process.stdout.write('Security/control checks passed: biometrics, SecureStore, private-table deny policies, owner-verified device RPCs, registry table lockout, guarded permissions, single-attempt login repair, LTR credentials, and local-only WebView navigation.\n');
