@@ -20,6 +20,11 @@ need(fixes,"cardsManageCustomTemplates",'custom template management permission i
 need(fixes,"cardsTemplatesEdit",'template edit/select permission is not enforced');
 need(fixes,"protectEnvelope10",'the tenth envelope must be protected as a base model');
 need(fixes,"id==='env-10'",'env-10 deletion protection is missing');
+need(fixes,'__abuTemplateDeleteGuard=prev.__abuTemplateDeleteGuard===true','envelope delete protection must preserve the template permission guard');
+need(fixes,'refreshStandaloneTemplateState','standalone edits must be rebound when the template changes');
+need(fixes,"[file,template,frameSide(el),el.id||('e'+index++)]",'standalone layout key must include the active template');
+need(fixes,'doc.__abuTemplateSwitching=true','template switching must suppress stale override reapplication');
+need(fixes,'clearPreviousOverride','old template geometry must be removed before applying the new template');
 need(fixes,"printKeys",'printing must use an action-specific permission set');
 need(fixes,"pdfKeys",'PDF export must use an action-specific permission set');
 need(fixes,"mode==='cr80'",'direct CR80 printing permission guard is missing');
