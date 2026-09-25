@@ -23,6 +23,8 @@ need(upgrades,"guardChild(win,'printNow',['cardsPrint','printCards','printGenera
 need(finalAudit,'07829667521','standalone front/back brand footer must include the library phone');
 need(finalAudit,"['ration-card.html','mawkib-cards.html']",'CR80 standalone branding targets must be explicit');
 need(finalAudit,'.abu-brand-footer','front-side standalone brand footer is missing');
+need(finalAudit,'تصميم: أكرم حاتم الغزالي','approved designer identity must be applied to designs');
+need(finalAudit,"@media print{.designer{display:block!important}}",'approved designer identity must remain visible in print/PDF');
 need(finalAudit,"guardChild(win,'saveImages',['cardsExportImage','imageExport','exportOutsideApp']",'final audit must guard direct multi-image export');
 need(finalAudit,'Android.savePagesToGallery','final audit must guard gallery bridge');
 need(fixes,'__ABU_CARDS_HARDENING_FIXES_V2__','V2 final card hardening guard');
