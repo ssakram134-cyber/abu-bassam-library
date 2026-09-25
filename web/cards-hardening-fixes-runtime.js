@@ -1,0 +1,20 @@
+(()=>{
+'use strict';
+if(window.__ABU_CARDS_HARDENING_FIXES_V1__)return;
+window.__ABU_CARDS_HARDENING_FIXES_V1__=true;
+const LAYOUT_KEY='abuBassamStandaloneCardLayoutV2';
+const can=k=>window.AbuBassamPermissions?.can?.(k)!==false;
+function deny(k){const item=window.AbuBassamPermissions?.items?.find?.(x=>x.key===k);alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+(item?.label||k));return false}
+function currentOutput(){return String(document.getElementById('csOutput')?.value||'')}
+function checkLayoutPermission(){const mode=currentOutput();if(mode.startsWith('a4')&&!can('cardsA4Layout'))return deny('cardsA4Layout');if(mode==='cr80'&&!can('printCardDirect'))return deny('printCardDirect');return true}
+function patchCardsStudio(){const c=window.CardsStudio;if(!c||c.__abuLayoutPermissionFix)return;c.__abuLayoutPermissionFix=true;for(const name of ['printNow','savePdf','previewPrint']){const fn=c[name];if(typeof fn!=='function')continue;c[name]=function(...args){if(!checkLayoutPermission())return;return fn.apply(this,args)}}}
+function isCardA4(html){const s=String(html||'');return /A4|210mm/i.test(s)&&/cs-print-card|pair-card|abu-a4-card-item/.test(s)}
+function patchBridge(){if(!window.Android||Android.__abuCardsA4PermissionFix)return;Android.__abuCardsA4PermissionFix=true;for(const name of ['printHtml','savePdfHtml']){const fn=Android[name];if(typeof fn!=='function')continue;Android[name]=function(...args){const html=name==='savePdfHtml'?args[1]:args[0];if(isCardA4(html)&&!can('cardsA4Layout'))return deny('cardsA4Layout');return fn.apply(this,args)}}}
+function safeTextTarget(el){const controls=new Set([...el.querySelectorAll(':scope > .abu-se-handle,:scope > .abu-se-rot')]);const direct=[...el.childNodes].filter(n=>n.nodeType===3&&String(n.nodeValue||'').trim());if(direct.length)return {get:()=>direct.map(n=>n.nodeValue||'').join(' ').trim(),set:v=>{direct[0].nodeValue=v;direct.slice(1).forEach(n=>n.nodeValue='')}};const children=[...el.children].filter(n=>!controls.has(n));if(children.length===1&&!children[0].querySelector('img,svg,canvas,input,textarea,select'))return {get:()=>String(children[0].textContent||'').trim(),set:v=>{children[0].textContent=v}};return null}
+function installSafeTextEdit(frame){try{const doc=frame.contentDocument,win=frame.contentWindow;if(!doc||!win||doc.__abuSafeStandaloneText)return;doc.__abuSafeStandaloneText=true;doc.addEventListener('click',e=>{const b=e.target?.closest?.('#abuStandaloneEditorBar [data-text]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const el=doc.querySelector('.abu-se-selected');if(!el)return;if(!can('cardsEditText'))return deny('cardsEditText');const target=safeTextTarget(el);if(!target)return alert('هذا عنصر مركب. عدّل نصه من الحقول الأصلية حتى لا تتلف مكونات التصميم.');const value=prompt('النص الجديد:',target.get());if(value==null)return;target.set(value);const key=el.dataset.abuStandaloneKey;if(key){let data={};try{data=JSON.parse(win.localStorage.getItem(LAYOUT_KEY)||'{}')||{}}catch(_e){}data[key]=Object.assign({},data[key]||{},{text:value});try{win.localStorage.setItem(LAYOUT_KEY,JSON.stringify(data))}catch(_e){}}},true)}catch(e){}}
+function disableForbiddenOptions(){const sel=document.getElementById('csOutput');if(!sel)return;[...sel.options].forEach(o=>{if(o.value.startsWith('a4'))o.disabled=!can('cardsA4Layout');if(o.value==='cr80')o.disabled=!can('printCardDirect')})}
+function watchFrame(){const frame=document.getElementById('abuRecoveryFrame');if(!frame)return;installSafeTextEdit(frame);if(frame.dataset.abuCardsFixWatch==='1')return;frame.dataset.abuCardsFixWatch='1';frame.addEventListener('load',()=>setTimeout(()=>installSafeTextEdit(frame),120))}
+function tick(){patchCardsStudio();patchBridge();disableForbiddenOptions();watchFrame()}
+function boot(){let n=0,t=setInterval(()=>{tick();if(++n>350)clearInterval(t)},90);tick();new MutationObserver(()=>setTimeout(tick,0)).observe(document.documentElement,{childList:true,subtree:true})}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
