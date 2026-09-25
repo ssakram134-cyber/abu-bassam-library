@@ -33,6 +33,16 @@ for (const [marker, label] of [
   ['setWebReady(true)', 'startup watchdog completion'],
 ]) requireMarker(index, marker, label);
 
+// Keep a progress-based escape hatch in addition to onLoadEnd and the native
+// watchdog. This is useful on WebView versions that delay the final load event.
+if (!index.includes('onLoadProgress=')) {
+  const anchor = 'injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onShouldStartLoadWithRequest={onShouldStartLoadWithRequest} onLoadEnd={() => setWebReady(true)}';
+  if (!index.includes(anchor)) throw new Error('Startup stability patch failed: WebView load callback anchor');
+  index = index.replace(anchor, 'injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onShouldStartLoadWithRequest={onShouldStartLoadWithRequest} onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }} onLoadEnd={() => setWebReady(true)}');
+  indexChanged = true;
+}
+requireMarker(index, 'onLoadProgress', 'WebView progress fallback');
+
 // Preserve original file names and per-image MIME when exporting a batch of
 // compressed pictures. This patch is intentionally additive and idempotent.
 if (!index.includes('const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);')) {
@@ -91,4 +101,4 @@ if (recovery.includes(oldObserver)) {
 }
 if (recoveryChanged) await writeFile(recoveryPath, recovery, 'utf8');
 
-process.stdout.write('Startup stability preparation passed: hardened local WebView, native retry watchdog, named mixed-format compressed image saving, and debounced recovery observer.\n');
+process.stdout.write('Startup stability preparation passed: hardened local WebView, progress fallback, native retry watchdog, named mixed-format compressed image saving, and debounced recovery observer.\n');
