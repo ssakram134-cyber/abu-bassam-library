@@ -15,8 +15,8 @@ for(const f of ['questions-paper-runtime.js','questions-completion-runtime.js','
   try{new vm.Script(read(f),{filename:f})}catch(e){errors.push(`${f}: syntax ${e.message}`)}
 }
 const paper=read('questions-paper-runtime.js');
-for(const m of ['__ABU_QUESTION_PAPER_V2__','A4P','A4L','A4 فقط','210,297','297,210','window.fitToScreen','window.checkAutoFlow','questions-completion-runtime.js','questions-maintenance-runtime.js','window.deletePage=deletePage','s.async=false'])need(paper,m,'paper');
-for(const m of ['<option value="A5P"','<option value="A5L"','<option value="custom"'])forbid(paper,m,'paper A4-only UI');
+for(const m of ['__ABU_QUESTION_PAPER_V3__','A4P','A4L','A5P','A5L','CUSTOM','210,297','297,210','148,210','210,148','مخصص','window.fitToScreen','window.checkAutoFlow','questions-completion-runtime.js','questions-maintenance-runtime.js','window.deletePage=deletePage','s.async=false'])need(paper,m,'paper');
+forbid(paper,'A4 فقط','paper current UI');
 const completion=read('questions-completion-runtime.js');
 for(const m of ['__ABU_QUESTIONS_COMPLETION_V2__','اليوم /','التاريخ /','اسم\\s*التلميذ','abuAnswerToggle','abu-answer-box','indexedDB','AbuBassamQuestionDraftV2','pointerdown','setPointerCapture','stableRebind','removeQuestionLibraryBranding','math1:[','science3:[','general:[','رياضيات الأول — نموذج ١٠','علوم الثالث — نموذج ١٠','نموذج عام ١٠','after!==before','button.on'])need(completion,m,'completion');
 for(const m of ['touchstart','touchmove','attributes:true'])forbid(completion,m,'completion pointer stability');
@@ -35,4 +35,4 @@ const templates=read('questions-templates-runtime.js');
 for(const m of ['Array.from({length:10},(_,i)=>makeScienceTemplate(4,i))','Array.from({length:10},(_,i)=>makeIslamicTemplate(i))'])need(templates,m,'base 10-template subjects');
 const types=read('question-type-runtime.js');for(const m of ['blanks','brackets','definitions','enumeration','multiple','truefalse','short'])need(types,m,'question types');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Question section checks passed: A4-only, deterministic loading, stable touch, durable draft, maintenance, day/date header, answers toggle, no library logo, and 10-model coverage.\n');
+process.stdout.write('Question section checks passed: A4/A5/custom paper, deterministic loading, stable touch, durable draft, maintenance, day/date header, answers toggle, no library logo, and 10-model coverage.\n');
