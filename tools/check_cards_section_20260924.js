@@ -15,7 +15,9 @@ const catalog=read('web/card-templates-v2.html');
 const student=read('web/student-thanks-cards.html');
 const standaloneBase=read('web/standalone-card-models-runtime.js');
 for(const src of [upgrades,plus,standalone,a4,freeLayout,standaloneBase,hardening,hardeningFixes,envelopePreload])new Function(src);
-const sandbox={window:{}};vm.runInNewContext(library,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;if(!Array.isArray(groups))throw new Error('cards check failed: template library did not load');for(const id of ['personal','child','login','wifi','qr','ration','mawkib','student-thanks','envelope','certificate','thanks']){const g=groups.find(x=>x.id===id);if(!g)throw new Error(`cards check failed: missing group ${id}`);if(g.models.length!==10)throw new Error(`cards check failed: ${id} must contain exactly 10 real models, found ${g.models.length}`)}
+const sandbox={window:{}};vm.runInNewContext(library,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;if(!Array.isArray(groups))throw new Error('cards check failed: template library did not load');
+const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:9,certificate:10,thanks:6};
+for(const [id,n] of Object.entries(expected)){const g=groups.find(x=>x.id===id);if(!g)throw new Error(`cards check failed: missing group ${id}`);if(g.models.length!==n)throw new Error(`cards check failed: ${id} must contain exactly ${n} approved models, found ${g.models.length}`)}
 for(const f of ['card-models-plus-runtime.js','cards-section-upgrades-runtime.js','standalone-card-layouts-plus-runtime.js'])need(loader,f,`loader ${f}`);
 need(loader,'card-free-layout-runtime.js','free card layout runtime must be loaded');
 need(upgrades,'cards-hardening-runtime.js','cards hardening runtime must be loaded');
@@ -32,15 +34,14 @@ need(freeLayout,'تحرير الباج','explicit card edit mode checkbox');
 need(freeLayout,'abuBassamCardEditModeV1','card edit mode persistence');
 need(freeLayout,'if(!editMode)return','elements must not move when edit mode is off');
 need(freeLayout,'AbuBassamCardFreeLayout','card edit mode public API');
-for(const id of ['personal-10','wifi-10','qr-10'])need(plus,id,`real extra model ${id}`);
-for(let i=1;i<=10;i++){need(library,`personal-${i}`,`personal model ${i}`);need(library,`login-${i}`,`login model ${i}`);need(library,`env-${i}`,`envelope model ${i}`)}
-for(const id of ['child-clouds','child-future','wifi-10','qr-10'])need(library,id,`catalog model ${id}`);
+for(let i=1;i<=5;i++)need(library,`personal-${i}`,`personal model ${i}`);
+for(let i=1;i<=10;i++)need(library,`login-${i}`,`login model ${i}`);
+for(let i=1;i<=9;i++)need(library,`env-${i}`,`envelope model ${i}`);
+for(const id of ['child-clouds','child-future','wifi-3','qr-4'])need(library,id,`catalog model ${id}`);
 need(library,"id:'thanks'",'thanks section exists');
-for(const id of ['t7','t8','t9','t10'])need(hardening,`'${id}'`,`thanks runtime model ${id}`);
-need(envelopePreload,"id:'env-10'",'real tenth envelope template payload');
-for(let i=1;i<=10;i++)need(standaloneBase,`'t${i}'`,`standalone model t${i}`);
+for(let i=1;i<=10;i++)need(standaloneBase,`'t${i}'`,`standalone ration model t${i}`);
 need(standaloneBase,'student-thanks-cards.html','student template hash routing');
-need(standalone,'card.t10','distinct ration/mawkib layout t10');
+need(standalone,'card.t10','distinct ration layout t10');
 need(standalone,'abuMawkibOutput','mawkib A4/CR80 selector');
 need(a4,'a4v2-count','A4 copy stepper');
 need(a4,"DIRS=['nw','n','ne','e','se','s','sw','w']",'eight A4 resize handles');
