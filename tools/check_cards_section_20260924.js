@@ -1,4 +1,4 @@
-const fs=require('fs');
+const fs=require('fs'),vm=require('vm');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`cards check failed: ${label}`)}
 const loader=read('web/productivity-tools-runtime.js');
@@ -15,6 +15,7 @@ const catalog=read('web/card-templates-v2.html');
 const student=read('web/student-thanks-cards.html');
 const standaloneBase=read('web/standalone-card-models-runtime.js');
 for(const src of [upgrades,plus,standalone,a4,freeLayout,standaloneBase,hardening,hardeningFixes,envelopePreload])new Function(src);
+const sandbox={window:{}};vm.runInNewContext(library,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;if(!Array.isArray(groups))throw new Error('cards check failed: template library did not load');for(const id of ['personal','child','login','wifi','qr','ration','mawkib','student-thanks','envelope','certificate','thanks']){const g=groups.find(x=>x.id===id);if(!g)throw new Error(`cards check failed: missing group ${id}`);if(g.models.length!==10)throw new Error(`cards check failed: ${id} must contain exactly 10 real models, found ${g.models.length}`)}
 for(const f of ['card-models-plus-runtime.js','cards-section-upgrades-runtime.js','standalone-card-layouts-plus-runtime.js'])need(loader,f,`loader ${f}`);
 need(loader,'card-free-layout-runtime.js','free card layout runtime must be loaded');
 need(upgrades,'cards-hardening-runtime.js','cards hardening runtime must be loaded');
@@ -33,7 +34,6 @@ need(freeLayout,'if(!editMode)return','elements must not move when edit mode is 
 need(freeLayout,'AbuBassamCardFreeLayout','card edit mode public API');
 for(const id of ['personal-10','wifi-10','qr-10'])need(plus,id,`real extra model ${id}`);
 for(let i=1;i<=10;i++){need(library,`personal-${i}`,`personal model ${i}`);need(library,`login-${i}`,`login model ${i}`);need(library,`env-${i}`,`envelope model ${i}`)}
-for(let i=1;i<=10;i++)need(library,`id:'t${i}'`,`at least one t${i} model exists in catalog`);
 for(const id of ['child-clouds','child-future','wifi-10','qr-10'])need(library,id,`catalog model ${id}`);
 need(library,"id:'thanks'",'thanks section exists');
 for(const id of ['t7','t8','t9','t10'])need(hardening,`'${id}'`,`thanks runtime model ${id}`);
