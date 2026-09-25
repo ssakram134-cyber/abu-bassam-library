@@ -1,15 +1,38 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`cards latest hardening failed: ${label}`)}
+function reject(src,token,label){if(src.includes(token))throw new Error(`cards latest hardening failed: ${label}`)}
 const fixes=read('web/cards-hardening-fixes-runtime.js');
 const upgrades=read('web/cards-section-upgrades-runtime.js');
 new Function(fixes);new Function(upgrades);
 need(upgrades,'cards-hardening-fixes-runtime.js','latest hardening runtime is not loaded');
+need(upgrades,'__ABU_CARDS_HARDENING_FIXES_V2__','loader must target V2 hardening guard');
+need(upgrades,'__abuCardsBootstrap','card permissions need a fail-closed bootstrap facade');
+need(upgrades,"can(){try{return window.AbuBassamSecurity?.role?.()==='owner'}",'bootstrap may only allow owner before full permissions load');
+need(upgrades,"cardsBarcode')!==true",'gallery barcode shortcut must enforce cardsBarcode');
+need(fixes,'__ABU_CARDS_HARDENING_FIXES_V2__','V2 final card hardening guard');
+need(fixes,"window.AbuBassamPermissions.can(k)===true",'branch permission checks must fail closed');
 need(fixes,'reapplyOverrides','text/image overrides must survive rerender');
 need(fixes,"b.dataset.image='1'",'standalone image replacement button is missing');
-need(fixes,"cardsEditImage",'image replacement must obey cardsEditImage permission');
-need(fixes,"cardsEditText",'text editing must obey cardsEditText permission');
-need(fixes,"mode.startsWith('a4')",'A4 layout permission guard is missing');
-need(fixes,"mode==='cr80'",'direct CR80 permission guard is missing');
-need(fixes,'isCardA4','native bridge A4 bypass guard is missing');
+need(fixes,"['cardsEdit','cardsEditImage']",'image replacement must require edit and image permissions');
+need(fixes,"['cardsEdit','cardsEditText']",'text editing must require edit and text permissions');
+need(fixes,"cardsManageCustomTemplates",'custom template management permission is not enforced');
+need(fixes,"cardsTemplatesEdit",'template edit/select permission is not enforced');
+need(fixes,"protectEnvelope10",'the tenth envelope must be protected as a base model');
+need(fixes,"id==='env-10'",'env-10 deletion protection is missing');
+need(fixes,"printKeys",'printing must use an action-specific permission set');
+need(fixes,"pdfKeys",'PDF export must use an action-specific permission set');
+need(fixes,"mode==='cr80'",'direct CR80 printing permission guard is missing');
+need(fixes,"isCardCr80",'standalone CR80 output must be detected');
+need(fixes,"isCardA4",'A4 output must be detected');
+need(fixes,"patchReactNativeBridge",'ReactNativeWebView direct output bypass must be guarded');
+need(fixes,"__abuCardsFinalBridgeGuard",'bridge wrappers must be function-level and re-wrappable');
+need(fixes,"#csForm [data-field]",'main card data fields must become read-only when editing is denied');
+need(fixes,"csBarcodeImageInput",'barcode file input must be disabled when barcode permission is denied');
+need(fixes,"#dsCanvas [contenteditable]",'design studio direct text editing must be guarded');
+need(fixes,"#dsCanvas .ds-el",'design studio pointer editing must be guarded');
+need(fixes,"cardsA4Layout','printA4",'A4 print must require both card layout and print A4 permissions');
+need(fixes,"cardsExportPdf','pdfCreate','pdfSave",'PDF export must require PDF permissions');
+need(fixes,"cardsPrint','printCards','printGeneral",'card printing must require card and global print permissions');
+reject(fixes,"const can=k=>window.AbuBassamPermissions?.can?.(k)!==false",'fail-open permission helper returned');
 console.log('latest cards hardening checks passed');
