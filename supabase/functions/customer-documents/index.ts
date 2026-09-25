@@ -22,7 +22,7 @@ function revision(){ return `${Date.now()}-${crypto.randomUUID().replaceAll('-',
 async function removeQuiet(admin:ReturnType<typeof adminClient>, paths:string[]){ const clean=[...new Set(paths.filter(Boolean))]; if(clean.length)await admin.storage.from(BUCKET).remove(clean).catch(()=>null); }
 async function sha256Hex(value:string){const bytes=new TextEncoder().encode(value);const digest=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');}
 function legacyFallback(key:string){if(/Print$/.test(key))return'print';if(/Export$/.test(key))return'export';return'edit';}
-async function allowed(admin:ReturnType<typeof adminClient>,userId:string,deviceId:string,secret:string,key:string,defaultValue=true){
+async function allowed(admin:ReturnType<typeof adminClient>,userId:string,deviceId:string,secret:string,key:string,defaultValue=false){
   if(!userId||!deviceId||!secret)return false;
   const hash=await sha256Hex(secret);
   const {data,error}=await admin.from('abu_bassam_devices').select('role,active,permissions,secret_hash').eq('user_id',userId).eq('device_id',deviceId).maybeSingle();
@@ -63,7 +63,7 @@ Deno.serve(async(req:Request)=>{
       const {data:existingAccess}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       const existing=Array.isArray(existingAccess)?existingAccess[0]:existingAccess;
       const needed=existing?'customerDocumentsEdit':'customerDocumentsAdd';
-      if(!await allowed(admin,userId,deviceId,secret,needed,true))return json({error:needed==='customerDocumentsEdit'?'CUSTOMER_DOCUMENT_EDIT_NOT_ALLOWED':'CUSTOMER_DOCUMENT_ADD_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,needed,false))return json({error:needed==='customerDocumentsEdit'?'CUSTOMER_DOCUMENT_EDIT_NOT_ALLOWED':'CUSTOMER_DOCUMENT_ADD_NOT_ALLOWED'},403);
       const {data:planned,error:planError}=await user.rpc('abu_bassam_customer_document_upload_plan',{p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId,p_document_id:documentId});
       if(planError)return json({error:planError.message},403);
       const plan=Array.isArray(planned)?planned[0]:planned;
@@ -101,9 +101,8 @@ Deno.serve(async(req:Request)=>{
         p_file_name:fileName,p_mime:mime,p_size_bytes:file.size,p_sort_order:sortOrder,
         p_original_mime:originalMime,p_original_size_bytes:originalSize,p_edit_meta:editMeta
       };
-      let {data:committed,error:commitError}=await user.rpc('abu_bassam_customer_document_commit_v3',commitArgs);
-      if(commitError){({data:committed,error:commitError}=await user.rpc('abu_bassam_customer_document_commit_v3',commitArgs))}
-      if(commitError){await removeQuiet(admin,uploaded);return json({error:commitError.message},500)}
+      const {data:committed,error:commitError}=await user.rpc('abu_bassam_customer_document_commit_v3',commitArgs);
+      if(commitError){await removeQuiet(admin,uploaded);return json({error:commitError.message},403)}
 
       const oldPaths=[String(plan.existing_storage_path||''),String(plan.existing_original_storage_path||'')].filter(p=>p&&!uploaded.includes(p));
       await removeQuiet(admin,oldPaths);
@@ -113,8 +112,8 @@ Deno.serve(async(req:Request)=>{
 
     if(action==='download'&&req.method==='GET'){
       const documentId=String(url.searchParams.get('document_id')||''),version=String(url.searchParams.get('version')||'edited');
-      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsView',true))return json({error:'CUSTOMER_DOCUMENT_VIEW_NOT_ALLOWED'},403);
-      if(version==='original'&&!await allowed(admin,userId,deviceId,secret,'customerOriginalDocumentView',true))return json({error:'CUSTOMER_ORIGINAL_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsView',false))return json({error:'CUSTOMER_DOCUMENT_VIEW_NOT_ALLOWED'},403);
+      if(version==='original'&&!await allowed(admin,userId,deviceId,secret,'customerOriginalDocumentView',false))return json({error:'CUSTOMER_ORIGINAL_NOT_ALLOWED'},403);
       const {data:access,error:accessError}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       if(accessError)return json({error:accessError.message},403);
       const row=Array.isArray(access)?access[0]:access;
@@ -130,14 +129,28 @@ Deno.serve(async(req:Request)=>{
       return new Response(blob,{status:200,headers});
     }
 
-    if(action==='delete'&&req.method==='DELETE'){
-      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsDelete',true))return json({error:'CUSTOMER_DOCUMENT_DELETE_NOT_ALLOWED'},403);
-      const body=await req.json().catch(()=>({})),documentId=String(body?.document_id||url.searchParams.get('document_id')||'');
-      const {data:access}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
-      const before=Array.isArray(access)?access[0]:access;
-      const {data:path,error:deleteError}=await user.rpc('abu_bassam_customer_document_delete',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
+    if(action==='delete-customer'&&req.method==='DELETE'){
+      if(!await allowed(admin,userId,deviceId,secret,'customerDelete',false))return json({error:'CUSTOMER_DELETE_NOT_ALLOWED'},403);
+      const body=await req.json().catch(()=>({}));
+      const customerId=String(body?.customer_id||url.searchParams.get('customer_id')||'');
+      if(!customerId)return json({error:'CUSTOMER_REQUIRED'},400);
+      const {data:paths,error:deleteError}=await user.rpc('abu_bassam_customer_delete',{p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId});
       if(deleteError)return json({error:deleteError.message},403);
-      await removeQuiet(admin,[String(path||before?.storage_path||''),String(before?.original_storage_path||'')]);
+      await removeQuiet(admin,Array.isArray(paths)?paths.map(String):[]);
+      return json({ok:true,removed_files:Array.isArray(paths)?paths.length:0});
+    }
+
+    if(action==='delete'&&req.method==='DELETE'){
+      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsDelete',false))return json({error:'CUSTOMER_DOCUMENT_DELETE_NOT_ALLOWED'},403);
+      const body=await req.json().catch(()=>({})),documentId=String(body?.document_id||url.searchParams.get('document_id')||'');
+      const {data:access,error:accessError}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
+      if(accessError)return json({error:accessError.message},403);
+      const accessRow=Array.isArray(access)?access[0]:access;
+      if(!accessRow?.storage_path)return json({error:'DOCUMENT_NOT_FOUND'},404);
+      const {data:before}=await admin.from('abu_bassam_customer_documents').select('storage_path,original_storage_path').eq('user_id',userId).eq('document_id',documentId).maybeSingle();
+      const {error:deleteError}=await user.rpc('abu_bassam_customer_document_delete',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
+      if(deleteError)return json({error:deleteError.message},403);
+      await removeQuiet(admin,[String(before?.storage_path||accessRow.storage_path||''),String(before?.original_storage_path||'')]);
       return json({ok:true});
     }
     return json({error:'UNSUPPORTED_ACTION'},400);
