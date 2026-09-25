@@ -26,6 +26,7 @@ for (const forbidden of ["originWhitelist={['*']}", 'mixedContentMode="always"']
   if (index.includes(forbidden)) throw new Error(`Startup stability patch refused insecure WebView state: ${forbidden}`);
 }
 for (const [marker, label] of [
+  ['file:///android_asset/library/', 'local app asset scope'],
   ["originWhitelist={['file://*','about:*']}", 'local-only origin whitelist'],
   ['mixedContentMode="never"', 'mixed-content protection'],
   ['onShouldStartLoadWithRequest', 'navigation guard'],
