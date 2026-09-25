@@ -27,6 +27,7 @@ const APP_URL = 'file:///android_asset/library/index.html';
 const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
+const STARTUP_WATCHDOG_MS = 9000;
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
@@ -114,6 +115,7 @@ function App() {
   const [torch, setTorch] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('back');
   const [webReady, setWebReady] = useState(false);
+  const [startupAttempts, setStartupAttempts] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -143,6 +145,20 @@ function App() {
     });
     return () => subscription.remove();
   }, [inject, webReady]);
+
+  useEffect(() => {
+    if (webReady) return undefined;
+    const timer = setTimeout(() => {
+      if (startupAttempts < 1) {
+        setStartupAttempts((value) => value + 1);
+        webRef.current?.reload();
+        return;
+      }
+      setWebReady(true);
+      Alert.alert('تعذر إكمال بدء التشغيل', 'لم تفتح الواجهة ضمن الوقت المتوقع. أعد تشغيل التطبيق، وإذا تكررت المشكلة افحص ملفات التطبيق.');
+    }, STARTUP_WATCHDOG_MS);
+    return () => clearTimeout(timer);
+  }, [startupAttempts, webReady]);
 
   const openCamera = useCallback(async (mode) => {
     try {
@@ -281,6 +297,16 @@ function App() {
     } catch (error) { Alert.alert('تعذر فتح الرابط', String(error?.message || error)); }
   }, []);
 
+  const onShouldStartLoadWithRequest = useCallback((request) => {
+    const url = String(request?.url || '').trim();
+    if (!url || url === 'about:blank' || url.startsWith('file:///android_asset/library/')) return true;
+    if (/^(https?:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) {
+      openExternal({ url });
+      return false;
+    }
+    return false;
+  }, [openExternal]);
+
   const shareBase64 = useCallback(async ({ name, mime, data }) => {
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error('المشاركة غير متاحة على هذا الجهاز');
@@ -357,10 +383,10 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
-        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['*']} javaScriptEnabled domStorageEnabled
-        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="always"
+        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
+        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
-        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onLoadEnd={() => setWebReady(true)}
+        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} onMessage={onWebMessage} onShouldStartLoadWithRequest={onShouldStartLoadWithRequest} onLoadEnd={() => setWebReady(true)}
         onError={() => Alert.alert('تعذر فتح التطبيق', 'أعد تشغيل التطبيق وحاول مرة أخرى.')}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
