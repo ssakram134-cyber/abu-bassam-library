@@ -21,17 +21,17 @@ if(fs.existsSync(path.join(web,'questions-final-fixes-runtime.js'))){
 }
 if(fs.existsSync(path.join(web,'questions-en-fixes-runtime.js'))){
   const s=read('questions-en-fixes-runtime.js');
-  for(const m of ['__ABU_QUESTIONS_EN_FIXES_V1__','A4P','A4L','A4 only','durableSave','dbDelete','window.saveQuestionDraft=durableSave','window.resetQuestionDraft=reset','window.handleAddImage=addImage','pointerdown','2600/max','40*1024*1024','window.checkAutoFlow=flow','abuEnAnswerBtn','Model answer / notes','Day /','img.style.objectFit','window.saveState?.()'])need(s,m,'English fixes');
-  for(const bad of ['A5P','A5L','value="custom"'])if(s.includes(bad))errors.push(`English fixes: forbidden ${bad}`);
+  for(const m of ['__ABU_QUESTIONS_EN_FIXES_V2__','A4P','A4L','A5P','A5L','CUSTOM','A4, A5, or custom size','durableSave','dbDelete','window.saveQuestionDraft=durableSave','window.resetQuestionDraft=reset','window.handleAddImage=addImage','pointerdown','2600/max','40*1024*1024','window.checkAutoFlow=flow','abuEnAnswerBtn','Model answer / notes','Day /','img.style.objectFit','window.saveState?.()','choosePaper'])need(s,m,'English fixes');
 }
 if(fs.existsSync(path.join(web,'questions-paper-runtime.js'))){
   const p=read('questions-paper-runtime.js');
-  for(const m of ['questions-final-fixes-runtime.js','questions-custom-library-runtime.js','s.async=false'])need(p,m,'Arabic paper loader');
+  for(const m of ['__ABU_QUESTION_PAPER_V3__','A4P','A4L','A5P','A5L','CUSTOM','questions-final-fixes-runtime.js','questions-custom-library-runtime.js','s.async=false'])need(p,m,'Arabic paper loader');
+  forbid(p,'A4 فقط','Arabic paper loader');
 }
 if(fs.existsSync(path.join(web,'productivity-tools-runtime.js'))){
   const p=read('productivity-tools-runtime.js');
-  for(const m of ['A4 فقط','injectEnglishRuntime','questions-en-fixes-runtime.js','injectCurrentQuestionRuntime','script.async=false'])need(p,m,'question host');
-  if(p.includes('A4/A5/مخصص'))errors.push('question host still advertises A5/custom paper');
+  for(const m of ['A4/A5/مخصص','injectEnglishRuntime','questions-en-fixes-runtime.js','injectCurrentQuestionRuntime','script.async=false'])need(p,m,'question host');
+  forbid(p,'A4 فقط','question host');
 }
 if(fs.existsSync(path.join(web,'questions-template-tools-runtime.js'))){
   const s=read('questions-template-tools-runtime.js');
@@ -49,4 +49,4 @@ if(fs.existsSync(path.join(web,'questions-custom-library-runtime.js'))){
   forbid(s,'CSS.escape','custom template compatibility');
 }
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Question final-fix checks passed: Arabic/English A4-only, deterministic drafts, IndexedDB custom templates, safe images, stable touch/undo, safe template management/profile storage and overflow cleanup.\n');
+process.stdout.write('Question final-fix checks passed: Arabic/English A4/A5/custom paper, deterministic drafts, IndexedDB custom templates, safe images, stable touch/undo, safe template management/profile storage and overflow cleanup.\n');
