@@ -20,8 +20,8 @@ const index=read('index.html');for(const ref of ['supabase-2.58.0.js','secure-sy
 const device=read('device-name-runtime.js');for(const m of ['feature-recovery-runtime.js','child-card-templates-runtime.js','card-models-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','standalone-fold-runtime.js','device-reconcile-runtime.js','app-security-runtime.js','security-extras-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','dismissSplash','installSplashWatchdog','1800'])need(device,m,'device-name-runtime.js');
 for(const m of ['global-flex-runtime.js','loadGlobalFlex','abuGlobalFlexRuntime'])forbid(device,m,'device-name-runtime.js');
 
-const productivity=read('productivity-tools-runtime.js');for(const m of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame','question-type-runtime.js','A4 فقط','questions-en-fixes-runtime.js'])need(productivity,m,'productivity-tools-runtime.js');
-for(const m of ['abuModeEnvelope','abuPaneEnvelope','envelopeFrame','src="envelopes.html"','الأسئلة والظروف','studioMode','A4/A5/مخصص'])forbid(productivity,m,'productivity-tools-runtime.js');
+const productivity=read('productivity-tools-runtime.js');for(const m of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame','question-type-runtime.js','A4/A5/مخصص','questions-en-fixes-runtime.js'])need(productivity,m,'productivity-tools-runtime.js');
+for(const m of ['abuModeEnvelope','abuPaneEnvelope','envelopeFrame','src="envelopes.html"','الأسئلة والظروف','studioMode','A4 فقط'])forbid(productivity,m,'productivity-tools-runtime.js');
 
 const recovery=read('feature-recovery-runtime.js');for(const m of ['abuCardsTemplatesBtn','abuSectionTemplatesBtn','openSectionTemplates','card-templates-v2.html#',"addCardTool(types,'ration'","addCardTool(types,'mawkib'","addCardTool(types,'envelope'","addCardTool(types,'certificate'","addCardTool(types,'thanks'",'envelopes.html','certificates.html','thanks-letter.html','top:76px','width:52px','height:52px','scheduleRecovery'])need(recovery,m,'feature-recovery-runtime.js');
 for(const section of ['personal','child','login','wifi','qr','ration','mawkib','envelope','certificate','thanks'])need(recovery,`${section}:{title:`,`feature-recovery-runtime.js section ${section}`);
@@ -29,8 +29,8 @@ forbid(recovery,"types.querySelector('[data-type=\"envelope\"]')?.remove()",'fea
 
 const library=read('card-template-library.js');
 const count=id=>{const m=library.match(new RegExp(`id:'${id}'[\\s\\S]*?models:\\[([\\s\\S]*?)\\]`));return m?(m[1].match(/\{id:/g)||[]).length:0};
-for(const [id,n] of [['personal',10],['child',10],['login',10],['wifi',10],['qr',10],['ration',10],['mawkib',10],['student-thanks',10],['envelope',9],['certificate',10],['thanks',6]])if(count(id)!==n)errors.push(`${id}: expected ${n} templates, got ${count(id)}`);
-for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','الشكر والتقدير للتلاميذ','صناعة الظرف','شهادات التقدير','كتاب الشكر والتقدير','personal-10','child-future','login-10','wifi-10','qr-10','env-9','cert-10'])need(library,m,'card-template-library.js');
+for(const [id,n] of [['personal',5],['child',10],['login',10],['wifi',3],['qr',4],['ration',10],['mawkib',4],['student-thanks',10],['envelope',9],['certificate',10],['thanks',6]])if(count(id)!==n)errors.push(`${id}: expected ${n} templates, got ${count(id)}`);
+for(const m of ['AbuBassamCardTemplateLibrary','باج الروضة والمدرسة','البطاقة التموينية','كروت المواكب الحسينية','الشكر والتقدير للتلاميذ','صناعة الظرف','شهادات التقدير','كتاب الشكر والتقدير','personal-5','child-future','login-10','wifi-3','qr-4','env-9','cert-10'])need(library,m,'card-template-library.js');
 
 const child=read('child-card-templates-runtime.js');for(const m of ['child-clouds','child-hearts','child-nature','child-space','child-rainbow','child-garden','child-shapes','child-balloons','child-board','child-future','templateCss'])need(child,m,'child-card-templates-runtime.js');
 const cardModels=read('card-models-runtime.js');for(const m of ['personal-5','login-10','wifi-3','qr-4','cssPersonal','cssLogin','cssWifi','cssQr','printCss'])need(cardModels,m,'card-models-runtime.js');
@@ -41,7 +41,7 @@ const studio=read('design-studio-runtime.js');for(const m of ['Array.from({lengt
 const envAgreement=read('envelope-agreement-runtime.js');for(const m of ['REMOVED_KEY','markRemoved(marker)','clearRemoved()','DesignStudio.remove=function','dataset.agreedField'])need(envAgreement,m,'envelope-agreement-runtime.js');
 
 const gestures=read('questions-gesture-runtime.js');need(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','questions-gesture-runtime.js');for(const m of ['touchstart','touchmove','pointerdown','pointermove','abuScale','abuMoveX','abuMoveY'])forbid(gestures,m,'questions-gesture-runtime.js');
-const paper=read('questions-paper-runtime.js');for(const m of ['__ABU_QUESTION_PAPER_V2__','A4P','A4L','210,297','297,210','A4 فقط','window.fitToScreen','window.checkAutoFlow'])need(paper,m,'questions-paper-runtime.js');for(const m of ['<option value="A5P"','<option value="A5L"','<option value="custom"','questions-gesture-runtime.js'])forbid(paper,m,'questions-paper-runtime.js');
+const paper=read('questions-paper-runtime.js');for(const m of ['__ABU_QUESTION_PAPER_V3__','A4P','A4L','A5P','A5L','CUSTOM','210,297','297,210','148,210','210,148','مخصص','window.fitToScreen','window.checkAutoFlow'])need(paper,m,'questions-paper-runtime.js');for(const m of ['A4 فقط','questions-gesture-runtime.js'])forbid(paper,m,'questions-paper-runtime.js');
 const qtypes=read('question-type-runtime.js');for(const m of ['blanks','brackets','definitions','enumeration','points','multiple','truefalse','short','المستوى السهل','المستوى المتوسط','المستوى الصعب','التسلسل','الحفظ','الحديث الشريف','التلاوة','العقائد والعبادات','المعاني','السيرة','الآداب الإسلامية'])need(qtypes,m,'question-type-runtime.js');
 
 const loginFix=read('login-throttle-fix-runtime.js');for(const m of ['credentialFailure(message)','deviceOrPostAuthFailure(message)','recordCredentialFailure','legacyInstalled','loginBusy','attributeFilter'])need(loginFix,m,'login-throttle-fix-runtime.js');
@@ -61,4 +61,4 @@ if(/Ahmed Hassan|أحمد حسن|facebook\.com/i.test(projectText))errors.push('
 if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write(`Project checks passed (${required.length} required assets): startup safety, local-only navigation, current card model counts, A4-only questions, login/device fixes, no legacy flex/gestures, deterministic read-only Android CI, and syntax/security checks.\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets): startup safety, local-only navigation, approved card model counts, A4/A5/custom questions, login/device fixes, no legacy flex/gestures, deterministic read-only Android CI, and syntax/security checks.\n`);
