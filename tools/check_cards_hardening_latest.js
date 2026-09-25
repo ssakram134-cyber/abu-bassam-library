@@ -22,7 +22,10 @@ need(fixes,"protectEnvelope10",'the tenth envelope must be protected as a base m
 need(fixes,"id==='env-10'",'env-10 deletion protection is missing');
 need(fixes,'__abuTemplateDeleteGuard=prev.__abuTemplateDeleteGuard===true','envelope delete protection must preserve the template permission guard');
 need(fixes,'refreshStandaloneTemplateState','standalone edits must be rebound when the template changes');
-need(fixes,"[file,template,frameSide(el),el.id||('e'+index++)]",'standalone layout key must include the active template');
+need(fixes,"const idx=index++",'standalone element indexing must match the base editor key order');
+need(fixes,"[file,template,frameSide(el),el.id||('e'+idx)]",'standalone layout key must include the active template');
+need(fixes,'scheduleCleanTemplateReload','static template changes must reload once from a clean DOM');
+need(fixes,"abuCardsTemplateReload:", 'template reload loop guard is missing');
 need(fixes,'doc.__abuTemplateSwitching=true','template switching must suppress stale override reapplication');
 need(fixes,'clearPreviousOverride','old template geometry must be removed before applying the new template');
 need(fixes,"printKeys",'printing must use an action-specific permission set');
