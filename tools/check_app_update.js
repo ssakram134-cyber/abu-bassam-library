@@ -9,7 +9,7 @@ const migration=read('supabase/migrations/202609270001_app_release_update_center
 new vm.Script(runtime,{filename:'app-update-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
 for(const m of ['__ABU_APP_UPDATE_V1__','current_code','Authorization','download_ready','validDownloadUrl','dlbxcqkbmvnrcrbhuttv.supabase.co','Android.openExternal','لا يحتوي التطبيق على GitHub Token'])need(runtime,m,m);
 for(const m of ['loadAppUpdate','app-update-runtime.js','__ABU_APP_UPDATE_V1__','setTimeout(loadAppUpdate,240)'])need(loader,m,'loader '+m);
-for(const m of ['npm:@supabase/supabase-js@2.58.0','auth.getUser()','abu_bassam_app_releases',".eq('channel','stable')",".eq('active',true)",'createSignedUrl','Cache-Control','no-store'])need(edge,m,'edge '+m);
+for(const m of ['npm:@supabase/supabase-js@2.58.0','auth.getUser()','abu_bassam_app_releases',".eq('channel','stable')",".eq('active',true)",'available&&release.storage_path&&release.sha256&&release.signing_cert_sha256','createSignedUrl','Cache-Control','no-store'])need(edge,m,'edge '+m);
 for(const m of ['enable row level security','as restrictive','using (false)','with check (false)','revoke all on table public.abu_bassam_app_releases from public, anon, authenticated','grant select on table public.abu_bassam_app_releases to service_role','abu_bassam_app_releases_one_active_channel'])need(migration,m,'migration '+m);
 forbid(runtime,'github.com','GitHub download URL in client');
 forbid(runtime,'ghp_','GitHub personal access token');
