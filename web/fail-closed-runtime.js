@@ -6,7 +6,9 @@ const VAULT_ERROR='VAULT_GATEWAY_NOT_READY';
 const SECURE_ERROR='SECURE_STORAGE_REQUIRED';
 const HARDENING_ERROR='ACCOUNT_RECOVERY_HARDENING_REQUIRED';
 const sensitiveButtons=new Set(['acctRecoveryGenerate','acctRecoverDo']);
+let branchCloudOps=null,branchApiOps=null;
 function vaultError(){return new Error(VAULT_ERROR)}
+function secureError(){return new Error(SECURE_ERROR)}
 function secureBridgeReady(){return !!(window.Android&&typeof Android.security==='function')}
 function recoveryHardeningReady(){return window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__===true}
 function sensitiveReady(){return secureBridgeReady()&&recoveryHardeningReady()}
@@ -29,6 +31,58 @@ function armVault(){
   if(originals.get)cloud.get=(kind,id)=>String(kind)==='vault'?Promise.reject(vaultError()):originals.get(kind,id);
   if(originals.upsert)cloud.upsert=(kind,id,data)=>String(kind)==='vault'?Promise.reject(vaultError()):originals.upsert(kind,id,data);
   if(originals.removeKind)cloud.removeKind=kind=>String(kind)==='vault'?Promise.reject(vaultError()):originals.removeKind(kind);
+  return true
+}
+function captureBranchOps(){
+  const cloud=window.AbuBassamCloud,branch=window.AbuBassamBranchVault;
+  if(cloud?.__abuBranchVaultPatched&&!cloud.__abuVaultSecureBlocked&&!branchCloudOps){
+    branchCloudOps={
+      list:typeof cloud.list==='function'?cloud.list.bind(cloud):null,
+      get:typeof cloud.get==='function'?cloud.get.bind(cloud):null,
+      upsert:typeof cloud.upsert==='function'?cloud.upsert.bind(cloud):null,
+      removeKind:typeof cloud.removeKind==='function'?cloud.removeKind.bind(cloud):null,
+      uploadVault:typeof cloud.uploadVault==='function'?cloud.uploadVault.bind(cloud):null,
+      downloadVault:typeof cloud.downloadVault==='function'?cloud.downloadVault.bind(cloud):null,
+      removeVault:typeof cloud.removeVault==='function'?cloud.removeVault.bind(cloud):null
+    }
+  }
+  if(branch&&!branch.__abuSecureStoreBlocked&&!branchApiOps){
+    branchApiOps={};
+    for(const name of ['credentials','list','get','upsert','upload','download','remove'])if(typeof branch[name]==='function')branchApiOps[name]=branch[name]
+  }
+}
+function blockBranchVaultWithoutSecureStore(){
+  const cloud=window.AbuBassamCloud,branch=window.AbuBassamBranchVault;
+  if(!cloud?.__abuBranchVaultPatched||secureBridgeReady())return false;
+  captureBranchOps();
+  if(!cloud.__abuVaultSecureBlocked){
+    cloud.__abuVaultSecureBlocked=true;
+    cloud.uploadVault=async()=>{throw secureError()};
+    cloud.downloadVault=async()=>{throw secureError()};
+    cloud.removeVault=async()=>{throw secureError()};
+    if(branchCloudOps?.list)cloud.list=(kind,limit)=>String(kind)==='vault'?Promise.reject(secureError()):branchCloudOps.list(kind,limit);
+    if(branchCloudOps?.get)cloud.get=(kind,id)=>String(kind)==='vault'?Promise.reject(secureError()):branchCloudOps.get(kind,id);
+    if(branchCloudOps?.upsert)cloud.upsert=(kind,id,data)=>String(kind)==='vault'?Promise.reject(secureError()):branchCloudOps.upsert(kind,id,data);
+    if(branchCloudOps?.removeKind)cloud.removeKind=kind=>String(kind)==='vault'?Promise.reject(secureError()):branchCloudOps.removeKind(kind)
+  }
+  if(branch&&!branch.__abuSecureStoreBlocked){
+    branch.__abuSecureStoreBlocked=true;
+    const deny=async()=>{throw secureError()};
+    for(const name of ['credentials','list','get','upsert','upload','download','remove'])if(typeof branch[name]==='function')branch[name]=deny
+  }
+  return true
+}
+function restoreBranchVaultWithSecureStore(){
+  const cloud=window.AbuBassamCloud,branch=window.AbuBassamBranchVault;
+  if(!secureBridgeReady())return false;
+  if(cloud?.__abuVaultSecureBlocked&&branchCloudOps){
+    for(const [name,fn] of Object.entries(branchCloudOps))if(typeof fn==='function')cloud[name]=fn;
+    cloud.__abuVaultSecureBlocked=false
+  }
+  if(branch?.__abuSecureStoreBlocked&&branchApiOps){
+    for(const [name,fn] of Object.entries(branchApiOps))if(typeof fn==='function')branch[name]=fn;
+    branch.__abuSecureStoreBlocked=false
+  }
   return true
 }
 function blockSensitiveClick(event){
@@ -69,8 +123,9 @@ function patchAccountApi(){
 function verifyVaultGateway(){
   const cloud=window.AbuBassamCloud;
   if(!cloud)return;
-  if(cloud.__abuBranchVaultPatched)return;
-  armVault()
+  if(!cloud.__abuBranchVaultPatched){armVault();return}
+  captureBranchOps();
+  if(secureBridgeReady())restoreBranchVaultWithSecureStore();else blockBranchVaultWithoutSecureStore()
 }
 function boot(){
   document.addEventListener('click',blockSensitiveClick,true);
