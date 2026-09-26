@@ -1,6 +1,7 @@
 const fs=require('fs'),vm=require('vm');
 const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.readFileSync(p,'utf8')};
 const need=(s,t,l)=>{if(!s.includes(t))throw new Error(`admin permissions check failed: ${l}`)};
+const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`admin permissions check failed: ${l}`)};
 const runtime=read('web/admin-permissions-runtime.js');
 const guards=read('web/permission-section-guards-runtime.js');
 const loader=read('web/device-name-runtime.js');
@@ -20,8 +21,9 @@ for(const key of ['edit','print','export','appearance','sync','security','device
 for(const marker of [
   '__ABU_ADMIN_PERMISSIONS_V1__','صلاحيات متقدمة','السماح للكل','منع الكل','قراءة فقط','موظف طباعة','موظف مستمسكات','موظف تصميم','مخصص / الحالي',
   'vaultView','customerDocumentsView','cardsEdit','questionsEdit','compressSave','printGeneral','pdfSave','syncAutomatic','logsViewOwn','notificationsView','securityView','settingsView','adminViewAllBranches',
-  'ADMIN_ONLY','saveDevicePermissions','abu_bassam_manage_device','AbuBassamPermissions','guardCustomerApi','guardQuestionDocument','guardCompressorDocument','guardMessage'
+  'ADMIN_ONLY','saveDevicePermissions','abu_bassam_manage_device','AbuBassamPermissions','guardCustomerApi','guardQuestionDocument','guardCompressorDocument','guardMessage','SECURE_STORAGE_REQUIRED',"native('secureGet',{key:SECRET_KEY})"
 ])need(runtime,marker,marker);
+forbid(runtime,'__dev_secure_','admin device secret must never fall back to localStorage');
 for(const marker of ['PERMISSION_KEY_NOT_ALLOWED','PERMISSION_VALUE_INVALID','ADMIN_ONLY_PERMISSION','OWNER_PERMISSIONS_IMMUTABLE','_abu_bassam_permission_key_allowed','_abu_bassam_permission_admin_only'])need(migration,marker,'server validation '+marker);
 need(capacity,'jsonb_object_length(p_permissions)>260','full 222-key payload capacity');
 for(const marker of ['_abu_bassam_device_permission','secret_hash','p_permission'])need(helper,marker,'server permission helper '+marker);
@@ -32,4 +34,4 @@ const adminBlock=(runtime.match(/const ADMIN_ONLY=new Set\(\[([\s\S]*?)\]\);/)||
 const adminKeys=[...adminBlock.matchAll(/'([A-Za-z][A-Za-z0-9]+)'/g)].map(m=>m[1]);
 if(adminKeys.length<35)throw new Error(`admin permissions check failed: admin-only set too small (${adminKeys.length})`);
 for(const key of adminKeys)need(migration,`'${key}'`,`admin-only server list missing ${key}`);
-console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions + 8 legacy compatibility flags, ${adminKeys.length} admin-only protections, presets, server validation, customer document edge enforcement, and cross-section runtime guards`);
+console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions + 8 legacy compatibility flags, ${adminKeys.length} admin-only protections, native SecureStore-only owner secrets, presets, server validation, customer document edge enforcement, and cross-section runtime guards`);
