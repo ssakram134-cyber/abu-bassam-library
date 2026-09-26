@@ -7,12 +7,17 @@ const BUCKET = 'abu-bassam-customers-private';
 const MAX_FILE = 25 * 1024 * 1024;
 const SAFE_EDITED = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif','application/pdf']);
 const SAFE_ORIGINAL = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif']);
+const DEFAULT_ALLOWED = new Set([
+  'customerView','customerAdd','customerEdit','customerDelete','customerSearch',
+  'customerDocumentsView','customerDocumentsAdd','customerDocumentsEdit','customerDocumentsDelete',
+  'customerDocumentsPrint','customerDocumentsExport','customerPhoneView','customerSensitiveDataView','customerOriginalDocumentView'
+]);
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-id, x-device-secret',
   'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
 };
-function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control':'no-store' } }); }
+function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type':'application/json', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff' } }); }
 function userClient(req: Request) { const authorization=req.headers.get('Authorization')||''; return createClient(SUPABASE_URL,ANON_KEY,{global:{headers:{Authorization:authorization}},auth:{persistSession:false}}); }
 function adminClient(){ return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}}); }
 function creds(req: Request){ return {deviceId:req.headers.get('x-device-id')||'',secret:req.headers.get('x-device-secret')||''}; }
@@ -22,16 +27,16 @@ function revision(){ return `${Date.now()}-${crypto.randomUUID().replaceAll('-',
 async function removeQuiet(admin:ReturnType<typeof adminClient>, paths:string[]){ const clean=[...new Set(paths.filter(Boolean))]; if(clean.length)await admin.storage.from(BUCKET).remove(clean).catch(()=>null); }
 async function sha256Hex(value:string){const bytes=new TextEncoder().encode(value);const digest=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');}
 function legacyFallback(key:string){if(/Print$/.test(key))return'print';if(/Export$/.test(key))return'export';return'edit';}
-async function allowed(admin:ReturnType<typeof adminClient>,userId:string,deviceId:string,secret:string,key:string,defaultValue=false){
+async function allowed(admin:ReturnType<typeof adminClient>,userId:string,deviceId:string,secret:string,key:string){
   if(!userId||!deviceId||!secret)return false;
   const hash=await sha256Hex(secret);
   const {data,error}=await admin.from('abu_bassam_devices').select('role,active,permissions,secret_hash').eq('user_id',userId).eq('device_id',deviceId).maybeSingle();
   if(error||!data||data.active===false||!data.secret_hash||data.secret_hash!==hash)return false;
   if(data.role==='owner')return true;
   const p=(data.permissions&&typeof data.permissions==='object')?data.permissions:{};
-  if(typeof p[key]==='boolean')return p[key];
-  const legacy=legacyFallback(key);if(typeof p[legacy]==='boolean')return p[legacy];
-  return defaultValue;
+  if(typeof p[key]==='boolean')return p[key]===true;
+  const legacy=legacyFallback(key);if(typeof p[legacy]==='boolean')return p[legacy]===true;
+  return DEFAULT_ALLOWED.has(key);
 }
 
 Deno.serve(async(req:Request)=>{
@@ -63,7 +68,7 @@ Deno.serve(async(req:Request)=>{
       const {data:existingAccess}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       const existing=Array.isArray(existingAccess)?existingAccess[0]:existingAccess;
       const needed=existing?'customerDocumentsEdit':'customerDocumentsAdd';
-      if(!await allowed(admin,userId,deviceId,secret,needed,false))return json({error:needed==='customerDocumentsEdit'?'CUSTOMER_DOCUMENT_EDIT_NOT_ALLOWED':'CUSTOMER_DOCUMENT_ADD_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,needed))return json({error:needed==='customerDocumentsEdit'?'CUSTOMER_DOCUMENT_EDIT_NOT_ALLOWED':'CUSTOMER_DOCUMENT_ADD_NOT_ALLOWED'},403);
       const {data:planned,error:planError}=await user.rpc('abu_bassam_customer_document_upload_plan',{p_device_id:deviceId,p_device_secret:secret,p_customer_id:customerId,p_document_id:documentId});
       if(planError)return json({error:planError.message},403);
       const plan=Array.isArray(planned)?planned[0]:planned;
@@ -112,8 +117,8 @@ Deno.serve(async(req:Request)=>{
 
     if(action==='download'&&req.method==='GET'){
       const documentId=String(url.searchParams.get('document_id')||''),version=String(url.searchParams.get('version')||'edited');
-      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsView',false))return json({error:'CUSTOMER_DOCUMENT_VIEW_NOT_ALLOWED'},403);
-      if(version==='original'&&!await allowed(admin,userId,deviceId,secret,'customerOriginalDocumentView',false))return json({error:'CUSTOMER_ORIGINAL_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsView'))return json({error:'CUSTOMER_DOCUMENT_VIEW_NOT_ALLOWED'},403);
+      if(version==='original'&&!await allowed(admin,userId,deviceId,secret,'customerOriginalDocumentView'))return json({error:'CUSTOMER_ORIGINAL_NOT_ALLOWED'},403);
       const {data:access,error:accessError}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       if(accessError)return json({error:accessError.message},403);
       const row=Array.isArray(access)?access[0]:access;
@@ -130,7 +135,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     if(action==='delete-customer'&&req.method==='DELETE'){
-      if(!await allowed(admin,userId,deviceId,secret,'customerDelete',false))return json({error:'CUSTOMER_DELETE_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,'customerDelete'))return json({error:'CUSTOMER_DELETE_NOT_ALLOWED'},403);
       const body=await req.json().catch(()=>({}));
       const customerId=String(body?.customer_id||url.searchParams.get('customer_id')||'');
       if(!customerId)return json({error:'CUSTOMER_REQUIRED'},400);
@@ -141,7 +146,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     if(action==='delete'&&req.method==='DELETE'){
-      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsDelete',false))return json({error:'CUSTOMER_DOCUMENT_DELETE_NOT_ALLOWED'},403);
+      if(!await allowed(admin,userId,deviceId,secret,'customerDocumentsDelete'))return json({error:'CUSTOMER_DOCUMENT_DELETE_NOT_ALLOWED'},403);
       const body=await req.json().catch(()=>({})),documentId=String(body?.document_id||url.searchParams.get('document_id')||'');
       const {data:access,error:accessError}=await user.rpc('abu_bassam_customer_document_access_v2',{p_device_id:deviceId,p_device_secret:secret,p_document_id:documentId});
       if(accessError)return json({error:accessError.message},403);
