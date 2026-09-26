@@ -9,10 +9,10 @@ const read=p=>fs.readFileSync(path.join(web,p),'utf8');
 const has=(src,token,label)=>{if(!src.includes(token))errors.push(`${label}: missing ${token}`)};
 const forbid=(src,token,label)=>{if(src.includes(token))errors.push(`${label}: forbidden ${token}`)};
 const required=[
-  'index.html','app-security-runtime.js','security-hardening-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-name-runtime.js','device-reconcile-runtime.js',
+  'index.html','security-bootstrap-guard-runtime.js','app-security-runtime.js','security-hardening-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-name-runtime.js','device-reconcile-runtime.js',
   'cards-studio-runtime.js','card-template-library.js','card-models-runtime.js','card-free-layout-runtime.js','cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','envelopes.html','certificates.html','student-thanks-cards.html','thanks-letter.html',
   'questions-ar.html','questions-en.html','questions-paper-runtime.js','questions-en-fixes-runtime.js','questions-templates-runtime.js','questions-final-fixes-runtime.js','questions-custom-library-runtime.js','question-type-runtime.js','image-compressor.html',
-  'document-vault-runtime.js','document-vault-advanced-runtime.js','customer-documents-runtime.js','notification-center-runtime.js','operation-log-privacy-runtime.js','productivity-tools-runtime.js','photo-print-advanced-runtime.js','poster-project-runtime.js',
+  'document-vault-runtime.js','document-vault-advanced-runtime.js','customer-documents-runtime.js','notification-center-runtime.js','notification-excel-runtime.js','operation-log-privacy-runtime.js','productivity-tools-runtime.js','photo-print-advanced-runtime.js','poster-project-runtime.js',
   'supabase-2.58.0.js','qrcode.js','jszip.min.js','fonts/Cairo-Regular.ttf','fonts/Cairo-Bold.ttf','fonts/Tajawal-Regular.ttf','fonts/Tajawal-Bold.ttf'
 ];
 for(const f of required){const p=path.join(web,f);if(!fs.existsSync(p))errors.push(`Missing web asset: ${f}`);else if(fs.statSync(p).size===0)errors.push(`Empty required asset: ${f}`)}
@@ -41,7 +41,15 @@ forbid(qEn,'A4 only','English question tools');
 const qTemplates=read('questions-templates-runtime.js');for(const t of ['التاريخ / ${esc(profile.date','اليوم / ${esc(profile.day','أكرم حاتم الغزالي'])has(qTemplates,t,'question templates');
 const gestures=read('questions-gesture-runtime.js');has(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','question gestures');for(const t of ['touchstart','touchmove','pointerdown','pointermove'])forbid(gestures,t,'question gestures');
 const productivity=read('productivity-tools-runtime.js');for(const t of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"'])has(productivity,t,'productivity host');
-const native=readRoot('index.js');for(const t of ['expo-local-authentication','expo-secure-store','expo-screen-capture','expo-print','ANDROID_BRIDGE','BackHandler.exitApp','STARTUP_WATCHDOG_MS',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])has(native,t,'index.js');for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
+const bootstrap=read('security-bootstrap-guard-runtime.js');for(const t of ['__ABU_SECURITY_BOOTSTRAP_GUARD_V1__','localStorage.removeItem(LEGACY_TRUST_KEY)','sec.offlineUnlock=denyLegacyOffline','stopImmediatePropagation'])has(bootstrap,t,'security bootstrap guard');
+const deviceLoader=read('device-name-runtime.js');for(const t of ['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()'])has(deviceLoader,t,'security startup order');
+const native=readRoot('index.js');for(const t of [
+  'expo-local-authentication','expo-secure-store','expo-screen-capture','expo-print','ANDROID_BRIDGE','BackHandler.exitApp','STARTUP_WATCHDOG_MS',
+  "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest',"if (message.type === 'webBootReady')",
+  'cameraFrameKind','cardDocumentFrame','photoDocumentFrame','openCamera(message.mode, message.frameKind)',
+  'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);'
+])has(native,t,'index.js');
+for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
 for(const t of ['Print.printAsync','Print.printToFileAsync','StorageAccessFramework.createFileAsync'])has(native,t,'native print/export');
 const workflow=readRoot('.github/workflows/android.yml');for(const t of ['npm ci --no-audit --no-fund','npm run check:web','assembleRelease','assets/index.android.bundle','apksigner','sha256sum'])has(workflow,t,'android workflow');
 const deviceLimit=readRoot('supabase/migrations/202609240009_strict_device_registration_identity.sql');for(const t of ['pg_advisory_xact_lock','DEVICE_LIMIT_REACHED',"v_role:=case when v_count=0 then 'owner' else 'secondary' end","if v_row.active=false then raise exception 'DEVICE_DISABLED'"])has(deviceLimit,t,'strict device migration');
@@ -51,4 +59,4 @@ for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGI
 if(/Ahmed Hassan|أحمد حسن/i.test(projectText))errors.push('Project contains a previous designer name');
 if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write(`Project checks passed (${required.length} required assets): syntax, approved card counts, A4/A5/custom questions, native print/PDF, local-only navigation, strict device identity, configurable device limit, and secret/designer checks.\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets): canonical native startup security, smart camera frames, bounded named image saving, secure bootstrap ordering, syntax, approved card counts, A4/A5/custom questions, native print/PDF, strict device identity, configurable device limit, and secret/designer checks.\n`);
