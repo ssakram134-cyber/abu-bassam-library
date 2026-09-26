@@ -4,6 +4,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const BUCKET = 'abu-bassam-private';
+const DEFAULT_ALLOWED = new Set(['vaultView','vaultAdd','vaultEdit','vaultDelete','vaultSync']);
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-id, x-device-secret',
@@ -14,6 +15,12 @@ function userClient(req:Request){const authorization=req.headers.get('Authorizat
 function adminClient(){return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}})}
 function safePart(v:string){return String(v||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180)}
 async function sha256Hex(value:string){const bytes=new TextEncoder().encode(value),hash=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function permissionEnabled(device:{role?:string;permissions?:Record<string,unknown>},key:string){
+  if(device?.role==='owner')return true;
+  const permissions=device?.permissions&&typeof device.permissions==='object'?device.permissions:{};
+  if(typeof permissions[key]==='boolean')return permissions[key]===true;
+  return DEFAULT_ALLOWED.has(key);
+}
 async function context(req:Request,permission:string){
   const deviceId=req.headers.get('x-device-id')||'',secret=req.headers.get('x-device-secret')||'';
   if(!deviceId||!secret)throw new Error('DEVICE_REQUIRED');
@@ -21,8 +28,7 @@ async function context(req:Request,permission:string){
   if(userError||!user)throw new Error('NOT_AUTHENTICATED');
   const admin=adminClient(),{data:device,error}=await admin.from('abu_bassam_devices').select('device_id,role,active,permissions,secret_hash').eq('user_id',user.id).eq('device_id',deviceId).maybeSingle();
   if(error||!device||device.active===false||!device.secret_hash||device.secret_hash!==await sha256Hex(secret))throw new Error('DEVICE_NOT_AUTHORIZED');
-  const allowed=device.role==='owner'||device.permissions?.[permission]!==false;
-  if(!allowed)throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
+  if(!permissionEnabled(device,permission))throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
   return{user,userApi,admin,deviceId,device};
 }
 function scopedPath(userId:string,deviceId:string,itemId:string){return `${userId}/branch-vault/${safePart(deviceId)}/${safePart(itemId)}`}
@@ -38,7 +44,7 @@ Deno.serve(async(req:Request)=>{
       const base=await context(req,'vaultSync');
       const {data:existing}=await base.admin.from('abu_bassam_branch_vault').select('client_id').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
       const permission=existing?'vaultEdit':'vaultAdd';
-      if(base.device.role!=='owner'&&base.device.permissions?.[permission]===false)return json({error:permission.toUpperCase()+'_NOT_ALLOWED'},403);
+      if(!permissionEnabled(base.device,permission))return json({error:permission.toUpperCase()+'_NOT_ALLOWED'},403);
       const path=scopedPath(base.user.id,base.deviceId,itemId),{data,error}=await base.admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:true});
       if(error||!data)return json({error:error?.message||'SIGNED_UPLOAD_FAILED'},500);
       return json({ok:true,path,token:data.token,mime:mime||'application/octet-stream'});
@@ -46,7 +52,7 @@ Deno.serve(async(req:Request)=>{
     if(action==='download-url'&&req.method==='GET'){
       const itemId=String(url.searchParams.get('item_id')||'');if(!itemId)return json({error:'ITEM_ID_REQUIRED'},400);
       const base=await context(req,'vaultView');
-      if(base.device.role!=='owner'&&base.device.permissions?.vaultSync===false)return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
+      if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
       const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
       if(rowError||!row)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
       const path=String(row.data?.storagePath||'');if(!path||!isScoped(path,base.user.id,base.deviceId))return json({error:'VAULT_PATH_INVALID'},403);
@@ -56,7 +62,7 @@ Deno.serve(async(req:Request)=>{
     if(action==='delete'&&req.method==='DELETE'){
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),requested=String(body?.path||'');
       const base=await context(req,'vaultDelete');
-      if(base.device.role!=='owner'&&base.device.permissions?.vaultSync===false)return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
+      if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
       let path=requested;
       if(itemId){const {data:row}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();path=path||String(row?.data?.storagePath||'')}
       if(path&&!isScoped(path,base.user.id,base.deviceId))return json({error:'VAULT_PATH_INVALID'},403);
