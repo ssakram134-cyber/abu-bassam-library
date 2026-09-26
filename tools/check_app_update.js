@@ -5,7 +5,7 @@ const forbid=(s,t,l)=>{if(s.includes(t))throw new Error('app update check failed
 const runtime=read('web/app-update-runtime.js');
 const loader=read('web/device-name-runtime.js');
 const edge=read('supabase/functions/app-update/index.ts');
-const migration=read('supabase/migrations/202609270001_app_release_update_center.sql');
+const migration=read('supabase/migrations/20260926215416_app_release_update_center.sql');
 new vm.Script(runtime,{filename:'app-update-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
 for(const m of ['__ABU_APP_UPDATE_V1__','current_code','Authorization','download_ready','validDownloadUrl','dlbxcqkbmvnrcrbhuttv.supabase.co','Android.openExternal','لا يحتوي التطبيق على GitHub Token'])need(runtime,m,m);
 for(const m of ['loadAppUpdate','app-update-runtime.js','__ABU_APP_UPDATE_V1__','setTimeout(loadAppUpdate,240)'])need(loader,m,'loader '+m);
@@ -14,4 +14,4 @@ for(const m of ['enable row level security','as restrictive','using (false)','wi
 forbid(runtime,'github.com','GitHub download URL in client');
 forbid(runtime,'ghp_','GitHub personal access token');
 forbid(edge,'verify_jwt = false','unauthenticated update gateway');
-console.log('app update checks passed: authenticated metadata gateway, private release table, signed short-lived download URL, local-host validation, and no GitHub token in the APK source.');
+console.log('app update checks passed: production-history migration, authenticated metadata gateway, mandatory SHA/certificate metadata before download, private release table, signed short-lived URL, local-host validation, and no GitHub token in the APK source.');
