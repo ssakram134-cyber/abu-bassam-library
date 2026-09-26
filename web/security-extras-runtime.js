@@ -10,7 +10,6 @@ const PRIVACY_KEY='abuBassamPrivacyModeV1';
 const ATTEMPT_KEY='abuBassamLoginAttemptsV1';
 const LOGIN_LOCK_KEY='abuBassamLoginLockUntilV1';
 const BLOCK_COUNT_KEY='abuBassamLoginBlockCountV1';
-const MAIN_EMAIL='akrama1992@gmail.com';
 const pending=new Map();
 let seq=0;
 let bypassTarget=null;
@@ -23,15 +22,10 @@ function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;'
 function isOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function canSecurity(){return window.AbuBassamSecurity?.can?.('security')||isOwner()}
 function nativeAvailable(){return !!(window.Android&&typeof Android.security==='function')}
+function requireNativeSecurity(){if(nativeAvailable())return true;alert('تعذر الوصول إلى التخزين الآمن في Android. أعد فتح التطبيق قبل تنفيذ هذه العملية الحساسة.');return false}
 
 function nativeRequest(action,payload={}){
-  if(!nativeAvailable()){
-    if(action==='secureGet')return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');
-    if(action==='secureSet'){localStorage.setItem('__dev_secure_'+payload.key,String(payload.value||''));return Promise.resolve(true)}
-    if(action==='secureDelete'){localStorage.removeItem('__dev_secure_'+payload.key);return Promise.resolve(true)}
-    if(action==='privacyMode')return Promise.resolve(false);
-    return Promise.resolve(null)
-  }
+  if(!nativeAvailable())return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
   return new Promise((resolve,reject)=>{
     const requestId='secx-'+Date.now()+'-'+(++seq),timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة العملية'))},12000);
     pending.set(requestId,{resolve,reject,timer});Android.security(action,requestId,payload)
@@ -51,25 +45,34 @@ async function pinHash(){return String(await nativeRequest('secureGet',{key:PIN_
 function validPin(value){return /^\d{4,8}$/.test(String(value||''))}
 async function setDangerPin(){
   if(!isOwner())return alert('رمز العمليات الحساسة يضبطه الجهاز الرئيسي فقط.');
-  const existing=await pinHash();
-  if(existing){const old=String(prompt('أدخل رمز العمليات الحساسة الحالي:')||'');if(await digest(old)!==existing)return alert('الرمز الحالي غير صحيح.')}
-  const first=String(prompt('اختر رمزًا رقميًا من ٤ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز يجب أن يتكون من ٤ إلى ٨ أرقام.');
-  const second=String(prompt('أعد كتابة الرمز للتأكيد:')||'');if(first!==second)return alert('الرمزان غير متطابقين.');
-  await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
+  if(!requireNativeSecurity())return;
+  try{
+    const existing=await pinHash();
+    if(existing){const old=String(prompt('أدخل رمز العمليات الحساسة الحالي:')||'');if(await digest(old)!==existing)return alert('الرمز الحالي غير صحيح.')}
+    const first=String(prompt('اختر رمزًا رقميًا من ٤ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز يجب أن يتكون من ٤ إلى ٨ أرقام.');
+    const second=String(prompt('أعد كتابة الرمز للتأكيد:')||'');if(first!==second)return alert('الرمزان غير متطابقين.');
+    await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
+  }catch(e){alert('تعذر حفظ رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function removeDangerPin(){
   if(!isOwner())return alert('هذه العملية للجهاز الرئيسي فقط.');
-  const hash=await pinHash();if(!hash)return;
-  const value=String(prompt('أدخل رمز العمليات الحساسة لإلغائه:')||'');if(await digest(value)!==hash)return alert('الرمز غير صحيح.');
-  await nativeRequest('secureDelete',{key:PIN_KEY});log('إلغاء رمز العمليات الحساسة');render()
+  if(!requireNativeSecurity())return;
+  try{
+    const hash=await pinHash();if(!hash)return;
+    const value=String(prompt('أدخل رمز العمليات الحساسة لإلغائه:')||'');if(await digest(value)!==hash)return alert('الرمز غير صحيح.');
+    await nativeRequest('secureDelete',{key:PIN_KEY});log('إلغاء رمز العمليات الحساسة');render()
+  }catch(e){alert('تعذر إلغاء رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function verifyDangerPin(reason='هذه عملية حساسة'){
   if(!isOwner())return false;
-  let hash=await pinHash();
-  if(!hash){if(!confirm(`${reason}\nلم يتم إنشاء رمز مستقل للعمليات الحساسة بعد. سيتم إنشاؤه الآن قبل المتابعة.`))return false;await setDangerPin();hash=await pinHash();if(!hash)return false}
-  const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
-  if(await digest(value)!==hash){alert('رمز العمليات الحساسة غير صحيح.');log('فشل تحقق رمز العمليات الحساسة',reason);return false}
-  return true
+  if(!requireNativeSecurity())return false;
+  try{
+    let hash=await pinHash();
+    if(!hash){if(!confirm(`${reason}\nلم يتم إنشاء رمز مستقل للعمليات الحساسة بعد. سيتم إنشاؤه الآن قبل المتابعة.`))return false;await setDangerPin();hash=await pinHash();if(!hash)return false}
+    const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
+    if(await digest(value)!==hash){alert('رمز العمليات الحساسة غير صحيح.');log('فشل تحقق رمز العمليات الحساسة',reason);return false}
+    return true
+  }catch(e){alert('تعذر التحقق من رمز العمليات الحساسة: '+String(e?.message||e));return false}
 }
 
 function loginLockUntil(){return Number(localStorage.getItem(LOGIN_LOCK_KEY)||0)}
@@ -99,15 +102,27 @@ function installLoginThrottle(){
   return true
 }
 
+function passwordWeakness(value){
+  const external=window.AbuBassamStrongPasswordWeakness||window.AbuBassamSecurityExtras?.passwordWeakness;
+  if(typeof external==='function'&&external!==passwordWeakness)return external(value);
+  const v=String(value||'');
+  if(v.length<12)return'استخدم 12 محرفًا على الأقل.';
+  if(!/\p{L}/u.test(v))return'أضف حرفًا واحدًا على الأقل.';
+  if(!/\p{N}/u.test(v))return'أضف رقمًا واحدًا على الأقل.';
+  if(!/[^\p{L}\p{N}\s]/u.test(v))return'أضف رمزًا خاصًا مثل ! أو # أو @.';
+  return''
+}
 async function changePassword(){
   if(!isOwner())return alert('تغيير كلمة مرور الحساب متاح للجهاز الرئيسي فقط.');
-  const c=window.AbuBassamCloud?.client;if(!c)return alert('خدمة الحساب غير جاهزة.');
+  const c=window.AbuBassamCloud?.client,u=window.AbuBassamCloud?.session?.()?.user,email=String(u?.email||'').trim().toLowerCase();
+  if(!c||!email)return alert('سجّل الدخول إلى الحساب الحالي أولًا.');
   const current=String(prompt('أدخل كلمة المرور الحالية لتأكيد الهوية:')||'');if(!current)return;
-  const auth=await c.auth.signInWithPassword({email:MAIN_EMAIL,password:current});if(auth.error)return alert('كلمة المرور الحالية غير صحيحة.');
-  const next=String(prompt('أدخل كلمة المرور الجديدة (١٠ محارف على الأقل):')||'');if(next.length<10)return alert('كلمة المرور الجديدة قصيرة. استخدم ١٠ محارف على الأقل.');
+  const auth=await c.auth.signInWithPassword({email,password:current});if(auth.error)return alert('كلمة المرور الحالية غير صحيحة.');
+  const next=String(prompt('أدخل كلمة المرور الجديدة (12 محرفًا على الأقل، حرف + رقم + رمز):')||''),problem=passwordWeakness(next);if(problem)return alert(problem);
   const repeat=String(prompt('أعد كتابة كلمة المرور الجديدة:')||'');if(next!==repeat)return alert('كلمتا المرور غير متطابقتين.');
   const result=await c.auth.updateUser({password:next});if(result.error)return alert('تعذر تغيير كلمة المرور: '+result.error.message);
-  log('تغيير كلمة مرور الحساب');alert('تم تغيير كلمة مرور الحساب بنجاح. لن تُحفظ كلمة المرور داخل التطبيق أو المستودع.')
+  try{await c.auth.signOut({scope:'others'})}catch(_){}
+  log('تغيير كلمة مرور الحساب');alert('تم تغيير كلمة مرور الحساب بنجاح وإلغاء الجلسات الأخرى قدر الإمكان. لن تُحفظ كلمة المرور داخل التطبيق أو المستودع.')
 }
 function logout(){window.AbuBassamSecurity?.logout?.()}
 
@@ -135,7 +150,16 @@ async function restoreSnapshot(){
 function snapshotInfo(){try{const data=JSON.parse(localStorage.getItem(SNAPSHOT_KEY)||'null');return data?.createdAt?new Date(data.createdAt).toLocaleString('ar-IQ'):'لا توجد نقطة أمان'}catch(e){return'لا توجد نقطة أمان'}}
 
 function privacyCover(){let cover=$('abuPrivacyCover');if(cover)return cover;cover=document.createElement('div');cover.id='abuPrivacyCover';cover.style.cssText='position:fixed;z-index:49999;inset:0;background:#10242e;display:none;align-items:center;justify-content:center;color:#fff;text-align:center;font:900 18px Tahoma;';cover.innerHTML='<div><img src="abu_bassam_icon.webp" style="width:76px;height:76px;border-radius:18px;display:block;margin:0 auto 12px"><div>مكتبة أبو بسام</div><small style="font-size:10px;opacity:.8">المحتوى مخفي لحماية الخصوصية</small></div>';document.body.appendChild(cover);return cover}
-async function applyPrivacy(enabled){localStorage.setItem(PRIVACY_KEY,enabled?'1':'0');privacyCover();try{await nativeRequest('privacyMode',{enabled:!!enabled})}catch(e){if(enabled)console.warn('Native privacy mode unavailable',e)}if(document.visibilityState==='hidden'&&enabled)privacyCover().style.display='flex';else privacyCover().style.display='none';log('وضع الخصوصية العالية',enabled?'مفعّل':'متوقف');render()}
+async function applyPrivacy(enabled){
+  privacyCover();
+  if(enabled&&!nativeAvailable()){localStorage.setItem(PRIVACY_KEY,'0');privacyCover().style.display='none';alert('تعذر تفعيل الخصوصية العالية لأن حماية Android الأصلية غير متاحة.');render();return false}
+  try{
+    if(enabled)await nativeRequest('privacyMode',{enabled:true});else if(nativeAvailable())await nativeRequest('privacyMode',{enabled:false});
+    localStorage.setItem(PRIVACY_KEY,enabled?'1':'0');
+    if(document.visibilityState==='hidden'&&enabled)privacyCover().style.display='flex';else privacyCover().style.display='none';
+    log('وضع الخصوصية العالية',enabled?'مفعّل':'متوقف');render();return true
+  }catch(e){localStorage.setItem(PRIVACY_KEY,'0');privacyCover().style.display='none';if(enabled)alert('تعذر تفعيل حماية لقطة الشاشة/المعاينة الحديثة: '+String(e?.message||e));render();return false}
+}
 function privacyEnabled(){return localStorage.getItem(PRIVACY_KEY)==='1'}
 function visibilityPrivacy(){const cover=privacyCover();if(document.visibilityState==='hidden'&&privacyEnabled())cover.style.display='flex';else setTimeout(()=>cover.style.display='none',60)}
 
@@ -162,6 +186,6 @@ function installTypographyApplyShim(){
 function startSnapshots(){createSnapshot(false);clearInterval(snapshotTimer);snapshotTimer=setInterval(()=>{if(document.visibilityState!=='hidden')createSnapshot(false)},10*60*1000);window.addEventListener('pagehide',()=>createSnapshot(false));document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden')createSnapshot(false)})}
 
 async function boot(){privacyCover();inject();guardDanger();installTypographyApplyShim();startSnapshots();const loginTimer=setInterval(()=>{if(installLoginThrottle())clearInterval(loginTimer)},200);setTimeout(()=>clearInterval(loginTimer),15000);await applyPrivacy(privacyEnabled());render()}
-window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render,guardedLogin};
+window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,passwordWeakness,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render,guardedLogin};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
