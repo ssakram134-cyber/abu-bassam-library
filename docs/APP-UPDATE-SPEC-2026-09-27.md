@@ -12,6 +12,7 @@
 - بوابة التحديث تتحقق من جلسة Supabase للمستخدم ثم تقرأ Metadata الإصدار بواسطة `service_role` داخل الخادم فقط.
 - اسم Migration الأساسي في المستودع يطابق سجل الإنتاج الفعلي: `20260926215416_app_release_update_center.sql`.
 - اعتماد إصدار جديد يتم عبر `abu_bassam_publish_app_release`، ولا يملك `public` أو `anon` أو `authenticated` حق EXECUTE عليه؛ `service_role` فقط.
+- بصمة شهادة توقيع الإنتاج المعتمدة مثبتة كقيمة عامة غير سرية في `config/release-signing-certificate.sha256`.
 
 ## بيانات الإصدار
 لكل إصدار: `version`، `version_code`، `channel`، `mandatory`، `min_supported_code`، `changelog`، مسار APK الخاص، `sha256`، بصمة شهادة التوقيع، وتاريخ النشر.
@@ -28,11 +29,19 @@
 1. يبنى APK بالأمر `npm run build:apk:release` مع متغيرات مفتاح التوقيع الإنتاجي.
 2. يجب أن ينتج `dist/BUILD_TYPE.txt` بالقيمة الدقيقة `signed-production-release-with-embedded-js`.
 3. `scripts/publish-app-update.mjs` يعيد حساب SHA-256 ويطابقه مع `dist/SHA256.txt`.
-4. يستخرج بصمة SHA-256 لشهادة التوقيع من `dist/SIGNING_CERTIFICATE.txt`.
+4. يستخرج بصمة SHA-256 لشهادة التوقيع من `dist/SIGNING_CERTIFICATE.txt` ثم يطابقها مع `config/release-signing-certificate.sha256` قبل الرفع.
 5. يرفض النشر عند غياب `SUPABASE_URL` أو `SUPABASE_SERVICE_ROLE_KEY`. مفتاح الخادم يمر عبر Environment فقط ولا يُكتب داخل المستودع أو APK.
 6. يرفع APK إلى `abu-bassam-private/app-releases/<version>/...`.
-7. يستدعي RPC الخادمية الذرّية `abu_bassam_publish_app_release` لتثبيت المسار والـHash والشهادة وتفعيل Stable بعد التحقق من القيم.
-8. الأمر: `npm run publish:update`. الخيارات: `--mandatory` و`--min-supported-code=<code>` و`--changelog=<text>`، أو `RELEASE_CHANGELOG` عبر Environment.
+7. بعد الرفع يعيد تنزيل نفس APK من Storage الخاص بواسطة صلاحية الخادم، ثم يطابق الحجم وSHA-256 مع الملف المحلي. لا تُفعّل Metadata عند أي اختلاف.
+8. يستدعي RPC الخادمية الذرّية `abu_bassam_publish_app_release` لتثبيت المسار والـHash والشهادة وتفعيل Stable بعد التحقق من القيم.
+9. الخادم نفسه يرفض: ملف APK غير موجود، VersionCode أقدم من Stable الحالي، أو شهادة توقيع مختلفة عن خط الإنتاج السابق.
+10. الأمر: `npm run publish:update`. الخيارات: `--mandatory` و`--min-supported-code=<code>` و`--changelog=<text>`، أو `RELEASE_CHANGELOG` عبر Environment.
+
+## بصمة الإنتاج الأساسية
+- بصمة SHA-256 المثبتة حاليًا: `9ed30ea3d1b0faaabdb8d51b8e82c675ccdaec77c1565ffba2aefb811a528112`.
+- مصدرها تقرير الإصدار الموثق داخل المشروع الذي سجل مطابقة توقيع APK 4.3.2 مع APK v4.2.
+- Artifact GitHub التاريخي الذي تم فحصه كان مميزًا كـDebug/Test ولم يُعتمد كتحديث إنتاجي.
+- لا يجوز تغيير ملف البصمة المثبتة عند نشر تحديث عادي. تغيير مفتاح التوقيع يحتاج إجراء Migration/Key rotation مقصودًا ومدروسًا وليس تجاوزًا لفحص الناشر.
 
 ## الحالات
 - لا يوجد إصدار أحدث: يظهر أن التطبيق على آخر إصدار.
@@ -46,15 +55,19 @@
 2. نجاح Android Release build.
 3. نجاح `apksigner verify`.
 4. حساب SHA-256 للـAPK ومطابقته مع ملف التحقق.
-5. استخراج ومراجعة بصمة شهادة التوقيع ومطابقتها مع الإصدار الإنتاجي السابق عند وجوده.
+5. استخراج بصمة شهادة التوقيع ومطابقتها مع البصمة الإنتاجية المثبتة.
 6. تشغيل `npm run publish:update` فقط بعد الخطوات السابقة.
-7. التأكد أن `app-update` يعيد رابطًا موقّعًا فقط عندما تكون بيانات السلامة مكتملة.
-8. اختبار: لا تحديث، تحديث اختياري، تحديث إلزامي، انتهاء الرابط الموقّع، وتثبيت فوق نسخة أقدم على هاتف حقيقي مع الحفاظ على البيانات.
+7. نجاح إعادة تنزيل APK المرفوع ومطابقة الحجم وSHA-256 قبل تفعيل الإصدار.
+8. التأكد أن `app-update` يعيد رابطًا موقّعًا فقط عندما تكون بيانات السلامة مكتملة.
+9. اختبار: لا تحديث، تحديث اختياري، تحديث إلزامي، انتهاء الرابط الموقّع، وتثبيت فوق نسخة أقدم على هاتف حقيقي مع الحفاظ على البيانات.
 
 ## الملفات
 - `web/app-update-runtime.js`
 - `supabase/functions/app-update/index.ts`
 - `supabase/migrations/20260926215416_app_release_update_center.sql`
 - `supabase/migrations/202609270001_app_release_publish_rpc.sql`
+- `supabase/migrations/202609270002_app_release_publisher_guard.sql`
+- `supabase/migrations/202609270003_release_signing_baseline.sql`
+- `config/release-signing-certificate.sha256`
 - `scripts/publish-app-update.mjs`
 - `tools/check_app_update.js`
