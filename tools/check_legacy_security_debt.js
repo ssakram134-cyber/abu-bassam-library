@@ -2,7 +2,6 @@ const fs=require('fs'),path=require('path');
 const web=path.resolve(__dirname,'..','web');
 const files=fs.readdirSync(web).filter(n=>n.endsWith('.js'));
 const allowedLegacySecretFiles=new Set([
-  'account-recovery-hardening-runtime.js',
   'security-bootstrap-guard-runtime.js'
 ]);
 const failures=[];
@@ -21,4 +20,4 @@ if(!secureSync.includes("path = `${account.id}/vault/"))failures.push('secure-sy
 const branch=fs.readFileSync(path.join(web,'branch-vault-runtime.js'),'utf8');
 for(const marker of ['SECURE_STORAGE_REQUIRED','c.uploadVault=uploadVault','c.downloadVault=downloadVault','c.removeVault=removeVault','__abuBranchVaultPatched'])if(!branch.includes(marker))failures.push(`branch gateway missing ${marker}`);
 if(failures.length){console.error(failures.join('\n'));process.exit(1)}
-console.log('legacy security debt contained: no new web-storage secret fallback may appear; known compatibility files remain neutralized by the bootstrap/fail-closed guards, legacy signup is intercepted by the 12-character policy, and the legacy vault path is replaced by Branch Vault before use.');
+console.log('legacy security debt contained: only the bootstrap guard may mention the retired __dev_secure_ prefix so it can erase/block old values; all functional device-secret access requires native SecureStore; legacy signup is intercepted by the 12-character policy, and the legacy vault path is replaced by Branch Vault before use.');
