@@ -2,10 +2,7 @@ const fs=require('fs'),path=require('path');
 const web=path.resolve(__dirname,'..','web');
 const files=fs.readdirSync(web).filter(n=>n.endsWith('.js'));
 const allowedLegacySecretFiles=new Set([
-  'account-center-runtime.js',
   'account-recovery-hardening-runtime.js',
-  'customer-documents-runtime.js',
-  'customer-documents-workflow-runtime.js',
   'security-bootstrap-guard-runtime.js'
 ]);
 const failures=[];
