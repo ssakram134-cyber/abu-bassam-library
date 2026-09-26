@@ -40,7 +40,8 @@
   function loadBranchVault(){loadScript('abuBranchVaultRuntime','branch-vault-runtime.js','__ABU_BRANCH_VAULT_V1__')}
   function loadDocumentVaultHardening(){loadScript('abuDocumentVaultHardeningRuntime','document-vault-hardening-runtime.js','__ABU_DOCUMENT_VAULT_HARDENING_V1__')}
   function loadBackupCenter(){loadScript('abuBackupCenterRuntime','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__')}
-  function loadAccountCenter(){loadScript('abuAccountCenterRuntime','account-center-runtime.js','__ABU_ACCOUNT_CENTER_V1__')}
+  function loadAccountRecoveryHardening(){loadScript('abuAccountRecoveryHardeningRuntime','account-recovery-hardening-runtime.js','__ABU_ACCOUNT_RECOVERY_HARDENING_V1__')}
+  function loadAccountCenter(){loadScript('abuAccountCenterRuntime','account-center-runtime.js','__ABU_ACCOUNT_CENTER_V1__',()=>setTimeout(loadAccountRecoveryHardening,0))}
   function loadDocumentVaultPermissionGuard(){loadScript('abuDocumentVaultPermissionGuardRuntime','document-vault-permission-guard-runtime.js','__ABU_DOCUMENT_VAULT_PERMISSION_GUARD_V1__')}
   function loadEncryptedVaultHardening(){loadScript('abuEncryptedVaultHardeningRuntime','encrypted-vault-hardening-runtime.js','__ABU_ENCRYPTED_VAULT_HARDENING_V1__')}
   function loadOperationLogStorageMigration(){loadScript('abuOperationLogStorageMigrationRuntime','operation-log-storage-migration-runtime.js','__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__')}
