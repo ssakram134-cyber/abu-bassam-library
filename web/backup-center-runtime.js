@@ -4,7 +4,7 @@ if(window.__ABU_BACKUP_CENTER_V1__)return;window.__ABU_BACKUP_CENTER_V1__=true;
 const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/backup-center',BUCKET='abu-bassam-private',DB='AbuBassamDocumentVaultV4',STORE='items',APP='4.3.2',SK='abu_bassam_device_secret_v1';
 const AUTO='abuBassamBackupAutoV1',CAD='abuBassamBackupCadenceV1',KEEP='abuBassamBackupRetentionV1',LAST='abuBassamBackupLastSuccessV1',LASTFP='abuBassamBackupLastFingerprintV1',LASTERR='abuBassamBackupLastErrorV1',RETRY='abuBassamBackupRetryAfterV1';
 const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,wait=new Map(),seq=0,modalBuilt=false;
-const $=id=>document.getElementById(id),dev=()=>window.AbuBassamSecurity?.device?.()||{},role=()=>window.AbuBassamSecurity?.role?.()||'',cloud=()=>window.AbuBassamCloud,can=k=>window.AbuBassamSecurity?.can?.(k)!==false;
+const $=id=>document.getElementById(id),dev=()=>window.AbuBassamSecurity?.device?.()||{},role=()=>window.AbuBassamSecurity?.role?.()||'',cloud=()=>window.AbuBassamCloud,can=k=>{const sec=window.AbuBassamSecurity;if(sec?.role?.()==='owner')return true;return typeof sec?.can==='function'&&sec.can(k)===true};
 function log(type,title,details=''){try{window.AbuBassamOps?.add?.({type,title,details,section:'النسخ الاحتياطي'})}catch{}}
 function fmt(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function when(v){if(!v)return'لا يوجد';try{return new Date(v).toLocaleString('ar-IQ')}catch{return String(v)}}
