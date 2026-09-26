@@ -6,7 +6,6 @@ const allowedLegacySecretFiles=new Set([
   'account-recovery-hardening-runtime.js',
   'customer-documents-runtime.js',
   'customer-documents-workflow-runtime.js',
-  'notification-center-runtime.js',
   'security-bootstrap-guard-runtime.js'
 ]);
 const failures=[];
