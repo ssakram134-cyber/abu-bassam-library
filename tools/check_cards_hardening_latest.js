@@ -5,7 +5,10 @@ function reject(src,token,label){if(src.includes(token))throw new Error(`cards l
 const fixes=read('web/cards-hardening-fixes-runtime.js');
 const upgrades=read('web/cards-section-upgrades-runtime.js');
 const finalAudit=read('web/cards-final-audit-runtime.js');
-new Function(fixes);new Function(upgrades);new Function(finalAudit);
+const preload=read('web/envelope-preload-runtime.js');
+const studio=read('web/design-studio-runtime.js');
+const library=read('web/card-template-library.js');
+new Function(fixes);new Function(upgrades);new Function(finalAudit);new Function(preload);new Function(studio);new Function(library);
 need(upgrades,'cards-hardening-fixes-runtime.js','latest hardening runtime is not loaded');
 need(upgrades,'__ABU_CARDS_HARDENING_FIXES_V2__','loader must target V2 hardening guard');
 need(upgrades,'cards-final-audit-runtime.js','final card audit runtime must be loaded');
@@ -35,9 +38,6 @@ need(fixes,"['cardsEdit','cardsEditImage']",'image replacement must require edit
 need(fixes,"['cardsEdit','cardsEditText']",'text editing must require edit and text permissions');
 need(fixes,'cardsManageCustomTemplates','custom template management permission is not enforced');
 need(fixes,'cardsTemplatesEdit','template edit/select permission is not enforced');
-need(fixes,'protectEnvelope10','the tenth envelope must be protected as a base model');
-need(fixes,"id==='env-10'",'env-10 deletion protection is missing');
-need(fixes,'__abuTemplateDeleteGuard=prev.__abuTemplateDeleteGuard===true','envelope delete protection must preserve the template permission guard');
 need(fixes,'refreshStandaloneTemplateState','standalone edits must be rebound when the template changes');
 need(fixes,'const idx=index++','standalone element indexing must match the base editor key order');
 need(fixes,"[file,template,frameSide(el),el.id||('e'+idx)]",'standalone layout key must include the active template');
@@ -60,4 +60,12 @@ need(fixes,"cardsA4Layout','printA4",'A4 print must require both card layout and
 need(fixes,"cardsExportPdf','pdfCreate','pdfSave",'PDF export must require PDF permissions');
 need(fixes,"cardsPrint','printCards','printGeneral",'card printing must require card and global print permissions');
 reject(fixes,"const can=k=>window.AbuBassamPermissions?.can?.(k)!==false",'fail-open permission helper returned');
-console.log('latest cards hardening checks passed');
+need(studio,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'system envelope templates must stay exactly 9');
+need(preload,"item.id==='env-10'",'legacy env-10 must be removed from saved custom templates');
+need(preload,"state.templateId==='env-10'",'legacy active env-10 state must migrate to an approved template');
+reject(preload,'function env10(','obsolete env-10 generator returned');
+reject(preload,"id:'env-10'",'obsolete env-10 injection returned');
+const envelope=(library.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'');
+const ids=[...envelope.matchAll(/id:'env-(\d+)'/g)].map(x=>Number(x[1]));
+if(ids.length!==9||ids.some((n,i)=>n!==i+1))throw new Error(`cards latest hardening failed: envelope library must be env-1..env-9, found ${ids.join(',')}`);
+console.log('latest cards hardening checks passed: permissions fail closed, output bridges are guarded, standalone editing stays template-bound, and the approved envelope set is exactly env-1..env-9 with legacy env-10 migrated out.');
