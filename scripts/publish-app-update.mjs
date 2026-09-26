@@ -14,6 +14,7 @@ const apkPath=path.join(dist,apkName);
 const buildTypePath=path.join(dist,'BUILD_TYPE.txt');
 const shaFile=path.join(dist,'SHA256.txt');
 const certFile=path.join(dist,'SIGNING_CERTIFICATE.txt');
+const expectedCertFile=path.join(root,'config','release-signing-certificate.sha256');
 const mandatory=process.argv.includes('--mandatory');
 const minArg=process.argv.find(x=>x.startsWith('--min-supported-code='));
 const minSupported=minArg?Number(minArg.split('=')[1]):versionCode;
@@ -46,7 +47,11 @@ async function main(){
   const certText=readRequired(certFile,'SIGNING_CERTIFICATE').toString('utf8');
   const certMatch=certText.match(/certificate SHA-256 digest:\s*([0-9a-fA-F:]{64,95})/i);
   if(!certMatch)fail('Production signing certificate SHA-256 fingerprint was not found');
-  const certSha=certMatch[1].toLowerCase();
+  const certSha=certMatch[1].replace(/:/g,'').toLowerCase();
+  const expectedCert=readRequired(expectedCertFile,'Expected production signing certificate').toString('utf8').trim().replace(/:/g,'').toLowerCase();
+  if(!/^[0-9a-f]{64}$/.test(expectedCert))fail('Pinned production signing certificate fingerprint is invalid');
+  if(certSha!==expectedCert)fail(`Production signing certificate mismatch. Expected ${expectedCert}, got ${certSha}`);
+
   const storagePath=storagePathFor(version);
   const apk=fs.readFileSync(apkPath);
 
