@@ -63,16 +63,23 @@ const repair=String(packageJson.scripts?.['repair:source']||'');
 for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker)){process.stderr.write(`repair:source missing explicit compatibility repair ${marker}.\n`);process.exit(1)}
 const assetRequired=[
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
+  'const DOWNLOAD_TIMEOUT_MS = 45000;',
   'await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });',
-  'for(const [relative,url,minBytes] of OCR_ASSETS)',
+  'for(const [relative,urls,minBytes] of OCR_ASSETS)',
+  'await download(urls,resolve(vendorRoot,relative),minBytes);',
+  'async function fetchWithTimeout(url)',
+  'https://cdn.jsdelivr.net/npm/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
+  'https://unpkg.com/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
+  'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
+  'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'Required offline OCR asset is missing or incomplete',
   'canonical web source remains unchanged'
 ];
 for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing canonical-source safeguard: ${marker}\n`);process.exit(1)}
-if(assets.includes("resolve(source, 'vendor', 'tesseract')")){process.stderr.write('Android asset preparation must not download generated OCR files into canonical web/.\n');process.exit(1)}
+for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
 const copyAt=assets.indexOf('await cp(source, destination');
-const downloadAt=assets.indexOf('for(const [relative,url,minBytes] of OCR_ASSETS)');
+const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
 if(copyAt<0||downloadAt<0||copyAt>downloadAt){process.stderr.write('Android assets must copy canonical web source before generating OCR assets in the disposable Android tree.\n');process.exit(1)}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
@@ -96,4 +103,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets, explicit production requests fail closed unless all signing secrets exist, canonical source stays read-only, OCR generation is isolated to disposable Android assets, JS bundle/signature/certificate are verified, SHA-256 is emitted, and CI remains read-only.\n');
+process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
