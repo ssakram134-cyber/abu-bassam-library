@@ -40,6 +40,7 @@
   function loadNotificationExcel(){loadScript('abuNotificationExcelRuntime','notification-excel-runtime.js','__ABU_NOTIFICATION_EXCEL_V1__')}
   function loadBranchVault(){loadScript('abuBranchVaultRuntime','branch-vault-runtime.js','__ABU_BRANCH_VAULT_V1__')}
   function loadDocumentVaultHardening(){loadScript('abuDocumentVaultHardeningRuntime','document-vault-hardening-runtime.js','__ABU_DOCUMENT_VAULT_HARDENING_V1__')}
+  function loadBackupCenter(){loadScript('abuBackupCenterRuntime','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__')}
   function loadDocumentVaultPermissionGuard(){loadScript('abuDocumentVaultPermissionGuardRuntime','document-vault-permission-guard-runtime.js','__ABU_DOCUMENT_VAULT_PERMISSION_GUARD_V1__')}
   function loadEncryptedVaultHardening(){loadScript('abuEncryptedVaultHardeningRuntime','encrypted-vault-hardening-runtime.js','__ABU_ENCRYPTED_VAULT_HARDENING_V1__')}
   function loadOperationLogStorageMigration(){loadScript('abuOperationLogStorageMigrationRuntime','operation-log-storage-migration-runtime.js','__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__')}
@@ -49,7 +50,7 @@
     const start=()=>loadScript('abuAppSecurityRuntime','app-security-runtime.js','__ABU_APP_SECURITY_V1__',()=>{loadSecurityHardening();setTimeout(loadSecurityExtras,20);setTimeout(loadDeviceReconcile,40);setTimeout(loadAdminPermissions,80);setTimeout(loadPermissionSectionGuards,130);setTimeout(loadCustomerPermissionsHardening,160);setTimeout(loadLoginInputDirection,50);setTimeout(loadPasswordPolicy,90)});
     if(window.__ABU_SECURITY_BOOTSTRAP_GUARD_V1__)start();else loadSecurityBootstrapGuard(start)
   }
-  function loadApprovedUi(){loadPasswordPolicy();loadMediaPipePin();loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadWifiSyncGuard();loadNotificationCorrections();loadNotificationExcel();loadSecurity();loadBranchVault();loadDocumentVaultHardening();loadDocumentVaultPermissionGuard();loadEncryptedVaultHardening();loadSettingsCorrections();loadOperationLogCorrections();loadCustomerPermissionsHardening();setTimeout(loadAdminPermissions,180);setTimeout(loadPermissionSectionGuards,280);setTimeout(loadCustomerPermissionsHardening,320)}
+  function loadApprovedUi(){loadPasswordPolicy();loadMediaPipePin();loadFeatureRecovery();loadChildTemplates();loadCardModels();loadStandaloneCardModels();loadStrictWorkflow();loadStandaloneFold();loadWifiSyncGuard();loadNotificationCorrections();loadNotificationExcel();loadSecurity();loadBranchVault();loadDocumentVaultHardening();setTimeout(loadBackupCenter,120);loadDocumentVaultPermissionGuard();loadEncryptedVaultHardening();loadSettingsCorrections();loadOperationLogCorrections();loadCustomerPermissionsHardening();setTimeout(loadAdminPermissions,180);setTimeout(loadPermissionSectionGuards,280);setTimeout(loadCustomerPermissionsHardening,320)}
   installSplashWatchdog();
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   window.addEventListener('DOMContentLoaded',()=>{ensureIdentity();loadApprovedUi();signalBootReady();setTimeout(heartbeat,800);setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000)});
