@@ -4,9 +4,12 @@ if(window.__ABU_FAIL_CLOSED_RUNTIME_V1__)return;
 window.__ABU_FAIL_CLOSED_RUNTIME_V1__=true;
 const VAULT_ERROR='VAULT_GATEWAY_NOT_READY';
 const SECURE_ERROR='SECURE_STORAGE_REQUIRED';
+const HARDENING_ERROR='ACCOUNT_RECOVERY_HARDENING_REQUIRED';
 const sensitiveButtons=new Set(['acctRecoveryGenerate','acctRecoverDo']);
 function vaultError(){return new Error(VAULT_ERROR)}
 function secureBridgeReady(){return !!(window.Android&&typeof Android.security==='function')}
+function recoveryHardeningReady(){return window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__===true}
+function sensitiveReady(){return secureBridgeReady()&&recoveryHardeningReady()}
 function setAccountMessage(text){const e=document.getElementById('acctMsg');if(e){e.textContent=text;e.style.color='#a52e3b'}else alert(text)}
 function armVault(){
   const cloud=window.AbuBassamCloud;
@@ -30,13 +33,17 @@ function armVault(){
 }
 function blockSensitiveClick(event){
   const target=event.target?.closest?.('button');
-  if(!target||!sensitiveButtons.has(target.id)||secureBridgeReady())return;
+  if(!target||!sensitiveButtons.has(target.id)||sensitiveReady())return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  setAccountMessage('أوقفت العملية لأن التخزين الآمن الأصلي غير متاح على هذا الجهاز. لا يتم حفظ سر الجهاز في localStorage.')
+  setAccountMessage(!secureBridgeReady()?'أوقفت العملية لأن التخزين الآمن الأصلي غير متاح على هذا الجهاز. لا يتم حفظ سر الجهاز في localStorage.':'أوقفت العملية لأن طبقة استرداد الهاتف الآمنة لم تكتمل بعد. أعد فتح الحساب وحاول مجددًا.')
 }
 function denySensitive(original){
-  const deny=async()=>{setAccountMessage('هذه العملية تحتاج SecureStore الأصلي على Android لحماية سر الجهاز.');throw new Error(SECURE_ERROR)};
+  const deny=async()=>{
+    const secure=secureBridgeReady(),hard=recoveryHardeningReady();
+    setAccountMessage(!secure?'هذه العملية تحتاج SecureStore الأصلي على Android لحماية سر الجهاز.':'طبقة استرداد الهاتف الآمنة غير جاهزة بعد.');
+    throw new Error(!secure?SECURE_ERROR:HARDENING_ERROR)
+  };
   deny.__abuFailClosed=true;
   deny.__abuOriginal=original;
   return deny
@@ -44,7 +51,7 @@ function denySensitive(original){
 function patchAccountApi(){
   const account=window.AbuBassamAccount;
   if(!account)return false;
-  if(secureBridgeReady()){
+  if(sensitiveReady()){
     for(const name of ['recoverPhone','generateRecovery']){
       const fn=account[name];
       if(fn&&fn.__abuFailClosed&&typeof fn.__abuOriginal==='function')account[name]=fn.__abuOriginal
