@@ -35,13 +35,27 @@ function blockSensitiveClick(event){
   event.stopImmediatePropagation();
   setAccountMessage('أوقفت العملية لأن التخزين الآمن الأصلي غير متاح على هذا الجهاز. لا يتم حفظ سر الجهاز في localStorage.')
 }
+function denySensitive(original){
+  const deny=async()=>{setAccountMessage('هذه العملية تحتاج SecureStore الأصلي على Android لحماية سر الجهاز.');throw new Error(SECURE_ERROR)};
+  deny.__abuFailClosed=true;
+  deny.__abuOriginal=original;
+  return deny
+}
 function patchAccountApi(){
   const account=window.AbuBassamAccount;
-  if(!account||secureBridgeReady())return false;
-  if(account.__abuSecureStoreFailClosed)return true;
-  const deny=async()=>{setAccountMessage('هذه العملية تحتاج SecureStore الأصلي على Android لحماية سر الجهاز.');throw new Error(SECURE_ERROR)};
-  account.recoverPhone=deny;
-  account.generateRecovery=deny;
+  if(!account)return false;
+  if(secureBridgeReady()){
+    for(const name of ['recoverPhone','generateRecovery']){
+      const fn=account[name];
+      if(fn&&fn.__abuFailClosed&&typeof fn.__abuOriginal==='function')account[name]=fn.__abuOriginal
+    }
+    account.__abuSecureStoreFailClosed=false;
+    return true
+  }
+  for(const name of ['recoverPhone','generateRecovery']){
+    const fn=account[name];
+    if(typeof fn==='function'&&!fn.__abuFailClosed)account[name]=denySensitive(fn)
+  }
   account.__abuSecureStoreFailClosed=true;
   return true
 }
