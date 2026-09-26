@@ -2,28 +2,55 @@
 'use strict';
 if(window.__ABU_QUESTION_PAPER_V2__)return;
 window.__ABU_QUESTION_PAPER_V2__=true;
+window.__ABU_QUESTION_PAPER_V3__=true;
 const $=id=>document.getElementById(id);
-const KEY='abuQuestionPaperSettingsV2';
-const presets={A4P:[210,297],A4L:[297,210]};
+const KEY='abuQuestionPaperSettingsV3';
+const LEGACY=['abuQuestionPaperSettingsV2','abuQuestionPaperSettingsV1'];
+const presets={A4P:[210,297],A4L:[297,210],A5P:[148,210],A5L:[210,148]};
+const labels={A4P:'A4 عمودي',A4L:'A4 أفقي',A5P:'A5 عمودي',A5L:'A5 أفقي',custom:'مخصص'};
 let state={preset:'A4P',w:210,h:297};
-try{
-  const old=JSON.parse(localStorage.getItem(KEY)||'null')||JSON.parse(localStorage.getItem('abuQuestionPaperSettingsV1')||'null')||{};
-  if(old.preset==='A4L'){state={preset:'A4L',w:297,h:210}}
-}catch(e){}
+function clamp(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback}
+function load(){
+  let old=null;
+  try{old=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
+  if(!old){for(const key of LEGACY){try{old=JSON.parse(localStorage.getItem(key)||'null');if(old)break}catch(e){}}}
+  if(!old||typeof old!=='object')return;
+  const p=Object.prototype.hasOwnProperty.call(presets,old.preset)?old.preset:(old.preset==='custom'?'custom':'A4P');
+  if(p==='custom')state={preset:'custom',w:clamp(old.w,80,500,210),h:clamp(old.h,80,500,297)};
+  else state={preset:p,w:presets[p][0],h:presets[p][1]};
+}
+load();
 function mmToPx(mm){return Math.round(mm*96/25.4)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
-function css(){return `.abu-paper-modal{position:fixed;inset:0;z-index:12600;background:#000b;display:none;align-items:flex-end}.abu-paper-modal.show{display:flex}.abu-paper-sheet{width:100%;max-height:72vh;overflow:auto;background:#fff;border-radius:22px 22px 0 0;padding:13px;color:#1f2937}.abu-paper-head{display:flex;justify-content:space-between;align-items:center}.abu-paper-head button{border:0;border-radius:50%;width:36px;height:36px;font-size:20px}.abu-paper-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}.abu-paper-grid label{font-size:9px;font-weight:800}.abu-paper-grid select{width:100%;min-height:42px;border:1px solid #cbd5e1;border-radius:9px;padding:6px;font-family:Tajawal}.abu-paper-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.abu-paper-actions button{min-height:42px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-family:Tajawal;font-weight:900}.abu-paper-btn{background:#1565c0!important}@media print{.abu-paper-modal{display:none!important}}`}
-function modal(){return `<div id="abuPaperModal" class="abu-paper-modal"><div class="abu-paper-sheet"><div class="abu-paper-head"><div><b>إعدادات ورق الأسئلة</b><div style="font-size:9px;color:#64748b">A4 فقط — عمودي أو أفقي</div></div><button onclick="AbuQuestionPaper.close()">×</button></div><div class="abu-paper-grid"><label>اتجاه A4<select id="abuPaperPreset" onchange="AbuQuestionPaper.preset()"><option value="A4P">A4 عمودي — 210 × 297 ملم</option><option value="A4L">A4 أفقي — 297 × 210 ملم</option></select></label></div><div class="abu-paper-actions"><button onclick="AbuQuestionPaper.apply()">تطبيق</button><button onclick="AbuQuestionPaper.close()">إغلاق</button></div></div></div>`}
+function css(){return `.abu-paper-modal{position:fixed;inset:0;z-index:12600;background:#000b;display:none;align-items:flex-end}.abu-paper-modal.show{display:flex}.abu-paper-sheet{width:100%;max-height:78vh;overflow:auto;background:#fff;border-radius:22px 22px 0 0;padding:13px;color:#1f2937}.abu-paper-head{display:flex;justify-content:space-between;align-items:center}.abu-paper-head button{border:0;border-radius:50%;width:36px;height:36px;font-size:20px}.abu-paper-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}.abu-paper-grid label{font-size:9px;font-weight:800}.abu-paper-grid select,.abu-paper-grid input{width:100%;min-height:42px;border:1px solid #cbd5e1;border-radius:9px;padding:6px;font-family:Tajawal;background:#fff}.abu-paper-custom{display:none;grid-template-columns:1fr 1fr;gap:8px}.abu-paper-custom.show{display:grid}.abu-paper-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.abu-paper-actions button{min-height:42px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-family:Tajawal;font-weight:900}.abu-paper-btn{background:#1565c0!important}@media print{.abu-paper-modal{display:none!important}}`}
+function modal(){return `<div id="abuPaperModal" class="abu-paper-modal"><div class="abu-paper-sheet"><div class="abu-paper-head"><div><b>إعدادات ورق الأسئلة</b><div style="font-size:9px;color:#64748b">A4 وA5 أو مقاس مخصص بالملم</div></div><button onclick="AbuQuestionPaper.close()">×</button></div><div class="abu-paper-grid"><label>مقاس الورق<select id="abuPaperPreset" onchange="AbuQuestionPaper.preset()"><option value="A4P">A4 عمودي — 210 × 297 ملم</option><option value="A4L">A4 أفقي — 297 × 210 ملم</option><option value="A5P">A5 عمودي — 148 × 210 ملم</option><option value="A5L">A5 أفقي — 210 × 148 ملم</option><option value="custom">مخصص</option></select></label><div id="abuPaperCustom" class="abu-paper-custom"><label>العرض (ملم)<input id="abuPaperW" type="number" min="80" max="500" step="1" value="210"></label><label>الارتفاع (ملم)<input id="abuPaperH" type="number" min="80" max="500" step="1" value="297"></label></div></div><div class="abu-paper-actions"><button onclick="AbuQuestionPaper.apply()">تطبيق</button><button onclick="AbuQuestionPaper.close()">إغلاق</button></div></div></div>`}
 function ensure(){
   if(!$('abuQuestionPaperStyle')){let s=document.createElement('style');s.id='abuQuestionPaperStyle';s.textContent=css();document.head.appendChild(s)}
   if(!$('abuPaperModal'))document.body.insertAdjacentHTML('beforeend',modal());
-  let bar=$('controls');if(bar&&!$('abuPaperBtn')){let b=document.createElement('button');b.id='abuPaperBtn';b.className='btn abu-paper-btn';b.textContent='📄 A4';b.onclick=open;bar.appendChild(b)}
+  let bar=$('controls');if(bar&&!$('abuPaperBtn')){let b=document.createElement('button');b.id='abuPaperBtn';b.className='btn abu-paper-btn';b.onclick=open;bar.appendChild(b)}
 }
-function sync(){if($('abuPaperPreset'))$('abuPaperPreset').value=state.preset}
+function updateButton(){const b=$('abuPaperBtn');if(b)b.textContent=`📄 ${labels[state.preset]||'ورق'}`}
+function sync(){
+  if($('abuPaperPreset'))$('abuPaperPreset').value=state.preset;
+  if($('abuPaperW'))$('abuPaperW').value=String(state.w);
+  if($('abuPaperH'))$('abuPaperH').value=String(state.h);
+  $('abuPaperCustom')?.classList.toggle('show',state.preset==='custom');updateButton();
+}
 function open(){sync();$('abuPaperModal')?.classList.add('show')}
 function close(){$('abuPaperModal')?.classList.remove('show')}
-function preset(){let v=$('abuPaperPreset')?.value==='A4L'?'A4L':'A4P';state.preset=v;state.w=presets[v][0];state.h=presets[v][1];apply()}
-function deletePage(btn){const page=btn?.closest?.('.a4-page');if(!page)return;const pages=document.querySelectorAll('.a4-page');if(pages.length<=1){alert('يجب أن تبقى صفحة A4 واحدة على الأقل.');return}try{window.saveState?.()}catch(e){}page.remove();try{window.fitToScreen?.();window.scheduleQuestionDraft?.()}catch(e){}}
+function preset(){
+  const v=$('abuPaperPreset')?.value||'A4P';
+  if(v==='custom'){state.preset='custom';$('abuPaperCustom')?.classList.add('show');sync();return}
+  if(!presets[v])return;
+  state={preset:v,w:presets[v][0],h:presets[v][1]};sync();apply(false);
+}
+function readCustom(){
+  state.preset='custom';
+  state.w=clamp($('abuPaperW')?.value,80,500,state.w||210);
+  state.h=clamp($('abuPaperH')?.value,80,500,state.h||297);
+  if($('abuPaperW'))$('abuPaperW').value=String(state.w);if($('abuPaperH'))$('abuPaperH').value=String(state.h);
+}
+function deletePage(btn){const page=btn?.closest?.('.a4-page');if(!page)return;const pages=document.querySelectorAll('.a4-page');if(pages.length<=1){alert('يجب أن تبقى صفحة واحدة على الأقل.');return}try{window.saveState?.()}catch(e){}page.remove();try{window.fitToScreen?.();window.scheduleQuestionDraft?.()}catch(e){}}
 function tagPages(){document.querySelectorAll('.a4-page').forEach(p=>{p.dataset.paperPreset=state.preset;p.dataset.paperW=String(state.w);p.dataset.paperH=String(state.h)})}
 function installFit(){
   window.fitToScreen=function(){
@@ -34,10 +61,7 @@ function installFit(){
     const natural=container.offsetHeight;container.style.marginBottom=((natural*scale)-natural)+'px';
   };
 }
-function makeFlowPage(){
-  if(typeof window.addNewPage==='function'){window.addNewPage(true);return document.querySelector('.a4-page:last-child')}
-  return null;
-}
+function makeFlowPage(){if(typeof window.addNewPage==='function'){window.addNewPage(true);return document.querySelector('.a4-page:last-child')}return null}
 function installFlow(){
   window.checkAutoFlow=function(){
     let guard=0,moved=false;
@@ -55,10 +79,11 @@ function installFlow(){
   };
 }
 function apply(closeAfter=true){
+  if(($('abuPaperPreset')?.value||state.preset)==='custom')readCustom();
   const old=$('abuQuestionPaperOverride');if(old)old.remove();
   const s=document.createElement('style');s.id='abuQuestionPaperOverride';const wpx=mmToPx(state.w),hpx=mmToPx(state.h);
   s.textContent=`.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}.a4-page.abu-question-overflow{outline:3px solid #dc2626!important}@media print{@page{size:${state.w}mm ${state.h}mm!important;margin:0}.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}}`;
-  document.head.appendChild(s);tagPages();save();installFit();installFlow();
+  document.head.appendChild(s);tagPages();save();installFit();installFlow();sync();
   try{window.fitToScreen?.();window.checkAutoFlow?.();window.scheduleQuestionDraft?.()}catch(e){}
   if(closeAfter)close();
 }
