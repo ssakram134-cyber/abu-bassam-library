@@ -69,5 +69,14 @@ const envelopeIds=[...envelopeSection.matchAll(/id:'env-(\d+)'/g)].map(m=>Number
 if(envelopeIds.length!==9||envelopeIds.some((n,i)=>n!==i+1))errors.push(`card template library must contain exactly env-1..env-9; found ${envelopeIds.join(',')}`);
 if(envelopeSection.includes("env-10"))errors.push('card template library must not expose obsolete env-10');
 
+const deviceLimitMigration=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
+need(deviceLimitMigration,"coalesce(trim(p_actor_device_id),'') = ''",'device-limit change must reject an empty actor device id');
+need(deviceLimitMigration,"coalesce(p_actor_secret,'') = ''",'device-limit change must reject an empty owner secret');
+need(deviceLimitMigration,"coalesce(v_actor.secret_hash,'') = ''",'device-limit change must reject owner rows without a stored secret hash');
+need(deviceLimitMigration,"v_actor.secret_hash <> v_hash",'device-limit change must require the owner secret hash to match');
+need(deviceLimitMigration,"p_device_limit > 50",'device-limit server maximum must stay 50');
+need(deviceLimitMigration,"DEVICE_LIMIT_BELOW_CURRENT_COUNT",'device-limit change must not go below registered device count');
+need(deviceLimitMigration,"revoke all on function public.abu_bassam_set_device_limit(text,text,integer) from public, anon",'device-limit RPC must not be executable by public/anon');
+
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards bootstrap owner-only permissions before legacy hardening; only A4 V2 may load; envelope system templates stay exactly env-1..env-9 and legacy env-10 is migrated out instead of injected.\n');
+process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards bootstrap owner-only permissions before legacy hardening; only A4 V2 may load; envelope system templates stay exactly env-1..env-9; device-limit changes require a non-empty matching owner secret and remain bounded to 1..50.\n');
