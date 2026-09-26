@@ -41,9 +41,22 @@ for(const full of files){
   }
 }
 
+let packageJson=null;
 for(const rel of ['package.json','app.json']){
-  try{JSON.parse(fs.readFileSync(path.join(root,rel),'utf8'))}catch(e){failures.push(`${rel}: invalid JSON: ${e.message}`)}
+  try{
+    const parsed=JSON.parse(fs.readFileSync(path.join(root,rel),'utf8'));
+    if(rel==='package.json')packageJson=parsed;
+  }catch(e){failures.push(`${rel}: invalid JSON: ${e.message}`)}
 }
+if(packageJson){
+  const checkWeb=String(packageJson.scripts?.['check:web']||'');
+  const checkerFiles=fs.readdirSync(path.join(root,'tools')).filter(name=>/^check_.*\.js$/i.test(name)).sort();
+  for(const name of checkerFiles){
+    const marker=`node tools/${name}`;
+    if(!checkWeb.includes(marker))failures.push(`package.json: permanent checker is orphaned from check:web: tools/${name}`);
+  }
+}
+
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
 for(const bad of ["originWhitelist={['*']}",'mixedContentMode="always"','allowUniversalAccessFromFileURLs={true}'])if(native.includes(bad))failures.push(`index.js: insecure WebView setting returned: ${bad}`);
 for(const good of ["originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])if(!native.includes(good))failures.push(`index.js: missing hardened WebView marker: ${good}`);
@@ -51,4 +64,4 @@ const gitignore=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
 for(const pattern of ['*.jks','*.keystore','*.p12','*.pfx','*.pem','*.key'])if(!gitignore.includes(pattern))failures.push(`.gitignore: missing signing/secret exclusion ${pattern}`);
 
 if(failures.length){console.error(failures.join('\n'));process.exit(1)}
-console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
+console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; every permanent check_*.js is wired into check:web; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
