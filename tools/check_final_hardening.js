@@ -35,5 +35,18 @@ need(backup,"if(sha!==String(d.backup.sha256||''))",'backup restore SHA-256 veri
 need(backup,"if(d.backup.branch_device_id!==cur)",'backup restore branch binding');
 need(backup,"SECURE_STORAGE_REQUIRED",'backup SecureStore fail-closed requirement');
 
+const cardsLoader=read('web/cards-section-upgrades-runtime.js');
+const adminPermissions=read('web/admin-permissions-runtime.js');
+try{new vm.Script(cardsLoader,{filename:'cards-section-upgrades-runtime.js'})}catch(e){errors.push(`cards-section-upgrades-runtime.js syntax: ${e.message}`)}
+try{new vm.Script(adminPermissions,{filename:'admin-permissions-runtime.js'})}catch(e){errors.push(`admin-permissions-runtime.js syntax: ${e.message}`)}
+need(cardsLoader,'function ensurePermissionFacade()','cards permission bootstrap facade');
+need(cardsLoader,"can(){try{return window.AbuBassamSecurity?.role?.()==='owner'}catch(e){return false}}",'cards bootstrap must default to owner-only');
+const facadeAt=cardsLoader.indexOf('ensurePermissionFacade();');
+const baseHardeningAt=cardsLoader.indexOf("loadOne('abuCardsHardeningRuntime'");
+if(facadeAt<0||baseHardeningAt<0||facadeAt>baseHardeningAt)errors.push('cards permission bootstrap must run before base cards hardening loads');
+need(adminPermissions,"function can(key){if(role()==='owner')return true",'advanced permissions owner path');
+need(adminPermissions,"return false}\nfunction requirePermission",'advanced permissions must deny unknown keys explicitly');
+forbid(cardsLoader,'can(){return true}','cards bootstrap must never fail open');
+
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: obsolete residence route removed, backup permissions fail closed for secondary devices, owner path is explicit, SecureStore is required, and restore remains branch-bound with SHA-256 verification.\n');
+process.stdout.write('Final hardening checks passed: obsolete residence route removed; backup permissions fail closed for secondary devices; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards install an owner-only permission facade before legacy hardening and advanced permissions deny unknown keys explicitly.\n');
