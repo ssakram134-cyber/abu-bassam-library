@@ -34,6 +34,8 @@ Google مخصص للمصادقة بالحد الأدنى من الصلاحيات
 ## تحديث التطبيق
 من الإعدادات يوجد مركز فحص تحديثات Android. Metadata الإصدار لا تُقرأ مباشرة من الجدول، بل عبر Edge Function محمية بـJWT. APK يبقى في Storage خاص، وعند نشر تحديث حقيقي يحصل المستخدم على رابط تنزيل موقّع قصير العمر؛ لا يوجد GitHub Token داخل APK ولا تثبيت صامت. الإصدار 4.3.2/build 432 مسجل حاليًا كالإصدار المستقر، ولا يظهر تنزيل حتى يُرفع APK إنتاجي موقع ويُسجل SHA-256 وبصمة شهادة التوقيع. التفاصيل الملزمة في `docs/APP-UPDATE-SPEC-2026-09-27.md`.
 
+نشر تحديث جديد لا يتم من APK اختبار. المسار المعتمد هو: بناء إنتاجي بواسطة `npm run build:apk:release`، ثم تمرير `SUPABASE_URL` و`SUPABASE_SERVICE_ROLE_KEY` كمتغيرات بيئة وتشغيل `npm run publish:update`. الناشر يثبت `BUILD_TYPE`، يعيد حساب SHA-256، يطابق شهادة التوقيع مع `config/release-signing-certificate.sha256`، يرفع APK إلى Storage الخاص، يعيد تنزيله للتحقق من الحجم والـSHA، ثم يفعّل Metadata ذريًا. الخادم يرفض VersionCode أقدم أو شهادة توقيع مختلفة.
+
 ## الأمان وبدء التشغيل
 Splash watchdog على الويب وWebView، حقول الدخول LTR، منع المحاولة المكررة من ضغطة واحدة، عدم احتساب أخطاء الجهاز ككلمة مرور، SecureStore والبصمة وإدارة الأجهزة مفعلة. WebView يستخدم ملفات التطبيق المحلية فقط داخله، وروابط المصادقة الخارجية تفتح عبر النظام وتعود إلى Deep Link خاص بالتطبيق. أي مفاتيح توافق قديمة من نوع `__dev_secure_*` تُمسح وتُحجب مركزيًا، والعمليات الحساسة تفشل مغلقة إذا لم يتوفر SecureStore الأصلي.
 
@@ -44,6 +46,12 @@ npm run check:web
 npm run android:prebuild
 cd android
 ./gradlew assembleRelease --no-daemon
+```
+
+للبناء الإنتاجي الصارم والنشر الآمن:
+```bash
+npm run build:apk:release
+npm run publish:update
 ```
 
 GitHub Actions يبني Release standalone ويؤكد وجود `assets/index.android.bundle` والتوقيع، ويولد SHA-256. الـworkflow read-only ولا ينشئ commits تلقائيًا. الـAPK الناتج يبقى Artifact لمدة 14 يومًا ولا يُحفظ داخل شجرة المشروع.
