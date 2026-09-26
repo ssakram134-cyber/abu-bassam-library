@@ -1,0 +1,15 @@
+const fs=require('fs'),vm=require('vm');
+const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.readFileSync(p,'utf8')};
+const need=(s,t,l)=>{if(!s.includes(t))throw new Error(`account center check failed: ${l}`)};
+const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`account center check failed: ${l}`)};
+const runtime=read('web/account-center-runtime.js'),loader=read('web/device-name-runtime.js'),entry=read('index-auth.js'),pkg=JSON.parse(read('package.json')),schema=read('supabase/migrations/202609260004_account_center_and_recovery.sql'),rpc=read('supabase/migrations/202609260005_account_recovery_rpcs.sql');
+new vm.Script(runtime,{filename:'account-center-runtime.js'});
+for(const marker of ['__ABU_ACCOUNT_CENTER_V1__','abu_bassam_profiles','signInWithPassword','signUp','resetPasswordForEmail','signInWithOAuth',"provider:'google'",'exchangeCodeForSession','updateUser({password','acctPassword2','acctUsername','acctAvatarFile','profile/avatar.jpg','AbuBassamStrongPasswordWeakness','abu_bassam_auth_callback_v1','abu_bassam_generate_recovery_code','abu_bassam_recover_device','abuBassamLockedDeviceIdV3','abuBassamVaultLocalScopeV1'])need(runtime,marker,marker);
+for(const marker of ['loadAccountCenter','account-center-runtime.js','__ABU_ACCOUNT_CENTER_V1__'])need(loader,marker,'loader '+marker);
+for(const marker of ['Linking.getInitialURL','Linking.addEventListener','SecureStore.setItemAsync','abu-bassam-library://auth/callback',"require('./index.js')"])need(entry,marker,'entry '+marker);
+if(pkg.main!=='index-auth.js')throw new Error('account center check failed: package main must use index-auth.js');
+for(const marker of ['create table if not exists public.abu_bassam_profiles','username_key text generated always','enable row level security','grant select,insert,update on table public.abu_bassam_profiles to authenticated','create table if not exists public.abu_bassam_recovery_codes','revoke all on table public.abu_bassam_recovery_codes from public,anon,authenticated','recovery_device_id'])need(schema,marker,'schema '+marker);
+for(const marker of ['abu_bassam_recovery_status','abu_bassam_generate_recovery_code','abu_bassam_recover_device','security definer','auth.uid()','OWNER_DEVICE_REQUIRED','RECOVERY_CODE_INVALID','RECOVERY_TEMPORARILY_LOCKED','gen_random_bytes(16)','secret_hash=encode(digest(p_new_secret','role=\'owner\'','next_recovery_code','grant execute on function public.abu_bassam_recover_device'])need(rpc,marker,'rpc '+marker);
+forbid(runtime,'SUPABASE_SERVICE_ROLE_KEY','client must not contain service role key');
+forbid(runtime,'service_role','client must not contain service role marker');
+console.log('account center checks passed: profile, strong signup, password recovery, Google OAuth callback, private avatar, and one-time owner-device recovery are wired.');
