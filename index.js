@@ -114,6 +114,7 @@ function App() {
   const [barcodeLocked, setBarcodeLocked] = useState(false);
   const [torch, setTorch] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('back');
+  const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
 
   const inject = useCallback((functionName, payload) => {
@@ -125,7 +126,7 @@ function App() {
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
-    setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
+    setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
   useEffect(() => {
@@ -151,12 +152,13 @@ function App() {
     return () => subscription.remove();
   }, [inject, webReady]);
 
-  const openCamera = useCallback(async (mode) => {
+  const openCamera = useCallback(async (mode, frameKind = 'paper') => {
     try {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
+      setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
     } catch (_) { cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.'); }
   }, [cameraError, cameraPermission, requestCameraPermission]);
@@ -357,7 +359,7 @@ function App() {
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
-    if (message.type === 'openCamera') return openCamera(message.mode);
+    if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
     if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
@@ -410,7 +412,7 @@ function App() {
                 <TouchableOpacity style={[styles.roundButton, cameraFacing !== 'back' && styles.roundButtonDisabled]} onPress={() => cameraFacing === 'back' && setTorch((value) => !value)} disabled={cameraFacing !== 'back'} accessibilityLabel="الفلاش"><Text style={styles.flashText}>{torch ? '☀' : 'ϟ'}</Text></TouchableOpacity>
               </View>
             </View>
-            <View style={barcodeMode ? styles.barcodeFrame : styles.documentFrame} />
+            <View style={barcodeMode ? styles.barcodeFrame : cameraFrameKind === 'card' ? styles.cardDocumentFrame : cameraFrameKind === 'photo' ? styles.photoDocumentFrame : styles.documentFrame} />
             <Text style={styles.cameraHint}>{barcodeMode ? 'وجّه الكاميرا نحو الباركود وسيُقرأ تلقائيًا' : cameraMode === 'cardPhoto' ? 'ضع الوجه داخل الإطار ثم اضغط زر التصوير' : cameraMode === 'ocr' ? 'صوّر النص بوضوح وبإضاءة جيدة' : 'ضع المستند داخل الإطار؛ سيُحلل ويُقص محليًا بعد الالتقاط'}</Text>
             {!barcodeMode && <TouchableOpacity style={[styles.shutter, (!cameraReady || cameraBusy) && styles.shutterDisabled]} onPress={captureDocument} disabled={!cameraReady || cameraBusy} accessibilityLabel="التقاط الصورة">{cameraBusy ? <ActivityIndicator color="#087f72" /> : <View style={styles.shutterInner} />}</TouchableOpacity>}
           </View>
@@ -431,6 +433,8 @@ const styles = StyleSheet.create({
   cameraActions: { flexDirection: 'row', gap: 7 }, roundButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center' },
   roundButtonDisabled: { opacity: 0.45 }, roundButtonText: { color: '#fff', fontSize: 32, lineHeight: 35 }, flipText: { color: '#fff', fontSize: 27, fontWeight: '800' }, flashText: { color: '#fff', fontSize: 25, fontWeight: '800' },
   documentFrame: { width: '91%', aspectRatio: 0.72, maxHeight: '66%', borderWidth: 3, borderColor: '#fff', borderRadius: 15, backgroundColor: '#00000010' },
+  cardDocumentFrame: { width: '91%', aspectRatio: 1.585, maxHeight: '48%', borderWidth: 3, borderColor: '#21d3b7', borderRadius: 16, backgroundColor: '#00000010' },
+  photoDocumentFrame: { width: '72%', aspectRatio: 0.78, maxHeight: '62%', borderWidth: 3, borderColor: '#f4d36c', borderRadius: 22, backgroundColor: '#00000010' },
   barcodeFrame: { width: '88%', height: 230, borderWidth: 3, borderColor: '#21d3b7', borderRadius: 20, backgroundColor: '#00000012' },
   cameraHint: { color: '#fff', fontSize: 14, fontWeight: '800', textAlign: 'center', backgroundColor: '#000a', paddingHorizontal: 17, paddingVertical: 10, borderRadius: 18 },
   shutter: { width: 78, height: 78, borderRadius: 39, borderWidth: 5, borderColor: '#fff', backgroundColor: '#ffffff66', alignItems: 'center', justifyContent: 'center' },
