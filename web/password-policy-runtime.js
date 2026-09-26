@@ -2,7 +2,6 @@
 'use strict';
 if(window.__ABU_PASSWORD_POLICY_V1__)return;
 window.__ABU_PASSWORD_POLICY_V1__=true;
-const MAIN_EMAIL='akrama1992@gmail.com';
 const MAIN_USERNAME='akrama1992';
 const COMMON=[
   'password','password1','password123','qwerty','qwerty123','123456','12345678','123456789','1234567890',
@@ -48,8 +47,9 @@ function enforceSignup(event){
 async function changePassword(){
   if(!owner())return alert('تغيير كلمة مرور الحساب متاح للجهاز الرئيسي فقط.');
   const c=window.AbuBassamCloud?.client;if(!c)return alert('خدمة الحساب غير جاهزة.');
+  const email=String(window.AbuBassamCloud?.session?.()?.user?.email||'').trim().toLowerCase();if(!email)return alert('سجّل الدخول إلى حسابك أولًا.');
   const current=String(prompt('أدخل كلمة المرور الحالية لتأكيد الهوية:')||'');if(!current)return;
-  const auth=await c.auth.signInWithPassword({email:MAIN_EMAIL,password:current});if(auth.error)return alert('كلمة المرور الحالية غير صحيحة.');
+  const auth=await c.auth.signInWithPassword({email,password:current});if(auth.error)return alert('كلمة المرور الحالية غير صحيحة. إذا كان دخولك بواسطة Google فقط، استخدم «نسيت كلمة المرور» لإضافة كلمة مرور عبر بريدك الموثق.');
   const next=String(prompt('كلمة المرور الجديدة: ١٢ محرفًا على الأقل، وتحتوي حروفًا وأرقامًا ورمزًا خاصًا:')||'');if(!next)return;
   const problem=weakness(next);if(problem)return alert(problem);
   if(next===current)return alert('كلمة المرور الجديدة يجب أن تختلف عن الحالية.');
