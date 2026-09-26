@@ -32,7 +32,7 @@ Deno.serve(async(req:Request)=>{
     const mandatory=available&&(release.mandatory===true||currentCode<Number(release.min_supported_code||1));
     let download_url:string|null=null;
     let download_ready=false;
-    if(available&&release.storage_path){
+    if(available&&release.storage_path&&release.sha256&&release.signing_cert_sha256){
       const {data:signed,error:signedError}=await admin.storage.from(String(release.storage_bucket||'abu-bassam-private')).createSignedUrl(String(release.storage_path),600);
       if(!signedError&&signed?.signedUrl){download_url=signed.signedUrl;download_ready=true;}
     }
