@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(projectRoot, 'web');
 const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library');
-const vendorRoot = resolve(source, 'vendor', 'tesseract');
+const vendorRoot = resolve(destination, 'vendor', 'tesseract');
 
 const OCR_ASSETS = [
   ['tesseract.min.js','https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',20000],
@@ -30,20 +30,27 @@ async function download(url,path,minBytes){
       const data=Buffer.from(await response.arrayBuffer());
       if(data.length<minBytes)throw new Error(`asset too small: ${data.length}`);
       await writeFile(path,data);
-      process.stdout.write(`OCR asset ready: ${path.replace(projectRoot,'')} (${data.length} bytes)\n`);
+      process.stdout.write(`OCR Android asset ready: ${path.replace(projectRoot,'')} (${data.length} bytes)\n`);
       return;
     }catch(error){lastError=error;if(attempt<3)await new Promise(r=>setTimeout(r,1200*attempt))}
   }
-  throw new Error(`Failed to prepare offline OCR asset ${url}: ${lastError?.message||lastError}`);
+  throw new Error(`Failed to prepare required offline OCR asset ${url}: ${lastError?.message||lastError}`);
 }
+
+// Canonical source is read-only during normal builds. Generate only the disposable
+// Android asset tree created by expo prebuild; never write downloaded files into web/.
+await rm(destination, { recursive: true, force: true });
+await mkdir(destination, { recursive: true });
+await cp(source, destination, { recursive: true, force: true });
 
 for(const [relative,url,minBytes] of OCR_ASSETS){
   await download(url,resolve(vendorRoot,relative),minBytes);
 }
 
-await rm(destination, { recursive: true, force: true });
-await mkdir(destination, { recursive: true });
-await cp(source, destination, { recursive: true, force: true });
+for(const [relative,,minBytes] of OCR_ASSETS){
+  const path=resolve(vendorRoot,relative);
+  if(!(await existsEnough(path,minBytes)))throw new Error(`Required offline OCR asset is missing or incomplete: ${relative}`);
+}
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
-process.stdout.write('Offline OCR assets (Arabic + English) are embedded in the Android assets.\n');
+process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
