@@ -10,6 +10,8 @@ const forbid=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}:
 
 const obsolete=path.join(web,'residence-card.html');
 if(fs.existsSync(obsolete))errors.push('obsolete standalone residence-card.html must stay removed; residence fields belong to the national-ID flow');
+const obsoleteA4=path.join(web,'a4-card-sheet-editor-runtime.js');
+if(fs.existsSync(obsoleteA4))errors.push('obsolete A4 card editor V1 must stay removed; only the V2 editor is authoritative');
 
 const productionFiles=[];
 for(const name of fs.readdirSync(web)){
@@ -20,6 +22,8 @@ for(const name of fs.readdirSync(web)){
 }
 for(const [name,src] of productionFiles){
   if(src.includes('residence-card.html'))errors.push(`${name}: obsolete residence-card.html route/reference returned`);
+  if(src.includes('a4-card-sheet-editor-runtime.js'))errors.push(`${name}: obsolete A4 editor V1 route/reference returned`);
+  if(src.includes('__ABU_A4_CARD_SHEET_EDITOR_V1__'))errors.push(`${name}: obsolete A4 editor V1 guard returned`);
 }
 
 const backup=read('web/backup-center-runtime.js');
@@ -47,6 +51,9 @@ if(facadeAt<0||baseHardeningAt<0||facadeAt>baseHardeningAt)errors.push('cards pe
 need(adminPermissions,"function can(key){if(role()==='owner')return true",'advanced permissions owner path');
 need(adminPermissions,"return false}\nfunction requirePermission",'advanced permissions must deny unknown keys explicitly');
 forbid(cardsLoader,'can(){return true}','cards bootstrap must never fail open');
+need(cardsLoader,"'a4-card-sheet-editor-v2-runtime.js'",'cards must load A4 editor V2');
+need(cardsLoader,'__ABU_A4_CARD_SHEET_EDITOR_V2__','cards must gate A4 preparation on V2');
+forbid(cardsLoader,"'a4-card-sheet-editor-runtime.js'",'cards must not reload obsolete A4 editor V1');
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: obsolete residence route removed; backup permissions fail closed for secondary devices; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards install an owner-only permission facade before legacy hardening and advanced permissions deny unknown keys explicitly.\n');
+process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed for secondary devices; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards install an owner-only permission facade before legacy hardening, advanced permissions deny unknown keys explicitly, and only the V2 A4 editor may load.\n');
