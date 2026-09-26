@@ -4,7 +4,9 @@ const root=path.resolve(__dirname,'..');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 const source=read(path.join(root,'.github','workflows','android.yml'));
 const pkg=read(path.join(root,'package.json'));
+const packageJson=JSON.parse(pkg);
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
+const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
 try{new Function(read(path.join(root,'tools','check_import_workflow.js')))}catch(e){throw new Error(`import workflow checker syntax error: ${e.message}`)}
 const required=[
   'permissions:\n  contents: read',
@@ -44,6 +46,26 @@ const forbidden=[
 ];
 const bad=forbidden.filter(marker=>source.includes(marker));
 if(bad.length){process.stderr.write('Android workflow contains unsafe/non-reproducible behavior:\n'+bad.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
+const checkWeb=String(packageJson.scripts?.['check:web']||'');
+const normalScripts=['start','android','android:prebuild'];
+if(!checkWeb.startsWith('node tools/check_project.js')){process.stderr.write('check:web must start with read-only project checks, not a mutating patch.\n');process.exit(1)}
+if(/scripts\/patch-|repair:source/.test(checkWeb)){process.stderr.write('check:web must not mutate or repair canonical source.\n');process.exit(1)}
+for(const name of normalScripts){if(/scripts\/patch-/.test(String(packageJson.scripts?.[name]||''))){process.stderr.write(`${name} must not patch canonical source automatically.\n`);process.exit(1)}}
+const repair=String(packageJson.scripts?.['repair:source']||'');
+for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker)){process.stderr.write(`repair:source missing explicit compatibility repair ${marker}.\n`);process.exit(1)}
+const assetRequired=[
+  "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
+  'await rm(destination, { recursive: true, force: true });',
+  'await cp(source, destination, { recursive: true, force: true });',
+  'for(const [relative,url,minBytes] of OCR_ASSETS)',
+  'Required offline OCR asset is missing or incomplete',
+  'canonical web source remains unchanged'
+];
+for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing canonical-source safeguard: ${marker}\n`);process.exit(1)}
+if(assets.includes("resolve(source, 'vendor', 'tesseract')")){process.stderr.write('Android asset preparation must not download generated OCR files into canonical web/.\n');process.exit(1)}
+const copyAt=assets.indexOf('await cp(source, destination');
+const downloadAt=assets.indexOf('for(const [relative,url,minBytes] of OCR_ASSETS)');
+if(copyAt<0||downloadAt<0||copyAt>downloadAt){process.stderr.write('Android assets must copy canonical web source before generating OCR assets in the disposable Android tree.\n');process.exit(1)}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
   ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
@@ -66,4 +88,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: hosted and local production releases require a complete signing key, PR/local test builds are labeled, the JS bundle and APK signature/certificate are verified, SHA-256 is emitted, and CI stays read-only.\n');
+process.stdout.write('Android build check passed: canonical source is read-only during checks/normal builds, OCR generation is isolated to disposable Android assets, hosted/local production releases require a complete signing key, the JS bundle and APK signature/certificate are verified, SHA-256 is emitted, and CI stays read-only.\n');
