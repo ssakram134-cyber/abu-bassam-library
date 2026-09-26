@@ -55,5 +55,19 @@ need(cardsLoader,"'a4-card-sheet-editor-v2-runtime.js'",'cards must load A4 edit
 need(cardsLoader,'__ABU_A4_CARD_SHEET_EDITOR_V2__','cards must gate A4 preparation on V2');
 forbid(cardsLoader,"'a4-card-sheet-editor-runtime.js'",'cards must not reload obsolete A4 editor V1');
 
+const envelopePreload=read('web/envelope-preload-runtime.js');
+const designStudio=read('web/design-studio-runtime.js');
+const templateLibrary=read('web/card-template-library.js');
+try{new vm.Script(envelopePreload,{filename:'envelope-preload-runtime.js'})}catch(e){errors.push(`envelope-preload-runtime.js syntax: ${e.message}`)}
+need(designStudio,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'envelope system template count must stay exactly 9');
+need(envelopePreload,"item.id==='env-10'",'envelope migration must remove obsolete env-10 from saved custom templates');
+need(envelopePreload,"if(state.templateId==='env-10')state.templateId='env-1'",'envelope migration must move obsolete active env-10 to env-1');
+forbid(envelopePreload,'function env10(','obsolete env-10 generator must stay removed');
+forbid(envelopePreload,"id:'env-10'",'obsolete env-10 template must not be injected');
+const envelopeSection=(templateLibrary.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'';
+const envelopeIds=[...envelopeSection.matchAll(/id:'env-(\d+)'/g)].map(m=>Number(m[1]));
+if(envelopeIds.length!==9||envelopeIds.some((n,i)=>n!==i+1))errors.push(`card template library must contain exactly env-1..env-9; found ${envelopeIds.join(',')}`);
+if(envelopeSection.includes("env-10"))errors.push('card template library must not expose obsolete env-10');
+
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed for secondary devices; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards install an owner-only permission facade before legacy hardening, advanced permissions deny unknown keys explicitly, and only the V2 A4 editor may load.\n');
+process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards bootstrap owner-only permissions before legacy hardening; only A4 V2 may load; envelope system templates stay exactly env-1..env-9 and legacy env-10 is migrated out instead of injected.\n');
