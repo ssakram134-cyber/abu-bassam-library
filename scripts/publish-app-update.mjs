@@ -25,7 +25,8 @@ const serviceKey=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
 
 function fail(message){throw new Error(message)}
 function readRequired(file,label){if(!fs.existsSync(file)||!fs.statSync(file).isFile()||fs.statSync(file).size===0)fail(`${label} missing: ${file}`);return fs.readFileSync(file)}
-function sha256(file){return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}
+function sha256Buffer(value){return crypto.createHash('sha256').update(value).digest('hex')}
+function sha256(file){return sha256Buffer(fs.readFileSync(file))}
 function storagePathFor(v){if(!/^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$/.test(v))fail('Invalid app version');return `app-releases/${v}/${apkName}`}
 function encodeStoragePath(value){return value.split('/').map(encodeURIComponent).join('/')}
 async function jsonResponse(response,label){const text=await response.text();let data={};try{data=text?JSON.parse(text):{}}catch{data={raw:text.slice(0,500)}}if(!response.ok)fail(`${label} failed (${response.status}): ${data?.message||data?.error||data?.raw||'unknown error'}`);return data}
@@ -53,19 +54,28 @@ async function main(){
   if(certSha!==expectedCert)fail(`Production signing certificate mismatch. Expected ${expectedCert}, got ${certSha}`);
 
   const storagePath=storagePathFor(version);
+  const encodedPath=encodeStoragePath(storagePath);
   const apk=fs.readFileSync(apkPath);
+  const authHeaders={Authorization:`Bearer ${serviceKey}`,apikey:serviceKey,'Cache-Control':'no-store'};
 
   console.log(`Publishing ${version} (${versionCode}) after production signature + SHA-256 verification...`);
-  const upload=await fetch(`${supabaseUrl}/storage/v1/object/abu-bassam-private/${encodeStoragePath(storagePath)}`,{
+  const upload=await fetch(`${supabaseUrl}/storage/v1/object/abu-bassam-private/${encodedPath}`,{
     method:'POST',
-    headers:{Authorization:`Bearer ${serviceKey}`,apikey:serviceKey,'Content-Type':'application/vnd.android.package-archive','x-upsert':'true','Cache-Control':'no-store'},
+    headers:{...authHeaders,'Content-Type':'application/vnd.android.package-archive','x-upsert':'true'},
     body:apk
   });
   await jsonResponse(upload,'Private APK upload');
 
+  const verifyStored=await fetch(`${supabaseUrl}/storage/v1/object/authenticated/abu-bassam-private/${encodedPath}`,{method:'GET',headers:authHeaders});
+  if(!verifyStored.ok){const detail=(await verifyStored.text()).slice(0,500);fail(`Stored APK verification download failed (${verifyStored.status}): ${detail}`)}
+  const storedBytes=Buffer.from(await verifyStored.arrayBuffer());
+  if(storedBytes.length!==apk.length)fail(`Stored APK size mismatch. Expected ${apk.length}, got ${storedBytes.length}`);
+  const storedSha=sha256Buffer(storedBytes);
+  if(storedSha!==actualSha)fail(`Stored APK SHA-256 mismatch. Expected ${actualSha}, got ${storedSha}`);
+
   const publish=await fetch(`${supabaseUrl}/rest/v1/rpc/abu_bassam_publish_app_release`,{
     method:'POST',
-    headers:{Authorization:`Bearer ${serviceKey}`,apikey:serviceKey,'Content-Type':'application/json','Cache-Control':'no-store'},
+    headers:{...authHeaders,'Content-Type':'application/json'},
     body:JSON.stringify({
       p_version:version,
       p_version_code:versionCode,
