@@ -25,14 +25,27 @@ async function context(req:Request,permission:string){
 function safeId(v:string){return String(v||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180)}
 function scopeAllowed(device:{role?:string},deviceId:string,row:any){return device?.role==='owner'||row?.branch_device_id===deviceId}
 async function removeParts(admin:any,parts:string[]){if(parts.length){const {error}=await admin.storage.from(BUCKET).remove(parts);if(error)throw error}}
-async function cleanupPending(base:any){const cutoff=new Date(Date.now()-24*60*60*1000).toISOString();const {data}=await base.admin.from(TABLE).select('backup_id,parts').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('ready',false).lt('created_at',cutoff).limit(20);for(const row of data||[]){await removeParts(base.admin,Array.isArray(row.parts)?row.parts:[]).catch(()=>{});await base.admin.from(TABLE).delete().eq('user_id',base.user.id).eq('backup_id',row.backup_id)}}
+async function deleteMetadata(admin:any,userId:string,backupId:string){const {error}=await admin.from(TABLE).delete().eq('user_id',userId).eq('backup_id',backupId);if(error)throw error}
+async function cleanupPending(base:any){
+  const cutoff=new Date(Date.now()-24*60*60*1000).toISOString();
+  const {data,error}=await base.admin.from(TABLE).select('backup_id,parts').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('ready',false).lt('created_at',cutoff).limit(20);
+  if(error)throw error;
+  let deferred=0;
+  for(const row of data||[]){
+    try{
+      await removeParts(base.admin,Array.isArray(row.parts)?row.parts.map(String):[]);
+      await deleteMetadata(base.admin,base.user.id,String(row.backup_id));
+    }catch(_){deferred+=1}
+  }
+  return deferred;
+}
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
   try{
     const url=new URL(req.url),action=url.searchParams.get('action')||'';
     if(action==='plan'&&req.method==='POST'){
-      const base=await context(req,'backupCreate');await cleanupPending(base);
+      const base=await context(req,'backupCreate');const cleanupDeferred=await cleanupPending(base);
       const body=await req.json().catch(()=>({})),sha=String(body.sha256||'').toLowerCase(),size=Number(body.size_bytes||0),count=Number(body.item_count||0),partCount=Number(body.part_count||0),kind=['manual','automatic','pre_restore'].includes(body.backup_kind)?body.backup_kind:'manual',encrypted=!!body.encrypted;
       if(!/^[0-9a-f]{64}$/.test(sha))return json({error:'INVALID_SHA256'},400);
       if(!Number.isInteger(size)||size<0||size>MAX_BYTES||!Number.isInteger(count)||count<0||count>MAX_ITEMS||!Number.isInteger(partCount)||partCount<1||partCount>MAX_PARTS)return json({error:'BACKUP_LIMIT_INVALID'},400);
@@ -42,7 +55,7 @@ Deno.serve(async(req:Request)=>{
       for(const path of parts){const {data,error}=await base.admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:false});if(error||!data?.token){await removeParts(base.admin,parts).catch(()=>{});return json({error:error?.message||'SIGNED_UPLOAD_FAILED'},500)}uploads.push({path,token:data.token})}
       const {error:insertError}=await base.admin.from(TABLE).insert({user_id:base.user.id,backup_id:backupId,branch_device_id:base.deviceId,branch_name:String(base.device.device_name||'هذا الفرع'),parts,sha256:sha,size_bytes:size,item_count:count,backup_kind:kind,encrypted,app_version:String(body.app_version||''),ready:false});
       if(insertError)return json({error:insertError.message},500);
-      return json({ok:true,backup_id:backupId,uploads});
+      return json({ok:true,backup_id:backupId,uploads,cleanup_deferred:cleanupDeferred});
     }
     if(action==='commit'&&req.method==='POST'){
       const base=await context(req,'backupCreate'),body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),retention=Math.max(1,Math.min(30,Number(body.retention)||7));
@@ -50,9 +63,15 @@ Deno.serve(async(req:Request)=>{
       const parts=Array.isArray(row.parts)?row.parts.map(String):[],prefix=`${base.user.id}/backup-vault/${safeId(base.deviceId)}/${backupId}`,{data:objects,error:listError}=await base.admin.storage.from(BUCKET).list(prefix,{limit:MAX_PARTS});if(listError)return json({error:listError.message},500);
       const byName=new Map((objects||[]).map((o:any)=>[String(o.name),Number(o.metadata?.size||0)]));let total=0;for(const path of parts){const name=path.split('/').pop()||'',n=byName.get(name);if(n===undefined)return json({error:'BACKUP_PART_MISSING'},409);total+=n}if(total!==Number(row.size_bytes))return json({error:'BACKUP_SIZE_MISMATCH',expected:row.size_bytes,actual:total},409);
       const {error:updateError}=await base.admin.from(TABLE).update({ready:true,committed_at:new Date().toISOString()}).eq('user_id',base.user.id).eq('backup_id',backupId);if(updateError)return json({error:updateError.message},500);
-      const {data:old}=await base.admin.from(TABLE).select('backup_id,parts').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('ready',true).order('created_at',{ascending:false}).range(retention,retention+49);
-      for(const stale of old||[]){await removeParts(base.admin,Array.isArray(stale.parts)?stale.parts:[]).catch(()=>{});await base.admin.from(TABLE).delete().eq('user_id',base.user.id).eq('backup_id',stale.backup_id)}
-      return json({ok:true,backup_id:backupId,retention});
+      const {data:old,error:oldError}=await base.admin.from(TABLE).select('backup_id,parts').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('ready',true).order('created_at',{ascending:false}).range(retention,retention+49);if(oldError)return json({error:oldError.message},500);
+      let cleanupDeferred=0;
+      for(const stale of old||[]){
+        try{
+          await removeParts(base.admin,Array.isArray(stale.parts)?stale.parts.map(String):[]);
+          await deleteMetadata(base.admin,base.user.id,String(stale.backup_id));
+        }catch(_){cleanupDeferred+=1}
+      }
+      return json({ok:true,backup_id:backupId,retention,cleanup_deferred:cleanupDeferred});
     }
     if(action==='list'&&req.method==='GET'){
       const base=await context(req,'backupRestore'),all=url.searchParams.get('all')==='1'&&base.device.role==='owner';let q=base.admin.from(TABLE).select('backup_id,branch_device_id,branch_name,sha256,size_bytes,item_count,backup_kind,encrypted,app_version,created_at,committed_at').eq('user_id',base.user.id).eq('ready',true).order('created_at',{ascending:false}).limit(100);if(!all)q=q.eq('branch_device_id',base.deviceId);const {data,error}=await q;if(error)return json({error:error.message},500);return json({ok:true,backups:data||[]});
@@ -61,9 +80,9 @@ Deno.serve(async(req:Request)=>{
       const base=await context(req,'backupRestore'),backupId=String(url.searchParams.get('backup_id')||''),{data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).eq('ready',true).maybeSingle();if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);if(!scopeAllowed(base.device,base.deviceId,row))return json({error:'BACKUP_SCOPE_DENIED'},403);const paths=Array.isArray(row.parts)?row.parts.map(String):[],signed=[] as any[];for(const path of paths){const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,180);if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);signed.push({path,url:data.signedUrl})}return json({ok:true,backup:row,parts:signed});
     }
     if(action==='delete'&&req.method==='DELETE'){
-      const base=await context(req,'backupDelete'),body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),{data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).maybeSingle();if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);if(!scopeAllowed(base.device,base.deviceId,row))return json({error:'BACKUP_SCOPE_DENIED'},403);await removeParts(base.admin,Array.isArray(row.parts)?row.parts.map(String):[]);await base.admin.from(TABLE).delete().eq('user_id',base.user.id).eq('backup_id',backupId);return json({ok:true});
+      const base=await context(req,'backupDelete'),body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),{data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).maybeSingle();if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);if(!scopeAllowed(base.device,base.deviceId,row))return json({error:'BACKUP_SCOPE_DENIED'},403);await removeParts(base.admin,Array.isArray(row.parts)?row.parts.map(String):[]);await deleteMetadata(base.admin,base.user.id,backupId);return json({ok:true});
     }
-    if(action==='cleanup'&&req.method==='POST'){const base=await context(req,'backupCreate');await cleanupPending(base);return json({ok:true})}
+    if(action==='cleanup'&&req.method==='POST'){const base=await context(req,'backupCreate');const cleanupDeferred=await cleanupPending(base);return json({ok:true,cleanup_deferred:cleanupDeferred})}
     return json({error:'UNSUPPORTED_ACTION'},400);
   }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=/NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE|SCOPE/.test(message)?403:500;return json({error:message},status)}
 });
