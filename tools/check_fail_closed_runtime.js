@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm');
+const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.readFileSync(p,'utf8')};
+const need=(s,t,l)=>{if(!s.includes(t))throw new Error(`fail-closed check failed: ${l}`)};
+const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`fail-closed check failed: ${l}`)};
+const runtime=read('web/fail-closed-runtime.js'),loader=read('web/device-name-runtime.js'),branch=read('web/branch-vault-runtime.js');
+new vm.Script(runtime,{filename:'fail-closed-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});new vm.Script(branch,{filename:'branch-vault-runtime.js'});
+for(const marker of ['__ABU_FAIL_CLOSED_RUNTIME_V1__','VAULT_GATEWAY_NOT_READY','SECURE_STORAGE_REQUIRED','cloud.uploadVault=async()=>{throw vaultError()}','cloud.downloadVault=async()=>{throw vaultError()}','cloud.removeVault=async()=>{throw vaultError()}',"String(kind)==='vault'?Promise.reject(vaultError())",'acctRecoveryGenerate','acctRecoverDo','secureBridgeReady','Android.security','stopImmediatePropagation','لا يتم حفظ سر الجهاز في localStorage'])need(runtime,marker,marker);
+for(const marker of ['loadFailClosedRuntime','fail-closed-runtime.js','__ABU_FAIL_CLOSED_RUNTIME_V1__','loadFailClosedRuntime(loadBranchVault)'])need(loader,marker,'loader '+marker);
+const guardAt=loader.indexOf('loadFailClosedRuntime(loadBranchVault)'),accountAt=loader.indexOf('setTimeout(loadAccountCenter,180)');
+if(guardAt<0||accountAt<0||guardAt>accountAt)throw new Error('fail-closed check failed: guard must load before account center');
+forbid(loader,'loadBranchVault();','branch vault must not race ahead of the fail-closed guard');
+for(const marker of ['__abuBranchVaultPatched','cloudPatched','c.uploadVault=uploadVault','c.downloadVault=downloadVault','c.removeVault=removeVault'])need(branch,marker,'branch gateway '+marker);
+console.log('fail-closed checks passed: vault access is blocked until the signed branch gateway is ready, and device recovery/generation require the native secure-storage bridge.');
