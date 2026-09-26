@@ -75,7 +75,7 @@ const FALLBACK={
  settingsView:'appearance',settingsAppearance:'appearance',settingsThemes:'appearance',settingsFonts:'appearance',settingsCardFonts:'appearance',settingsPrinting:'print',settingsSync:'sync',settingsArchive:'sync',settingsWhatsApp:'sync',settingsTelegram:'sync',settingsStorage:'edit',settingsPermissions:'security',settingsReset:'reset'
 };
 const pending=new Map();let seq=0,bridge=false,patched=false,currentEditor=null;
-function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function role(){return window.AbuBassamSecurity?.role?.()||''}
 function currentDevice(){return window.AbuBassamSecurity?.device?.()||{}}
 function rawPermissions(){const d=currentDevice();return d?.permissions&&typeof d.permissions==='object'?d.permissions:{}}
