@@ -12,4 +12,10 @@ need(src,"originWhitelist={['file://*','about:*']}",'WebView must stay local-onl
 need(src,'mixedContentMode="never"','mixed content must stay disabled');
 forbid(src,"originWhitelist={['*']}",'wildcard WebView origin whitelist');
 forbid(src,'mixedContentMode="always"','unsafe mixed content');
-console.log('native link security checks passed: canonical WebView and explicit repair source both keep external web navigation HTTPS-only.');
+for(const marker of [
+  "if (!index.includes('const STARTUP_WATCHDOG_MS = 3500;'))",
+  "if (!index.includes('const timer = setTimeout(() => setWebReady(true), STARTUP_WATCHDOG_MS);'))",
+  "if (!index.includes(\"message.type === 'webBootReady'\"))",
+  'safeWebViewMarkers.every(marker => index.includes(marker))'
+])need(repair,marker,'startup repair must be idempotent on current source: '+marker);
+console.log('native link security checks passed: canonical WebView and idempotent repair source both keep external web navigation HTTPS-only.');
