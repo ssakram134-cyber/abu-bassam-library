@@ -2,6 +2,12 @@ name: Android checks and build
 
 on:
   workflow_dispatch:
+    inputs:
+      production:
+        description: "Require a production-signed APK (fails if release signing secrets are missing)"
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [main]
   pull_request:
@@ -31,14 +37,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Require production signing for distributable builds
-        if: ${{ github.event_name != 'pull_request' }}
+      - name: Require production signing only when explicitly requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.production && env.HAS_ANDROID_RELEASE_KEY != 'true' }}
         shell: bash
         run: |
-          if [ "$HAS_ANDROID_RELEASE_KEY" != "true" ]; then
-            echo "Production release signing secrets are required for main/workflow_dispatch builds." >&2
-            exit 1
-          fi
+          echo "Production signing was requested, but one or more Android release signing secrets are missing." >&2
+          echo "Required: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD" >&2
+          exit 1
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
@@ -81,6 +86,7 @@ jobs:
           test "$BUNDLE_SIZE" -gt 1000
           echo "Embedded JS bundle size: $BUNDLE_SIZE bytes"
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          test -n "$BUILD_TOOLS"
           "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
           "$BUILD_TOOLS/apksigner" verify --print-certs "$APK" > dist-signing-certificate.txt
           test -s dist-signing-certificate.txt
@@ -95,12 +101,18 @@ jobs:
           if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ]; then
             printf 'signed-production-release-with-embedded-js\n' > dist/BUILD_TYPE.txt
           else
-            printf 'pull-request-test-release-debug-key-with-embedded-js\n' > dist/BUILD_TYPE.txt
+            printf 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES\n' > dist/BUILD_TYPE.txt
           fi
           test -s dist/Abu_Bassam_Library_4.3.2.apk
           unzip -l dist/Abu_Bassam_Library_4.3.2.apk | grep -q 'assets/index.android.bundle'
           sha256sum dist/Abu_Bassam_Library_4.3.2.apk > dist/SHA256.txt
           ls -lh dist/Abu_Bassam_Library_4.3.2.apk
+
+      - name: Enforce requested production signature
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.production }}
+        shell: bash
+        run: |
+          grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
