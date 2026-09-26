@@ -4,8 +4,15 @@ if(window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__)return;
 window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__=true;
 const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
+const SECRET_KEY='abu_bassam_device_secret_v1';
+const PENDING_SECRET_KEY='abu_bassam_recovery_pending_secret_v1';
+const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';
+const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
+const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
+const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
+const APP='4.3.2';
 const pending=new Map();
-let seq=0,bridgeInstalled=false,googleBusy=false;
+let seq=0,bridgeInstalled=false,googleBusy=false,recoveryBusy=false;
 const $=id=>document.getElementById(id);
 function setMsg(text,bad=false){const e=$('acctMsg');if(e){e.textContent=String(text||'');e.style.color=bad?'#a52e3b':'#087f72'}}
 function installBridge(){
@@ -26,6 +33,7 @@ function native(action,payload={}){
     if(action==='secureGet')return Promise.resolve(localStorage.getItem(key)||'');
     if(action==='secureSet'){localStorage.setItem(key,String(payload.value||''));return Promise.resolve(true)}
     if(action==='secureDelete'){localStorage.removeItem(key);return Promise.resolve(true)}
+    if(action==='deviceInfo')return Promise.resolve({model:'Web',platform:'Web'});
     return Promise.resolve(null)
   }
   return new Promise((resolve,reject)=>{
@@ -35,6 +43,17 @@ function native(action,payload={}){
     Android.security(action,requestId,payload)
   })
 }
+function cloud(){return window.AbuBassamCloud||null}
+function authClient(){return cloud()?.client||null}
+async function rpc(name,args={}){
+  await cloud()?.ready?.();
+  const c=authClient();
+  if(!c?.rpc)throw new Error('خدمة الحساب غير جاهزة');
+  const {data,error}=await c.rpc(name,args);
+  if(error)throw error;
+  if(data?.ok===false)throw new Error(data.error||'RPC_FAILED');
+  return data
+}
 async function verifyLocalArchiveEmpty(){
   const stats=window.DocumentVault?.stats;
   if(typeof stats!=='function')throw new Error('LOCAL_ARCHIVE_CHECK_UNAVAILABLE');
@@ -43,26 +62,76 @@ async function verifyLocalArchiveEmpty(){
   if(!Number.isFinite(count)||count<0)throw new Error('LOCAL_ARCHIVE_CHECK_INVALID');
   return count===0
 }
+function randomSecret(){const bytes=crypto.getRandomValues(new Uint8Array(32));return[...bytes].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function displayRotatedCode(code){
+  const value=String(code||'');
+  const box=$('acctRecoveryBox'),out=$('acctRecoveryCode'),reload=$('acctRecoveryReload');
+  if(out)out.textContent=value;
+  if(box)box.hidden=!value;
+  if(reload)reload.hidden=!value
+}
 async function guardedRecovery(){
+  if(recoveryBusy)return;
   const button=$('acctRecoverDo');
-  if(button?.disabled)return;
-  if(button)button.disabled=true;
+  const code=String($('acctRecoverCodeInput')?.value||'').trim();
+  if(code.replace(/[^A-F0-9]/gi,'').length!==32){setMsg('أدخل رمز الاسترداد كاملًا.',true);return}
+  recoveryBusy=true;if(button)button.disabled=true;
+  let serverRecovered=false;
   try{
     let empty;
     try{empty=await verifyLocalArchiveEmpty()}
     catch(_){setMsg('تعذر التحقق من الأرشيف المحلي، لذلك أوقفت الاستعادة لحماية الملفات من الاختلاط. أعد تشغيل التطبيق ثم حاول مجددًا.',true);return}
     if(!empty){setMsg('الأرشيف المحلي على هذا الهاتف غير فارغ. احفظ/صدّر ملفاته أولًا قبل استعادة هوية هاتف قديم حتى لا تختلط الفروع.',true);return}
-    const fn=window.AbuBassamAccount?.recoverPhone;
-    if(typeof fn!=='function'){setMsg('خدمة استعادة الهاتف غير جاهزة. أعد فتح الإعدادات وحاول مجددًا.',true);return}
-    await fn()
-  }finally{if(button)button.disabled=false}
+    if(!confirm('سيتم تحويل هذا الهاتف إلى هوية الجهاز الرئيسي القديمة وربط النسخ والملفات القديمة به. متابعة؟'))return;
+    const c=cloud(),session=c?.session?.();
+    if(!session?.user)throw new Error('سجّل الدخول إلى الحساب أولًا');
+    const secret=randomSecret();
+    await native('secureSet',{key:PENDING_SECRET_KEY,value:secret});
+    if(String(await native('secureGet',{key:PENDING_SECRET_KEY})||'')!==secret)throw new Error('تعذر التحقق من التخزين الآمن قبل الاستعادة');
+    const temp=window.AbuBassamDevices?.ensure?.()||{};
+    const info=await native('deviceInfo',{}).catch(()=>({}));
+    setMsg('جاري التحقق من رمز الاسترداد واستعادة هوية الهاتف...');
+    const recovered=await rpc('abu_bassam_recover_device',{
+      p_recovery_code:code,
+      p_new_secret:secret,
+      p_temporary_device_id:String(temp.id||''),
+      p_model:String(info?.model||''),
+      p_platform:String(info?.os||info?.platform||'Android'),
+      p_app_version:APP
+    });
+    serverRecovered=true;
+    await native('secureSet',{key:SECRET_KEY,value:secret});
+    if(String(await native('secureGet',{key:SECRET_KEY})||'')!==secret)throw new Error('تعذر تثبيت سر الجهاز الجديد في التخزين الآمن');
+    localStorage.setItem(DEVICE_ID_KEY,String(recovered.device_id||''));
+    localStorage.setItem(DEVICE_NAME_KEY,String(recovered.device_name||'جهاز المكتبة'));
+    localStorage.setItem(DEVICE_CREATED_KEY,String(recovered.first_seen||new Date().toISOString()));
+    localStorage.setItem(VAULT_SCOPE_KEY,String(recovered.device_id||''));
+    await native('secureDelete',{key:PENDING_SECRET_KEY}).catch(()=>{});
+    if($('acctRecoverForm'))$('acctRecoverForm').hidden=true;
+    if($('acctRecoverCodeInput'))$('acctRecoverCodeInput').value='';
+    let rotated=null;
+    try{
+      rotated=await rpc('abu_bassam_generate_recovery_code',{p_actor_device_id:String(recovered.device_id||''),p_actor_secret:secret})
+    }catch(_){}
+    if(rotated?.recovery_code){
+      displayRotatedCode(rotated.recovery_code);
+      setMsg('تمت استعادة هوية الهاتف القديم بأمان ✓ تم حفظ سر الجهاز أولًا ثم إنشاء رمز استرداد جديد. احفظ الرمز الجديد وأعد تشغيل التطبيق.')
+    }else{
+      setMsg('تمت استعادة هوية الهاتف وحفظ سر الجهاز ✓ تعذر فقط تدوير رمز الاسترداد. احتفظ بالرمز الحالي، وأعد تشغيل التطبيق ثم أنشئ رمزًا جديدًا من الحساب.',true)
+    }
+    try{window.AbuBassamOps?.add?.({type:'security',title:'استعادة هوية الهاتف',details:'استعادة ثنائية المرحلة مع تثبيت سر الجهاز قبل تدوير رمز الاسترداد',section:'الحساب والأمان'})}catch(_){}
+  }catch(error){
+    if(!serverRecovered)await native('secureDelete',{key:PENDING_SECRET_KEY}).catch(()=>{});
+    const msg=String(error?.message||error||'تعذرت الاستعادة');
+    const friendly=/RECOVERY_CODE_INVALID/.test(msg)?'رمز الاسترداد غير صحيح.':/RECOVERY_TEMPORARILY_LOCKED/.test(msg)?'تم إيقاف محاولات الاسترداد مؤقتًا بعد محاولات خاطئة متعددة.':/RECOVERY_NOT_CONFIGURED/.test(msg)?'لا يوجد رمز استرداد للطوارئ لهذا الحساب.':/RECOVERY_DEVICE_NOT_FOUND/.test(msg)?'هوية الهاتف القديمة لم تعد موجودة في سجل الحساب.':msg;
+    setMsg(serverRecovered?`${friendly} الخادم أبقى رمز الاسترداد الحالي صالحًا حتى تستطيع إعادة المحاولة بأمان.`:friendly,true)
+  }finally{recoveryBusy=false;if(button)button.disabled=false}
 }
-function authClient(){const cloud=window.AbuBassamCloud;return cloud?.client||null}
 async function safeGoogle(){
   if(googleBusy)return;
   googleBusy=true;setMsg('جاري فتح Google...');
   try{
-    await window.AbuBassamCloud?.ready?.();
+    await cloud()?.ready?.();
     const c=authClient();
     if(!c?.auth)throw new Error('خدمة الحساب غير جاهزة');
     const {data,error}=await c.auth.signInWithOAuth({provider:'google',options:{redirectTo:`${CALLBACK}?flow=google`,skipBrowserRedirect:true}});
@@ -88,22 +157,22 @@ async function cleanupStaleCallback(){
   }catch(_){}
 }
 function enforceBranchVault(){
-  const cloud=window.AbuBassamCloud,branch=window.AbuBassamBranchVault;
-  if(!cloud||!branch)return false;
-  if(typeof branch.upload==='function')cloud.uploadVault=branch.upload;
-  if(typeof branch.download==='function')cloud.downloadVault=branch.download;
-  if(typeof branch.remove==='function')cloud.removeVault=branch.remove;
-  if(!cloud.__abuBranchVaultPatched&&!cloud.__abuAccountVaultFallback){
-    cloud.__abuAccountVaultFallback=true;
-    const list=cloud.list?.bind(cloud),get=cloud.get?.bind(cloud),upsert=cloud.upsert?.bind(cloud);
-    if(list)cloud.list=(kind,limit)=>String(kind)==='vault'?branch.list(limit):list(kind,limit);
-    if(get)cloud.get=(kind,id)=>String(kind)==='vault'?branch.get(id):get(kind,id);
-    if(upsert)cloud.upsert=(kind,id,data)=>String(kind)==='vault'?branch.upsert(id,data):upsert(kind,id,data)
+  const c=cloud(),branch=window.AbuBassamBranchVault;
+  if(!c||!branch)return false;
+  if(typeof branch.upload==='function')c.uploadVault=branch.upload;
+  if(typeof branch.download==='function')c.downloadVault=branch.download;
+  if(typeof branch.remove==='function')c.removeVault=branch.remove;
+  if(!c.__abuBranchVaultPatched&&!c.__abuAccountVaultFallback){
+    c.__abuAccountVaultFallback=true;
+    const list=c.list?.bind(c),get=c.get?.bind(c),upsert=c.upsert?.bind(c);
+    if(list)c.list=(kind,limit)=>String(kind)==='vault'?branch.list(limit):list(kind,limit);
+    if(get)c.get=(kind,id)=>String(kind)==='vault'?branch.get(id):get(kind,id);
+    if(upsert)c.upsert=(kind,id,data)=>String(kind)==='vault'?branch.upsert(id,data):upsert(kind,id,data)
   }
   return true
 }
 function patchPublicApis(){
-  if(window.AbuBassamAccount)window.AbuBassamAccount.google=safeGoogle;
+  if(window.AbuBassamAccount){window.AbuBassamAccount.google=safeGoogle;window.AbuBassamAccount.recoverPhone=guardedRecovery}
   if(window.AbuBassamSettings)window.AbuBassamSettings.google=safeGoogle;
   enforceBranchVault()
 }
