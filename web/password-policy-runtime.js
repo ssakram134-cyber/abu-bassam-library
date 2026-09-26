@@ -24,6 +24,27 @@ function weakness(value){
   if(/(?:012345|123456|234567|345678|456789|987654|876543|765432)/.test(compact))return 'تجنب التسلسلات الرقمية السهلة.';
   return '';
 }
+function decorateSignup(){
+  const input=document.getElementById('syncPassword');
+  if(!input)return false;
+  input.setAttribute('minlength','12');
+  input.setAttribute('maxlength','128');
+  input.setAttribute('title','لإنشاء حساب جديد: ١٢ محرفًا على الأقل، مع حرف ورقم ورمز خاص.');
+  if(!input.placeholder||/كلمة مرور الحساب/.test(input.placeholder))input.placeholder='كلمة مرور قوية للحساب';
+  return true;
+}
+function enforceSignup(event){
+  const button=event.target?.closest?.('#syncSignUp');
+  if(!button)return;
+  const input=document.getElementById('syncPassword');
+  const problem=weakness(input?.value||'');
+  if(!problem)return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const error=document.getElementById('syncError');
+  if(error)error.textContent=problem;
+  input?.focus?.();
+}
 async function changePassword(){
   if(!owner())return alert('تغيير كلمة مرور الحساب متاح للجهاز الرئيسي فقط.');
   const c=window.AbuBassamCloud?.client;if(!c)return alert('خدمة الحساب غير جاهزة.');
@@ -38,7 +59,17 @@ async function changePassword(){
   try{window.AbuBassamOps?.add?.({type:'settings',title:'تغيير كلمة مرور الحساب',section:'الأمان',details:'سياسة كلمة مرور قوية'})}catch(_){}
   alert('تم تغيير كلمة مرور الحساب. لم تُحفظ كلمة المرور داخل التطبيق أو المستودع، وتم طلب إنهاء الجلسات الأخرى إن كانت الخدمة تدعم ذلك.')
 }
-function install(){const extras=window.AbuBassamSecurityExtras;if(!extras)return false;extras.changePassword=changePassword;extras.passwordWeakness=weakness;extras.__strongPasswordPolicy=true;return true}
-let tries=0,timer=setInterval(()=>{tries++;if(install()||tries>120)clearInterval(timer)},50);
+function install(){
+  decorateSignup();
+  const extras=window.AbuBassamSecurityExtras;
+  if(!extras)return false;
+  extras.changePassword=changePassword;
+  extras.passwordWeakness=weakness;
+  extras.__strongPasswordPolicy=true;
+  window.AbuBassamStrongPasswordWeakness=weakness;
+  return true;
+}
+document.addEventListener('click',enforceSignup,true);
+let tries=0,timer=setInterval(()=>{tries++;decorateSignup();if(install()||tries>120)clearInterval(timer)},50);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,20));else setTimeout(install,20);
 })();
