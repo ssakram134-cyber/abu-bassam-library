@@ -63,12 +63,30 @@ async function verifyLocalArchiveEmpty(){
   return count===0
 }
 function randomSecret(){const bytes=crypto.getRandomValues(new Uint8Array(32));return[...bytes].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function visibleRecoveryCode(){return String($('acctRecoveryCode')?.textContent||'').trim()}
 function displayRotatedCode(code){
-  const value=String(code||'');
+  const value=String(code||'').trim();
   const box=$('acctRecoveryBox'),out=$('acctRecoveryCode'),reload=$('acctRecoveryReload');
   if(out)out.textContent=value;
   if(box)box.hidden=!value;
   if(reload)reload.hidden=!value
+}
+async function copyVisibleRecoveryCode(){
+  const code=visibleRecoveryCode();
+  if(!code)return setMsg('لا يوجد رمز استرداد ظاهر لنسخه.',true);
+  try{await navigator.clipboard.writeText(code);setMsg('تم نسخ رمز الاسترداد الظاهر. احفظه خارج الهاتف.');return true}
+  catch(_){
+    try{const t=document.createElement('textarea');t.value=code;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();setMsg('تم نسخ رمز الاسترداد الظاهر.');return true}
+    catch(__){setMsg('تعذر نسخ رمز الاسترداد. احفظه يدويًا في مكان آمن.',true);return false}
+  }
+}
+async function shareVisibleRecoveryCode(){
+  const code=visibleRecoveryCode();
+  if(!code)return setMsg('لا يوجد رمز استرداد ظاهر لمشاركته.',true);
+  const text=`رمز استرداد حساب مكتبة أبو بسام\n${code}\nاحفظه بسرية. لا تشاركه مع أي شخص.`;
+  const data='data:text/plain;base64,'+btoa(unescape(encodeURIComponent(text)));
+  if(window.Android&&typeof Android.shareBase64==='function'){Android.shareBase64('Abu_Bassam_Recovery_Code.txt','text/plain',data);return true}
+  return copyVisibleRecoveryCode()
 }
 async function guardedRecovery(){
   if(recoveryBusy)return;
@@ -183,7 +201,13 @@ function onClick(event){
     event.preventDefault();event.stopImmediatePropagation();guardedRecovery();return
   }
   if(['acctGoogle','acctLoginGoogle','acctCreateGoogle'].includes(target.id)){
-    event.preventDefault();event.stopImmediatePropagation();safeGoogle()
+    event.preventDefault();event.stopImmediatePropagation();safeGoogle();return
+  }
+  if(target.id==='acctRecoveryCopy'){
+    event.preventDefault();event.stopImmediatePropagation();copyVisibleRecoveryCode();return
+  }
+  if(target.id==='acctRecoveryShare'){
+    event.preventDefault();event.stopImmediatePropagation();shareVisibleRecoveryCode()
   }
 }
 function boot(){
