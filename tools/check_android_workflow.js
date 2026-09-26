@@ -10,22 +10,27 @@ const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
 try{new Function(read(path.join(root,'tools','check_import_workflow.js')))}catch(e){throw new Error(`import workflow checker syntax error: ${e.message}`)}
 const required=[
   'permissions:\n  contents: read',
-  'npm ci --no-audit --no-fund',
-  'Require production signing for distributable builds',
-  "github.event_name != 'pull_request'",
-  'Production release signing secrets are required',
+  'workflow_dispatch:',
+  'production:',
+  'Require production signing only when explicitly requested',
+  "github.event_name == 'workflow_dispatch' && inputs.production",
+  'Production signing was requested, but one or more Android release signing secrets are missing.',
   "secrets.ANDROID_KEYSTORE_PASSWORD != ''",
   "secrets.ANDROID_KEY_ALIAS != ''",
   "secrets.ANDROID_KEY_PASSWORD != ''",
+  'npm ci --no-audit --no-fund',
   'Build standalone APK with embedded JS bundle',
   './gradlew assembleRelease --no-daemon',
   'Verify standalone APK contains React Native bundle',
   'assets/index.android.bundle',
+  'test -n "$BUILD_TOOLS"',
   'apksigner" verify --verbose',
   'apksigner" verify --print-certs',
   'SIGNING_CERTIFICATE.txt',
   'signed-production-release-with-embedded-js',
-  'pull-request-test-release-debug-key-with-embedded-js',
+  'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES',
+  'Enforce requested production signature',
+  "grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt",
   'Prepare distributable APK',
   'dist/Abu_Bassam_Library_4.3.2.apk',
   'sha256sum dist/Abu_Bassam_Library_4.3.2.apk',
@@ -38,6 +43,9 @@ const forbidden=[
   './gradlew assembleDebug --no-daemon',
   'android/app/build/outputs/apk/debug/',
   'standalone-release-debug-key-with-embedded-js',
+  'pull-request-test-release-debug-key-with-embedded-js',
+  'Require production signing for distributable builds',
+  "github.event_name != 'pull_request'",
   'installable-debug',
   'contents: write',
   'git push',
@@ -88,4 +96,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: canonical source is read-only during checks/normal builds, OCR generation is isolated to disposable Android assets, hosted/local production releases require a complete signing key, the JS bundle and APK signature/certificate are verified, SHA-256 is emitted, and CI stays read-only.\n');
+process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets, explicit production requests fail closed unless all signing secrets exist, canonical source stays read-only, OCR generation is isolated to disposable Android assets, JS bundle/signature/certificate are verified, SHA-256 is emitted, and CI remains read-only.\n');
