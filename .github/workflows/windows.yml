@@ -1,0 +1,127 @@
+name: Windows desktop build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [windows-desktop]
+    paths:
+      - 'desktop/**'
+      - 'web/**'
+      - '.github/workflows/windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate desktop JavaScript
+        shell: pwsh
+        run: |
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          node --check desktop/desktop-shell.js
+          node --check desktop/prepare-assets.cjs
+
+      - name: Validate required security and login runtimes
+        shell: pwsh
+        run: |
+          $required = @(
+            'web/app-security-runtime.js',
+            'web/security-bootstrap-guard-runtime.js',
+            'web/security-hardening-runtime.js',
+            'web/account-center-runtime.js',
+            'web/account-recovery-hardening-runtime.js',
+            'web/admin-permissions-runtime.js',
+            'web/fail-closed-runtime.js',
+            'web/touch-stability-runtime.js'
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Required runtime missing: $file" }
+          }
+
+      - name: Install Windows desktop dependencies
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build Windows application directory
+        working-directory: desktop
+        run: npm run build:dir
+
+      - name: Verify packaged application contents
+        shell: pwsh
+        run: |
+          $root = 'desktop/dist/win-unpacked'
+          if (!(Test-Path "$root/AbuBassamLibrary.exe")) { throw 'Windows EXE missing' }
+          $required = @(
+            'resources/web/index.html',
+            'resources/web/app-security-runtime.js',
+            'resources/web/security-bootstrap-guard-runtime.js',
+            'resources/web/security-hardening-runtime.js',
+            'resources/web/account-center-runtime.js',
+            'resources/web/account-recovery-hardening-runtime.js',
+            'resources/web/admin-permissions-runtime.js',
+            'resources/web/fail-closed-runtime.js',
+            'resources/web/touch-stability-runtime.js',
+            'resources/scanner.ps1',
+            'resources/windows-hello.ps1'
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path (Join-Path $root $file))) { throw "Packaged file missing: $file" }
+          }
+
+      - name: Install Inno Setup if required
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler unavailable' }
+
+      - name: Build guided Windows installer
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify installer and write hashes
+        shell: pwsh
+        run: |
+          $setup = 'desktop/dist/installer/Abu_Bassam_Library_Windows_Setup_4.3.2.exe'
+          if (!(Test-Path $setup)) { throw 'Installer missing' }
+          if ((Get-Item $setup).Length -lt 1000000) { throw 'Installer is unexpectedly small' }
+          New-Item -ItemType Directory -Force -Path desktop/dist/release | Out-Null
+          Copy-Item $setup desktop/dist/release/
+          Get-FileHash $setup -Algorithm SHA256 | Format-List | Out-File -Encoding utf8 desktop/dist/release/SHA256.txt
+          @(
+            'Windows Desktop 4.3.2',
+            'Guided installer: enabled',
+            'Custom install directory: enabled',
+            'Desktop shortcut task: optional',
+            'Printer selection: enabled',
+            'WIA scanner: enabled',
+            'Encrypted secure storage: enabled',
+            'Windows Hello bridge: included',
+            'Shared security/login runtimes: verified in package'
+          ) | Out-File -Encoding utf8 desktop/dist/release/BUILD_REPORT.txt
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: abu-bassam-windows-${{ github.sha }}
+          path: desktop/dist/release/*
+          if-no-files-found: error
+          retention-days: 14
