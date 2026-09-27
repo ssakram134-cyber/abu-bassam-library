@@ -23,7 +23,7 @@ function hiddenByStyle(el){
   if(!el||el.hidden)return true;
   try{
     const style=getComputedStyle(el);
-    return style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0&&el.id==='splash';
+    return style.display==='none'||style.visibility==='hidden'||(Number(style.opacity)===0&&el.id==='splash');
   }catch(_){return false}
 }
 
@@ -58,8 +58,8 @@ function repair(){
   scheduled=false;
   try{
     addStyle();
-    document.documentElement.style.touchAction='auto';
-    if(document.body)document.body.style.touchAction='auto';
+    if(document.documentElement.style.touchAction!=='auto')document.documentElement.style.touchAction='auto';
+    if(document.body&&document.body.style.touchAction!=='auto')document.body.style.touchAction='auto';
     document.querySelectorAll('#splash,#busyOverlay,.busy,.sheet-backdrop,.sheet,.paper-zoom,.nat-modal,.nat-zoom,.abu-device-modal,.abu-security-gate').forEach(guardElement);
   }catch(_){}
 }
