@@ -28,8 +28,6 @@
       "main.cjs",
       "preload.cjs",
       "desktop-shell.js",
-      "scanner.ps1",
-      "windows-hello.ps1",
       "build/**/*",
       "package.json"
     ],
@@ -38,6 +36,18 @@
         "from": "../web",
         "to": "web",
         "filter": ["**/*"]
+      },
+      {
+        "from": "scanner.ps1",
+        "to": "scanner.ps1"
+      },
+      {
+        "from": "windows-hello.ps1",
+        "to": "windows-hello.ps1"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "build/icon.png"
       }
     ],
     "win": {
