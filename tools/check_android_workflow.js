@@ -7,7 +7,9 @@ const pkg=read(path.join(root,'package.json'));
 const packageJson=JSON.parse(pkg);
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
 const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
+const touch=read(path.join(root,'web','touch-stability-runtime.js'));
 try{new Function(read(path.join(root,'tools','check_import_workflow.js')))}catch(e){throw new Error(`import workflow checker syntax error: ${e.message}`)}
+try{new Function(touch)}catch(e){throw new Error(`touch stability runtime syntax error: ${e.message}`)}
 const required=[
   'permissions:\n  contents: read',
   'workflow_dispatch:',
@@ -64,6 +66,10 @@ for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])
 const assetRequired=[
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
   'const DOWNLOAD_TIMEOUT_MS = 45000;',
+  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",
+  'async function injectTouchStabilityRuntime()',
+  'await injectTouchStabilityRuntime();',
+  'Touch stability runtime was not injected into Android web entry point',
   'await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });',
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
@@ -77,10 +83,24 @@ const assetRequired=[
   'canonical web source remains unchanged'
 ];
 for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing canonical-source safeguard: ${marker}\n`);process.exit(1)}
+const touchRequired=[
+  '__ABU_TOUCH_STABILITY_V1__',
+  'html,body,.app{touch-action:auto!important}',
+  '.sheet:not(.show)',
+  '.nat-modal:not(.show)',
+  'pointer-events:none!important',
+  'new MutationObserver(scheduleRepair)',
+  "document.addEventListener('pointerup'",
+  "document.addEventListener('touchend'",
+  "message.type==='webBootReady'"
+];
+const touchMissing=touchRequired.filter(marker=>!touch.includes(marker));
+if(touchMissing.length){process.stderr.write('Touch stability runtime missing required safeguards:\n'+touchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
 const copyAt=assets.indexOf('await cp(source, destination');
+const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');
 const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||downloadAt<0||copyAt>downloadAt){process.stderr.write('Android assets must copy canonical web source before generating OCR assets in the disposable Android tree.\n');process.exit(1)}
+if(copyAt<0||injectTouchAt<0||downloadAt<0||copyAt>injectTouchAt||injectTouchAt>downloadAt){process.stderr.write('Android assets must copy canonical web source, inject touch stability runtime, then generate OCR assets.\n');process.exit(1)}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
   ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
@@ -103,4 +123,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
+process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime is syntax-checked and locked into Android asset preparation; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
