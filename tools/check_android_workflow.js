@@ -89,6 +89,11 @@ const touchRequired=[
   'html,body,.app{touch-action:auto!important}',
   '.sheet:not(.show)',
   '.nat-modal:not(.show)',
+  '.cs-modal:not(.show)',
+  '.v-modal:not(.show)',
+  '.v-busy:not(.show)',
+  '.abu-settings-modal:not(.show)',
+  '#abuRecoveryModal',
   'pointer-events:none!important',
   'new MutationObserver(scheduleRepair)',
   "document.addEventListener('pointerup'",
@@ -133,4 +138,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime and both sides of the WebView ready bridge are locked by tests; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
+process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime, hidden section modal guards, and both sides of the WebView ready bridge are locked by tests; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
