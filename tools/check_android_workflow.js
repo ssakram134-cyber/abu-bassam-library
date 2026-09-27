@@ -5,6 +5,7 @@ function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.
 const source=read(path.join(root,'.github','workflows','android.yml'));
 const pkg=read(path.join(root,'package.json'));
 const packageJson=JSON.parse(pkg);
+const native=read(path.join(root,'index.js'));
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
 const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
 const touch=read(path.join(root,'web','touch-stability-runtime.js'));
@@ -92,10 +93,19 @@ const touchRequired=[
   'new MutationObserver(scheduleRepair)',
   "document.addEventListener('pointerup'",
   "document.addEventListener('touchend'",
-  "message.type==='webBootReady'"
+  "JSON.stringify({type:'webBootReady'})"
 ];
 const touchMissing=touchRequired.filter(marker=>!touch.includes(marker));
 if(touchMissing.length){process.stderr.write('Touch stability runtime missing required safeguards:\n'+touchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
+const nativeTouchRequired=[
+  "message.type === 'webBootReady'",
+  'const STARTUP_WATCHDOG_MS = 3500;',
+  'onLoad={() => setWebReady(true)}',
+  'onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}',
+  'onLoadEnd={() => setWebReady(true)}'
+];
+const nativeTouchMissing=nativeTouchRequired.filter(marker=>!native.includes(marker));
+if(nativeTouchMissing.length){process.stderr.write('Native WebView touch/startup bridge missing required safeguards:\n'+nativeTouchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
 const copyAt=assets.indexOf('await cp(source, destination');
 const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');
@@ -123,4 +133,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime is syntax-checked and locked into Android asset preparation; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
+process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime and both sides of the WebView ready bridge are locked by tests; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
