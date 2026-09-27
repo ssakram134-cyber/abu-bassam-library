@@ -1,0 +1,53 @@
+{
+  "name": "abu-bassam-library-windows",
+  "version": "4.3.2",
+  "private": true,
+  "description": "نسخة Windows المكتبية من مكتبة أبو بسام للتصوير والقرطاسية",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "prepare:assets": "node prepare-assets.cjs",
+    "build:dir": "npm run prepare:assets && electron-builder --win dir --x64",
+    "build:installer": "npm run build:dir"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.3"
+  },
+  "build": {
+    "appId": "iq.abubassam.library.windows",
+    "productName": "مكتبة أبو بسام",
+    "executableName": "AbuBassamLibrary",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "desktop-shell.js",
+      "scanner.ps1",
+      "windows-hello.ps1",
+      "build/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web",
+        "to": "web",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    }
+  }
+}
