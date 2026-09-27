@@ -5,6 +5,8 @@ window.__ABU_TOUCH_STABILITY_V1__=true;
 
 const STYLE_ID='abuTouchStabilityStyle';
 const GUARDED='abuTouchGuarded';
+const SHOW_GUARDED_CLASSES=['busy','sheet-backdrop','sheet','paper-zoom','nat-modal','nat-zoom','abu-device-modal','cs-modal','v-modal','v-busy','abu-settings-modal'];
+const GUARDED_SELECTOR='#splash,#busyOverlay,.busy,.sheet-backdrop,.sheet,.paper-zoom,.nat-modal,.nat-zoom,.abu-device-modal,.abu-security-gate,.cs-modal,.v-modal,.v-busy,.abu-settings-modal,#abuRecoveryModal';
 let scheduled=false;
 
 function addStyle(){
@@ -14,7 +16,7 @@ function addStyle(){
   style.textContent=`
 html,body,.app{touch-action:auto!important}
 button,a,label,input,select,textarea,[role="button"],[onclick]{touch-action:manipulation!important}
-#splash.hide,#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.sheet:not(.show),.paper-zoom:not(.show),.nat-modal:not(.show),.nat-zoom:not(.show),.abu-device-modal:not(.show),.abu-security-gate.hide{pointer-events:none!important}
+#splash.hide,#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.sheet:not(.show),.paper-zoom:not(.show),.nat-modal:not(.show),.nat-zoom:not(.show),.abu-device-modal:not(.show),.cs-modal:not(.show),.v-modal:not(.show),.v-busy:not(.show),.abu-settings-modal:not(.show),.abu-security-gate.hide{pointer-events:none!important}
 `;
   (document.head||document.documentElement).appendChild(style);
 }
@@ -31,8 +33,8 @@ function shouldBeDisabled(el){
   if(!el)return false;
   if(hiddenByStyle(el))return true;
   if(el.id==='splash')return el.classList.contains('hide')||el.getAttribute('aria-hidden')==='true';
-  if(el.id==='busyOverlay'||el.classList.contains('busy'))return !el.classList.contains('show');
-  if(el.classList.contains('sheet-backdrop')||el.classList.contains('sheet')||el.classList.contains('paper-zoom')||el.classList.contains('nat-modal')||el.classList.contains('nat-zoom')||el.classList.contains('abu-device-modal'))return !el.classList.contains('show');
+  if(el.id==='busyOverlay')return !el.classList.contains('show');
+  if(SHOW_GUARDED_CLASSES.some(name=>el.classList.contains(name)))return !el.classList.contains('show');
   if(el.classList.contains('abu-security-gate'))return el.classList.contains('hide');
   return false;
 }
@@ -60,7 +62,7 @@ function repair(){
     addStyle();
     if(document.documentElement.style.touchAction!=='auto')document.documentElement.style.touchAction='auto';
     if(document.body&&document.body.style.touchAction!=='auto')document.body.style.touchAction='auto';
-    document.querySelectorAll('#splash,#busyOverlay,.busy,.sheet-backdrop,.sheet,.paper-zoom,.nat-modal,.nat-zoom,.abu-device-modal,.abu-security-gate').forEach(guardElement);
+    document.querySelectorAll(GUARDED_SELECTOR).forEach(guardElement);
   }catch(_){}
 }
 
