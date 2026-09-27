@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +7,7 @@ const source = resolve(projectRoot, 'web');
 const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library');
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
 const DOWNLOAD_TIMEOUT_MS = 45000;
+const TOUCH_RUNTIME = 'touch-stability-runtime.js';
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
 const OCR_ASSETS = [
@@ -74,11 +75,28 @@ async function download(urls,path,minBytes){
   throw new Error(`Failed to prepare required offline OCR asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
 }
 
+async function injectTouchStabilityRuntime(){
+  const runtimePath=resolve(destination,TOUCH_RUNTIME);
+  if(!(await existsEnough(runtimePath,1000)))throw new Error(`Required Android touch runtime is missing or incomplete: ${TOUCH_RUNTIME}`);
+  const entryPath=resolve(destination,'index.html');
+  let html=await readFile(entryPath,'utf8');
+  const tag=`<script src="${TOUCH_RUNTIME}"></script>`;
+  if(!html.includes(tag)){
+    if(!html.includes('</body>'))throw new Error('Android web entry point is missing </body>; cannot install touch stability runtime');
+    html=html.replace('</body>',`${tag}\n</body>`);
+    await writeFile(entryPath,html,'utf8');
+  }
+  const verified=await readFile(entryPath,'utf8');
+  if(!verified.includes(tag))throw new Error('Touch stability runtime was not injected into Android web entry point');
+  process.stdout.write(`Android touch stability runtime enabled: ${TOUCH_RUNTIME}\n`);
+}
+
 // Canonical source is read-only during normal builds. Generate only the disposable
 // Android asset tree created by expo prebuild; never write downloaded files into web/.
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
+await injectTouchStabilityRuntime();
 
 for(const [relative,urls,minBytes] of OCR_ASSETS){
   await download(urls,resolve(vendorRoot,relative),minBytes);
