@@ -8,9 +8,9 @@ const packageJson=JSON.parse(pkg);
 const native=read(path.join(root,'index.js'));
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
 const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
-const touch=read(path.join(root,'web','touch-stability-runtime.js'));
+const legacyTouchPath=path.join(root,'web','touch-stability-runtime.js');
 try{new Function(read(path.join(root,'tools','check_import_workflow.js')))}catch(e){throw new Error(`import workflow checker syntax error: ${e.message}`)}
-try{new Function(touch)}catch(e){throw new Error(`touch stability runtime syntax error: ${e.message}`)}
+if(fs.existsSync(legacyTouchPath)){process.stderr.write('Legacy global touch stability runtime must stay deleted from canonical web source.\n');process.exit(1)}
 const required=[
   'permissions:\n  contents: read',
   'workflow_dispatch:',
@@ -26,7 +26,9 @@ const required=[
   './gradlew assembleRelease --no-daemon',
   'Verify standalone APK contains React Native bundle',
   'assets/index.android.bundle',
-  'test -n "$BUILD_TOOLS"',
+  'Verify legacy global touch patch is absent',
+  "test ! -e web/touch-stability-runtime.js",
+  "test ! -e android/app/src/main/assets/library/touch-stability-runtime.js",
   'apksigner" verify --verbose',
   'apksigner" verify --print-certs',
   'SIGNING_CERTIFICATE.txt',
@@ -42,7 +44,7 @@ const required=[
 ];
 const missing=required.filter(marker=>!source.includes(marker));
 if(missing.length){process.stderr.write('Android workflow missing safeguards:\n'+missing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-const forbidden=[
+const forbiddenWorkflow=[
   './gradlew assembleDebug --no-daemon',
   'android/app/build/outputs/apk/debug/',
   'standalone-release-debug-key-with-embedded-js',
@@ -55,22 +57,16 @@ const forbidden=[
   'Synchronize package lock',
   'npm install --no-audit --no-fund'
 ];
-const bad=forbidden.filter(marker=>source.includes(marker));
-if(bad.length){process.stderr.write('Android workflow contains unsafe/non-reproducible behavior:\n'+bad.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
+const badWorkflow=forbiddenWorkflow.filter(marker=>source.includes(marker));
+if(badWorkflow.length){process.stderr.write('Android workflow contains unsafe/non-reproducible behavior:\n'+badWorkflow.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 const checkWeb=String(packageJson.scripts?.['check:web']||'');
 const normalScripts=['start','android','android:prebuild'];
 if(!checkWeb.startsWith('node tools/check_project.js')){process.stderr.write('check:web must start with read-only project checks, not a mutating patch.\n');process.exit(1)}
 if(/scripts\/patch-|repair:source/.test(checkWeb)){process.stderr.write('check:web must not mutate or repair canonical source.\n');process.exit(1)}
 for(const name of normalScripts){if(/scripts\/patch-/.test(String(packageJson.scripts?.[name]||''))){process.stderr.write(`${name} must not patch canonical source automatically.\n`);process.exit(1)}}
-const repair=String(packageJson.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker)){process.stderr.write(`repair:source missing explicit compatibility repair ${marker}.\n`);process.exit(1)}
 const assetRequired=[
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
   'const DOWNLOAD_TIMEOUT_MS = 45000;',
-  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",
-  'async function injectTouchStabilityRuntime()',
-  'await injectTouchStabilityRuntime();',
-  'Touch stability runtime was not injected into Android web entry point',
   'await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });',
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
@@ -81,41 +77,31 @@ const assetRequired=[
   'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'Required offline OCR asset is missing or incomplete',
-  'canonical web source remains unchanged'
+  'canonical web source remains unchanged',
+  'No touch/pointer'
 ];
 for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing canonical-source safeguard: ${marker}\n`);process.exit(1)}
-const touchRequired=[
+const forbiddenAsset=[
+  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",
+  'injectTouchStabilityRuntime',
   '__ABU_TOUCH_STABILITY_V1__',
-  'html,body,.app{touch-action:auto!important}',
-  '.sheet:not(.show)',
-  '.nat-modal:not(.show)',
-  '.cs-modal:not(.show)',
-  '.v-modal:not(.show)',
-  '.v-busy:not(.show)',
-  '.abu-settings-modal:not(.show)',
-  '#abuRecoveryModal',
-  'pointer-events:none!important',
-  'new MutationObserver(scheduleRepair)',
-  "document.addEventListener('pointerup'",
-  "document.addEventListener('touchend'",
-  "JSON.stringify({type:'webBootReady'})"
+  "resolve(source, 'vendor', 'tesseract')",
+  'tessdata.projectnaptha.com'
 ];
-const touchMissing=touchRequired.filter(marker=>!touch.includes(marker));
-if(touchMissing.length){process.stderr.write('Touch stability runtime missing required safeguards:\n'+touchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-const nativeTouchRequired=[
+const badAssets=forbiddenAsset.filter(marker=>assets.includes(marker));
+if(badAssets.length){process.stderr.write('Android asset preparation still contains removed/unsafe behavior:\n'+badAssets.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
+const nativeReadyRequired=[
   "message.type === 'webBootReady'",
   'const STARTUP_WATCHDOG_MS = 3500;',
   'onLoad={() => setWebReady(true)}',
   'onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}',
   'onLoadEnd={() => setWebReady(true)}'
 ];
-const nativeTouchMissing=nativeTouchRequired.filter(marker=>!native.includes(marker));
-if(nativeTouchMissing.length){process.stderr.write('Native WebView touch/startup bridge missing required safeguards:\n'+nativeTouchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
+const nativeReadyMissing=nativeReadyRequired.filter(marker=>!native.includes(marker));
+if(nativeReadyMissing.length){process.stderr.write('Native WebView startup readiness safeguards missing:\n'+nativeReadyMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 const copyAt=assets.indexOf('await cp(source, destination');
-const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');
 const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||injectTouchAt<0||downloadAt<0||copyAt>injectTouchAt||injectTouchAt>downloadAt){process.stderr.write('Android assets must copy canonical web source, inject touch stability runtime, then generate OCR assets.\n');process.exit(1)}
+if(copyAt<0||downloadAt<0||copyAt>downloadAt){process.stderr.write('Android assets must copy canonical web source before generating offline OCR assets.\n');process.exit(1)}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
   ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
@@ -138,4 +124,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime, hidden section modal guards, and both sides of the WebView ready bridge are locked by tests; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
+process.stdout.write('Android build check passed: clean builds keep the legacy global touch patch deleted, copy canonical UI source directly, embed pinned Arabic/English OCR assets, verify the React Native bundle and APK signature/certificate, emit SHA-256, and keep CI read-only.\n');
