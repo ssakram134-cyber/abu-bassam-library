@@ -24,8 +24,8 @@ import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 
 const APP_URL = 'file:///android_asset/library/index.html';
-const APP_VERSION = '4.3.2';
-const BUILD_NUMBER = '432';
+const APP_VERSION = '5.0.0';
+const BUILD_NUMBER = '500';
 const STARTUP_WATCHDOG_MS = 3500;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
@@ -116,6 +116,7 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [webInstanceKey, setWebInstanceKey] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -128,6 +129,12 @@ function App() {
   const closeCamera = useCallback(() => {
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
+  const recoverWebRenderer = useCallback((didCrash) => {
+    closeCamera();
+    setWebReady(false);
+    setWebInstanceKey((value) => value + 1);
+    if (didCrash) Alert.alert('تمت استعادة التطبيق', 'تعطل محرك العرض الداخلي وتمت إعادة إنشائه تلقائيًا. إذا تكرر ذلك، قلّل عدد الصور الكبيرة في العملية الواحدة.');
+  }, [closeCamera]);
 
   useEffect(() => {
     if (webReady) return undefined;
@@ -381,6 +388,7 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
+        key={webInstanceKey}
         ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
         allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
@@ -394,6 +402,7 @@ function App() {
         onLoad={() => setWebReady(true)}
         onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}
         onLoadEnd={() => setWebReady(true)}
+        onRenderProcessGone={(event) => recoverWebRenderer(!!event.nativeEvent?.didCrash)}
         onError={() => { setWebReady(true); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
