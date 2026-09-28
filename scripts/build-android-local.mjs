@@ -42,6 +42,15 @@ function validateSigningConfiguration() {
   return configured;
 }
 
+function removeStaleBuildArtifacts() {
+  for (const dir of ['android','dist','.expo']) {
+    fs.rmSync(path.join(root, dir), { recursive: true, force: true });
+  }
+  for (const name of fs.readdirSync(root)) {
+    if (/\.(?:apk|aab|apks)$/i.test(name)) fs.rmSync(path.join(root, name), { force: true });
+  }
+}
+
 function findApk(dir) {
   if (!fs.existsSync(dir)) return null;
   const stack = [dir];
@@ -120,6 +129,9 @@ try {
   console.log(`Signing mode: ${customSigning ? 'production/custom key' : 'test/default key'}`);
   if (!customSigning && !requireReleaseKey) console.warn('WARNING: local test build only; do not distribute as production release.');
 
+  console.log('0/6 Removing stale generated Android/install artifacts...');
+  removeStaleBuildArtifacts();
+
   console.log('1/6 Checking project...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'check:web']);
 
@@ -143,10 +155,10 @@ try {
   console.log('6/6 Preparing distributable files...');
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist, { recursive: true });
-  const out = path.join(dist, 'Abu_Bassam_Library_4.3.2.apk');
+  const out = path.join(dist, 'Abu_Bassam_Library_5.0.0.apk');
   fs.copyFileSync(apk, out);
   const hash = sha256(out);
-  fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  Abu_Bassam_Library_4.3.2.apk\n`);
+  fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  Abu_Bassam_Library_5.0.0.apk\n`);
   fs.writeFileSync(path.join(dist, 'SIGNING_CERTIFICATE.txt'), certificate);
   fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), customSigning ? 'signed-production-release-with-embedded-js\n' : 'local-test-release-default-key-with-embedded-js\n');
   if (requireReleaseKey && !customSigning) throw new Error('Refusing to mark an unsigned/test APK as a production release');
