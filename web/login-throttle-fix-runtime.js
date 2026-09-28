@@ -55,8 +55,8 @@ function replaceHandlers(){
 function init(){
   if(localStorage.getItem(PATCH_MARKER)!=='1'){clearFailures();localStorage.setItem(PATCH_MARKER,'1')}
   let tries=0;const timer=setInterval(()=>{tries++;if(replaceHandlers()||tries>160)clearInterval(timer)},50);
-  let observerTimer=0;
-  new MutationObserver(()=>{clearTimeout(observerTimer);observerTimer=setTimeout(replaceHandlers,0)}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-throttled','data-abu-throttle-fix']});
+  window.addEventListener('pageshow',replaceHandlers);
+  document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(replaceHandlers,0));
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
