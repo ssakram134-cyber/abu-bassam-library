@@ -28,10 +28,6 @@ function restoreNativeTouch(){
       s.textContent=`html,body,.app{touch-action:auto!important}button,a,label,input,select,textarea,[role="button"],[onclick]{touch-action:auto!important}#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.paper-zoom:not(.show),.abu-security-gate.hide,.abu-device-modal:not(.show){pointer-events:none!important}`;
       (document.head||document.documentElement).appendChild(s);
     }
-    const splash=$('splash');
-    if(splash&&(splash.getAttribute('aria-hidden')==='true'||splash.style.display==='none'||getComputedStyle(splash).display==='none')){
-      splash.style.pointerEvents='none';
-    }
   }catch(e){}
 }
 function removeFlex(){['abuFlexFab','abuFlexPanel','abuGlobalFlexStyle'].forEach(id=>$(id)?.remove());document.querySelectorAll('[data-abu-flex-zoom]').forEach(el=>{el.style.zoom='';el.removeAttribute('data-abu-flex-zoom');el.classList.remove('abu-flex-zoomed','abu-flex-target')});document.documentElement.classList.remove('abu-flex-has-zoom');document.body.classList.remove('abu-flex-has-zoom','abu-flex-moving')}
