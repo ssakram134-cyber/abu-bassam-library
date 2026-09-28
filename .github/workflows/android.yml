@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
   push:
-    branches: [main]
+    branches: [main, fresh-rebuild-20260928-release6]
   pull_request:
 
 permissions:
