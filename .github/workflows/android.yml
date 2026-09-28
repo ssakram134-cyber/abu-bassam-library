@@ -25,6 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Remove all previous generated Android and installer artifacts
+        shell: bash
+        run: rm -rf android dist .expo
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -55,6 +59,14 @@ jobs:
         env:
           CI: "1"
         run: npm run android:prebuild
+
+      - name: Verify legacy global touch patch is absent
+        shell: bash
+        run: |
+          test ! -e web/touch-stability-runtime.js
+          test ! -e android/app/src/main/assets/library/touch-stability-runtime.js
+          ! grep -R -n --fixed-strings 'touch-stability-runtime.js' android/app/src/main/assets/library
+          ! grep -R -n --fixed-strings '__ABU_TOUCH_STABILITY_V1__' android/app/src/main/assets/library
 
       - name: Configure existing release key
         if: ${{ env.HAS_ANDROID_RELEASE_KEY == 'true' }}
@@ -94,6 +106,7 @@ jobs:
       - name: Prepare distributable APK
         shell: bash
         run: |
+          rm -rf dist
           mkdir -p dist
           APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
           cp "$APK" "dist/Abu_Bassam_Library_4.3.2.apk"
