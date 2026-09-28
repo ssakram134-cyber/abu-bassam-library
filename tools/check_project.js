@@ -26,7 +26,8 @@ const packageJson=JSON.parse(readRoot('package.json'));
 if(packageJson.version!=='4.3.2')errors.push(`package.json: expected version 4.3.2, got ${packageJson.version}`);
 for(const dep of ['expo','react-native','react-native-webview','expo-print','expo-secure-store','expo-local-authentication','expo-camera'])if(!packageJson.dependencies?.[dep])errors.push(`package.json: missing ${dep}`);
 const appJson=JSON.parse(readRoot('app.json'));const android=appJson.expo?.android||{};
-if(android.package!=='com.abubassam.librarycamera3')errors.push(`app.json: unexpected Android package ${android.package||'missing'}`);
+if(android.package!=='com.abubassam.library.rebuild')errors.push(`app.json: unexpected Android package ${android.package||'missing'}`);
+if(android.allowBackup!==false)errors.push('app.json: Android backup must stay disabled for the isolated rebuild data namespace');
 if(String(android.versionCode)!=='432')errors.push(`app.json: expected versionCode 432, got ${android.versionCode}`);
 const librarySource=read('card-template-library.js');const sandbox={window:{}};vm.runInNewContext(librarySource,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
 if(!Array.isArray(groups))errors.push('card-template-library.js: library did not load');
@@ -59,4 +60,4 @@ for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGI
 if(/Ahmed Hassan|أحمد حسن/i.test(projectText))errors.push('Project contains a previous designer name');
 if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write(`Project checks passed (${required.length} required assets): canonical native startup security, smart camera frames, bounded named image saving, secure bootstrap ordering, syntax, approved card counts, A4/A5/custom questions, native print/PDF, strict device identity, configurable device limit, and secret/designer checks.\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets): canonical native startup security, smart camera frames, bounded named image saving, secure bootstrap ordering, syntax, approved card counts, A4/A5/custom questions, native print/PDF, strict device identity, configurable device limit, isolated Android data namespace, and secret/designer checks.\n`);
