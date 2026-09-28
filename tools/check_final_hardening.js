@@ -40,7 +40,7 @@ need(backup,"if(d.backup.branch_device_id!==cur)",'backup restore branch binding
 need(backup,"SECURE_STORAGE_REQUIRED",'backup SecureStore fail-closed requirement');
 
 const cardsLoader=read('web/cards-section-upgrades-runtime.js');
-const adminPermissions=read('web/admin-permissions-runtime.js');
+const adminPermissions=read('web/admin-permissions-runtime.js').replace(/\r\n?/g,'\n');
 try{new vm.Script(cardsLoader,{filename:'cards-section-upgrades-runtime.js'})}catch(e){errors.push(`cards-section-upgrades-runtime.js syntax: ${e.message}`)}
 try{new vm.Script(adminPermissions,{filename:'admin-permissions-runtime.js'})}catch(e){errors.push(`admin-permissions-runtime.js syntax: ${e.message}`)}
 need(cardsLoader,'function ensurePermissionFacade()','cards permission bootstrap facade');

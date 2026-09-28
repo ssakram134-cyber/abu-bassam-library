@@ -2,7 +2,7 @@ const fs=require('fs');
 const path=require('path');
 const root=path.resolve(__dirname,'..');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
-const source=read(path.join(root,'.github','workflows','android.yml'));
+const source=read(path.join(root,'.github','workflows','android.yml')).replace(/\r\n?/g,'\n');
 const pkg=read(path.join(root,'package.json'));
 const packageJson=JSON.parse(pkg);
 const native=read(path.join(root,'index.js'));

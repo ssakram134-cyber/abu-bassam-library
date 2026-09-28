@@ -65,7 +65,7 @@ need(preload,"item.id==='env-10'",'legacy env-10 must be removed from saved cust
 need(preload,"state.templateId==='env-10'",'legacy active env-10 state must migrate to an approved template');
 reject(preload,'function env10(','obsolete env-10 generator returned');
 reject(preload,"id:'env-10'",'obsolete env-10 injection returned');
-const envelope=(library.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'');
+const envelope=(library.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'';
 const ids=[...envelope.matchAll(/id:'env-(\d+)'/g)].map(x=>Number(x[1]));
 if(ids.length!==9||ids.some((n,i)=>n!==i+1))throw new Error(`cards latest hardening failed: envelope library must be env-1..env-9, found ${ids.join(',')}`);
 console.log('latest cards hardening checks passed: permissions fail closed, output bridges are guarded, standalone editing stays template-bound, and the approved envelope set is exactly env-1..env-9 with legacy env-10 migrated out.');

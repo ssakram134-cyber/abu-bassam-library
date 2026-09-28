@@ -45,12 +45,10 @@ function nativeAvailable(){return !!(window.Android&&typeof Android.security==='
 
 function nativeRequest(action,payload={}){
   if(!nativeAvailable()){
-    if(action==='secureGet')return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');
-    if(action==='secureSet'){localStorage.setItem('__dev_secure_'+payload.key,String(payload.value||''));return Promise.resolve(true)}
-    if(action==='secureDelete'){localStorage.removeItem('__dev_secure_'+payload.key);return Promise.resolve(true)}
     if(action==='deviceInfo')return Promise.resolve({name:'متصفح الاختبار',model:'Browser',os:'web',androidVersion:'',appVersion:APP_VERSION});
     if(action==='biometricStatus')return Promise.resolve({available:false,enrolled:false,types:[]});
     if(action==='biometricAuth')return Promise.resolve({success:false,error:'native_unavailable'});
+    if(['secureGet','secureSet','secureDelete'].includes(action))return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
     return Promise.resolve(null);
   }
   return new Promise((resolve,reject)=>{

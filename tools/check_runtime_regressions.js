@@ -17,8 +17,9 @@ for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-sr
 for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"'])forbid(productivity,marker,'questions-only section');
 
 const recovery=read('feature-recovery-runtime.js');
-for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
+for(const marker of ["addCardTool(types,'envelope'",'refreshFeatures','[180,700,1800,3500].forEach(delay=>setTimeout(refreshFeatures,delay))','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
 
+forbid(recovery,'MutationObserver','cards/startup UI');
 const device=read('device-name-runtime.js');
 for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-throttle-fix-runtime.js','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 

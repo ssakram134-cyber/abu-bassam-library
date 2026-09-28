@@ -17,7 +17,8 @@ for(const m of ['src="about:blank"','data-src="questions-ar.html"','data-src="im
 for(const m of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"','الأسئلة والظروف'])forbid(productivity,m,'questions placement');
 
 const recovery=read('feature-recovery-runtime.js');
-for(const m of ["envelope:{title:'صناعة الظرف',file:'envelopes.html'}","addCardTool(types,'envelope'","addCardTool(types,'thanks'","addCardTool(types,'certificate'",'abuCardsTemplatesBtn','abuSectionTemplatesBtn','top:76px','width:52px','height:52px','scheduleRecovery'])need(recovery,m,'cards recovery');
+for(const m of ["envelope:{title:'صناعة الظرف',file:'envelopes.html'}","addCardTool(types,'envelope'","addCardTool(types,'thanks'","addCardTool(types,'certificate'",'abuCardsTemplatesBtn','abuSectionTemplatesBtn','top:76px','width:52px','height:52px'])need(recovery,m,'cards recovery');
+for(const m of ['MutationObserver','.style.touchAction','.style.pointerEvents'])forbid(recovery,m,'cards recovery interaction');
 forbid(recovery,"types.querySelector('[data-type=\"envelope\"]')?.remove()",'cards recovery');
 
 const lib=read('card-template-library.js');
@@ -48,11 +49,15 @@ const studio=read('design-studio-runtime.js');for(const m of ['Array.from({lengt
 const envelope=read('envelope-agreement-runtime.js');for(const m of ['REMOVED_KEY','markRemoved(marker)','clearRemoved()','dataset.agreedField','DesignStudio.remove=function','A4/A5'])need(envelope,m,'optional envelope fields');
 
 const login=read('login-throttle-fix-runtime.js');
-for(const m of ['credentialFailure(message)','deviceOrPostAuthFailure(message)','recordCredentialFailure','clearFailures','legacyInstalled','loginBusy','attributeFilter'])need(login,m,'login throttle fix');
+for(const m of ['credentialFailure(message)','deviceOrPostAuthFailure(message)','recordCredentialFailure','clearFailures','legacyInstalled','loginBusy'])need(login,m,'login throttle fix');
+forbid(login,'MutationObserver','login throttle fix');
 const direction=read('login-input-direction-runtime.js');for(const m of ["setAttribute('dir','ltr')","setAttribute('lang','en')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')",'unicodeBidi'])need(direction,m,'login LTR');
 
 const patch=rootRead('scripts/patch-startup-stability.mjs');
-for(const m of ['STARTUP_WATCHDOG_MS','onLoadProgress','setWebReady(true)','onShouldStartLoadWithRequest','file:///android_asset/library/','scheduleRecovery'])need(patch,m,'startup/security patch source');
+for(const m of ['STARTUP_WATCHDOG_MS','onLoadProgress','setWebReady(true)','onShouldStartLoadWithRequest','file:///android_asset/library/'])need(patch,m,'startup/security patch source');
+need(patch,'does not modify web touch/pointer behavior','startup/security patch source');
+forbid(patch,'MutationObserver','startup/security patch source');
+forbid(patch,'feature-recovery-runtime.js','startup/security patch source');
 const patchedIndex=rootRead('index.js');
 for(const m of ["originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest','file:///android_asset/library/','onLoadProgress','STARTUP_WATCHDOG_MS'])need(patchedIndex,m,'patched WebView security state');
 for(const m of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(patchedIndex,m,'patched WebView security state');
