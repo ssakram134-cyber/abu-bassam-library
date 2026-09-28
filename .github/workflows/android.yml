@@ -25,6 +25,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Remove stale build and installer artifacts
+        shell: bash
+        run: |
+          rm -rf android dist .expo
+          find . -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.apks' \) -delete
+          test -z "$(find . -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.apks' \) -print -quit)"
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -96,17 +103,17 @@ jobs:
         run: |
           mkdir -p dist
           APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n1)"
-          cp "$APK" "dist/Abu_Bassam_Library_4.3.2.apk"
+          cp "$APK" "dist/Abu_Bassam_Library_5.0.0.apk"
           cp dist-signing-certificate.txt dist/SIGNING_CERTIFICATE.txt
           if [ "$HAS_ANDROID_RELEASE_KEY" = "true" ]; then
             printf 'signed-production-release-with-embedded-js\n' > dist/BUILD_TYPE.txt
           else
             printf 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES\n' > dist/BUILD_TYPE.txt
           fi
-          test -s dist/Abu_Bassam_Library_4.3.2.apk
-          unzip -l dist/Abu_Bassam_Library_4.3.2.apk | grep -q 'assets/index.android.bundle'
-          sha256sum dist/Abu_Bassam_Library_4.3.2.apk > dist/SHA256.txt
-          ls -lh dist/Abu_Bassam_Library_4.3.2.apk
+          test -s dist/Abu_Bassam_Library_5.0.0.apk
+          unzip -l dist/Abu_Bassam_Library_5.0.0.apk | grep -q 'assets/index.android.bundle'
+          sha256sum dist/Abu_Bassam_Library_5.0.0.apk > dist/SHA256.txt
+          ls -lh dist/Abu_Bassam_Library_5.0.0.apk
 
       - name: Enforce requested production signature
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.production }}
@@ -119,7 +126,7 @@ jobs:
         with:
           name: abu-bassam-android-${{ github.sha }}
           path: |
-            dist/Abu_Bassam_Library_4.3.2.apk
+            dist/Abu_Bassam_Library_5.0.0.apk
             dist/BUILD_TYPE.txt
             dist/SHA256.txt
             dist/SIGNING_CERTIFICATE.txt
