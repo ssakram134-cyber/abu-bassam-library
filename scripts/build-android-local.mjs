@@ -42,6 +42,12 @@ function validateSigningConfiguration() {
   return configured;
 }
 
+function cleanGeneratedArtifacts() {
+  for (const relative of ['android', 'dist', '.expo']) {
+    fs.rmSync(path.join(root, relative), { recursive: true, force: true });
+  }
+}
+
 function findApk(dir) {
   if (!fs.existsSync(dir)) return null;
   const stack = [dir];
@@ -120,27 +126,30 @@ try {
   console.log(`Signing mode: ${customSigning ? 'production/custom key' : 'test/default key'}`);
   if (!customSigning && !requireReleaseKey) console.warn('WARNING: local test build only; do not distribute as production release.');
 
-  console.log('1/6 Checking project...');
+  console.log('1/7 Removing every generated Android/install artifact from previous builds...');
+  cleanGeneratedArtifacts();
+
+  console.log('2/7 Checking canonical project source...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'check:web']);
 
-  console.log('2/6 Generating Android project and offline assets...');
+  console.log('3/7 Generating a completely new Android project and offline assets...');
   run(win ? 'npm.cmd' : 'npm', ['run', 'android:prebuild'], root, { ...process.env, CI: '1' });
   ensureReleaseSigningHook(customSigning);
 
-  console.log('3/6 Building release APK...');
+  console.log('4/7 Building release APK from the newly generated Android project...');
   const androidDir = path.join(root, 'android');
   const gradle = win ? 'gradlew.bat' : './gradlew';
   run(gradle, ['assembleRelease', '--no-daemon'], androidDir);
 
-  console.log('4/6 Verifying embedded JS bundle...');
+  console.log('5/7 Verifying embedded JS bundle...');
   const apk = findApk(path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release'));
   if (!apk || !fs.statSync(apk).size) throw new Error('Release APK was not produced');
   verifyBundle(apk);
 
-  console.log('5/6 Verifying APK signature and certificate...');
+  console.log('6/7 Verifying APK signature and certificate...');
   const certificate = verifySignature(apk);
 
-  console.log('6/6 Preparing distributable files...');
+  console.log('7/7 Preparing a fresh distributable APK...');
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist, { recursive: true });
   const out = path.join(dist, 'Abu_Bassam_Library_4.3.2.apk');
