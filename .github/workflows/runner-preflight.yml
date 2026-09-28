@@ -1,0 +1,25 @@
+name: GitHub runner preflight
+on:
+  push:
+    branches: ['diagnose/github-runner-20260928']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runner-preflight
+  cancel-in-progress: true
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Prove the hosted runner can execute a step
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, platform
+          evidence = {"runner_started": True, "system": platform.system(), "purpose": "Infrastructure only; no app was built"}
+          print(json.dumps(evidence))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as report:
+              report.write("Hosted runner executed Python successfully.\n\nThis diagnostic does not build or validate the Android app.\n")
+          PY
