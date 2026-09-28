@@ -20,8 +20,9 @@ function apply(){
 
 function init(){
   apply();
-  let timer=0;
-  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(apply,30)}).observe(document.documentElement,{childList:true,subtree:true});
+  [80,250,700,1600].forEach(delay=>setTimeout(apply,delay));
+  window.addEventListener('pageshow',apply);
+  document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(apply,0));
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
