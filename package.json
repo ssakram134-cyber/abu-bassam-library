@@ -1,6 +1,6 @@
 {
   "name": "abu-bassam-library-native",
-  "version": "4.3.2",
+  "version": "5.0.0",
   "private": true,
   "main": "index-auth.js",
   "scripts": {
