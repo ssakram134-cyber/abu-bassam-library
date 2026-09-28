@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
   push:
-    branches: [main]
+    branches: [main, rebuild-clean-20260928]
   pull_request:
 
 permissions:
