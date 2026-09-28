@@ -16,9 +16,9 @@ let index = await readFile(indexPath, 'utf8');
 if (!index.includes('const STARTUP_WATCHDOG_MS = 3500;')) {
   index = replaceRequired(
     index,
-    "const BUILD_NUMBER = '432';\nconst PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';",
-    "const BUILD_NUMBER = '432';\nconst STARTUP_WATCHDOG_MS = 3500;\nconst PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';",
-    'watchdog constant'
+    "const BUILD_NUMBER = '500';\nconst PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';",
+    "const BUILD_NUMBER = '500';\nconst STARTUP_WATCHDOG_MS = 3500;\nconst PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';",
+    'v5 watchdog constant'
   );
 }
 
@@ -99,13 +99,16 @@ if (!index.includes('const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i
 await writeFile(indexPath, index, 'utf8');
 
 let recovery = await readFile(recoveryPath, 'utf8');
-const oldObserver = "function init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()}).observe(document.documentElement,{childList:true,subtree:true})}";
-const newObserver = "let recoveryTimer=0;function scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()},60)}\nfunction init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(scheduleRecovery).observe(document.documentElement,{childList:true,subtree:true})}";
-if (recovery.includes(oldObserver)) {
-  recovery = recovery.replace(oldObserver, newObserver);
-} else if (!recovery.includes('new MutationObserver(scheduleRecovery).observe(document.documentElement,{childList:true,subtree:true})')) {
-  throw new Error('Startup stability patch failed: debounced recovery observer');
-}
+recovery = recovery.replace(/\n\s*const splash=\$\('splash'\);\n\s*if\(splash&&[\s\S]*?\n\s*}\n(?=\s*}\s*catch\(e\)\{\})/, '\n');
+
+const legacyObserver = "function init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()}).observe(document.documentElement,{childList:true,subtree:true})}";
+const debouncedObserver = "let recoveryTimer=0;function scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{removeFlex();cleanQuestions();installCards();removeOldPlacements()},60)}\nfunction init(){addCss();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);new MutationObserver(scheduleRecovery).observe(document.documentElement,{childList:true,subtree:true})}";
+const eventRecovery = "let recoveryTimer=0;\nfunction scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{restoreNativeTouch();removeFlex();cleanQuestions();installCards();removeOldPlacements()},60)}\nfunction installRecoverySignals(){\n  window.addEventListener('pageshow',scheduleRecovery,{passive:true});\n  window.addEventListener('focus',scheduleRecovery,{passive:true});\n  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')scheduleRecovery()},{passive:true});\n  document.addEventListener('abu-bassam-section-changed',scheduleRecovery,{passive:true});\n}\nfunction init(){addCss();restoreNativeTouch();removeFlex();cleanQuestions();installCards();removeOldPlacements();window.addEventListener('message',recoveryMessage);installRecoverySignals();[120,600,1800].forEach(ms=>setTimeout(scheduleRecovery,ms))}";
+if (recovery.includes(legacyObserver)) recovery = recovery.replace(legacyObserver, eventRecovery);
+if (recovery.includes(debouncedObserver)) recovery = recovery.replace(debouncedObserver, eventRecovery);
+if (/new\s+MutationObserver\s*\(/.test(recovery)) throw new Error('Startup stability repair refuses global MutationObserver recovery');
+if (recovery.includes("style.pointerEvents='none'")) throw new Error('Startup stability repair refuses runtime pointer-events mutation');
+if (!recovery.includes("document.addEventListener('abu-bassam-section-changed',scheduleRecovery")) throw new Error('Startup stability repair requires event-based recovery signals');
 await writeFile(recoveryPath, recovery, 'utf8');
 
-process.stdout.write('Startup stability repair verified/applied: watchdog, HTTPS-only external web navigation, named image saving, and debounced recovery observer.\n');
+process.stdout.write('Startup stability repair verified/applied: v5 watchdog, safe external navigation, named mixed-format compressed image saving, event-based recovery, and no global touch/DOM interception.\n');
