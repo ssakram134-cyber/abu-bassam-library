@@ -2,7 +2,7 @@
 'use strict';
 if(window.__ABU_PERMISSION_SECTION_GUARDS_V1__)return;
 window.__ABU_PERMISSION_SECTION_GUARDS_V1__=true;
-let opsPatched=false,notifyPatched=false,securityPatched=false,settingsPatched=false,printPatched=false;
+let opsPatched=false,notifyPatched=false,securityPatched=false,settingsPatched=false,printPatched=false,tickTimer=0;
 const $=id=>document.getElementById(id);
 const can=k=>window.AbuBassamPermissions?.can?.(k)!==false;
 function deny(k){const item=window.AbuBassamPermissions?.items?.find?.(x=>x.key===k);alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+(item?.label||k));return false}
@@ -18,10 +18,19 @@ function guardCustomerPrivacy(){const btn=$('custBtn');if(btn){btn.style.display
 function inferCardPermission(text){text=String(text||'');if(/طبع|Print/i.test(text))return'cardsPrint';if(/PDF/i.test(text))return'cardsExportPdf';if(/حفظ.*صورة|تنزيل.*صورة|Export.*Image/i.test(text))return'cardsExportImage';if(/باركود|Barcode/i.test(text))return'cardsBarcode';if(/QR/i.test(text))return'cardsQr';if(/قالب|Template/i.test(text))return/cardsManage|مخصص/i.test(text)?'cardsManageCustomTemplates':'cardsTemplatesEdit';if(/حذف|Delete/i.test(text))return'cardsDelete';if(/نسخ|Duplicate/i.test(text))return'cardsDuplicate';if(/صورة|Image|Photo/i.test(text))return'cardsEditImage';if(/نص|Text|خط|Font/i.test(text))return'cardsEditText';return'cardsEdit'}
 function isCardContext(el){return !!el?.closest?.('[id*="card" i],[id*="badge" i],[class*="card" i],[class*="badge" i]')||/باج|كارت|بطاقة/.test(String(el?.closest?.('section,div')?.querySelector?.('h1,h2,h3,b')?.textContent||''))}
 function clickGuard(e){const t=e.target?.closest?.('button,a,label,[role="button"]');if(!t)return;const text=String(t.textContent||t.title||'').trim();if(isCardContext(t)){const k=inferCardPermission(text);if(!can(k)){e.preventDefault();e.stopImmediatePropagation();deny(k);return}}if(/إعادة ضبط المصنع|Factory Reset/i.test(text)&&!can('settingsFactoryReset')){e.preventDefault();e.stopImmediatePropagation();deny('settingsFactoryReset');return}if(/تغيير كلمة المرور/i.test(text)&&!can('securityChangePassword')){e.preventDefault();e.stopImmediatePropagation();deny('securityChangePassword');return}if(/بصمة/.test(text)&&!can('securityBiometric')){e.preventDefault();e.stopImmediatePropagation();deny('securityBiometric');return}}
-function guardMainPhotoUi(){const map=[['imageInput','imageExport'],['paperSize','settingsPrinting'],['photoSize','settingsPrinting']];map.forEach(([id,k])=>{const el=$(id);if(el){el.disabled=!can(k);if(!can(k))el.style.opacity='.45'}});document.querySelectorAll('label[for="imageInput"]').forEach(el=>{el.style.pointerEvents=can('imageExport')?'':'none';el.style.opacity=can('imageExport')?'1':'.45'})}
+function guardMainPhotoUi(){const map=[['imageInput','imageExport'],['paperSize','settingsPrinting'],['photoSize','settingsPrinting']];map.forEach(([id,k])=>{const el=$(id);if(el){el.disabled=!can(k);if(!can(k))el.style.opacity='.45';else el.style.opacity=''}});document.querySelectorAll('label[for="imageInput"]').forEach(el=>{el.style.pointerEvents=can('imageExport')?'':'none';el.style.opacity=can('imageExport')?'1':'.45'})}
 function guardSections(){forceHide('questionsCenter','questionsView');forceHide('compressorCenter','compressUse');guardTopButtons();guardCustomerPrivacy();guardMainPhotoUi()}
 function tick(){patchOps();patchNotifications();patchSecurity();patchSettings();patchPrint();guardSections()}
-function boot(){document.addEventListener('click',clickGuard,true);let n=0,t=setInterval(()=>{tick();if(++n>300)clearInterval(t)},100);new MutationObserver(()=>setTimeout(tick,0)).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(tick,100));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(tick,50)})}
+function scheduleTick(delay=0){clearTimeout(tickTimer);tickTimer=setTimeout(tick,delay)}
+function boot(){
+  document.addEventListener('click',clickGuard,true);
+  document.addEventListener('click',()=>scheduleTick(40));
+  document.addEventListener('abu-bassam-auth-changed',()=>scheduleTick(80));
+  window.addEventListener('abu:permissions-changed',()=>scheduleTick(0));
+  window.addEventListener('pageshow',()=>scheduleTick(0));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleTick(40)});
+  [0,120,350,900,1800,3500].forEach(delay=>setTimeout(tick,delay));
+}
 window.AbuPermissionSectionGuards={tick};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
