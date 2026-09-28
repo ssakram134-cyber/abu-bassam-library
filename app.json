@@ -7,8 +7,9 @@
     "orientation": "portrait",
     "scheme": "abu-bassam-library",
     "android": {
-      "package": "com.abubassam.librarycamera3",
+      "package": "com.abubassam.library.rebuild",
       "versionCode": 432,
+      "allowBackup": false,
       "permissions": ["CAMERA", "INTERNET"],
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
