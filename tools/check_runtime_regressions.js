@@ -13,8 +13,14 @@ for(const marker of ['__ABU_ENVELOPE_AGREEMENT_V3__','REMOVED_KEY','markRemoved'
 forbid(envelope,'new MutationObserver','envelope optional fields');
 
 const productivity=read('productivity-tools-runtime.js');
-for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame','a4-card-sheet-editor-v2-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V2__'])need(productivity,marker,'startup lazy loading');
+for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame','a4-card-sheet-editor-v2-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V2__','const proto=win.EventTarget?.prototype',"listener?.name==='schedule'",'proto.addEventListener=nativeAdd'])need(productivity,marker,'startup lazy loading');
 for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"','a4-card-sheet-editor-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V1__'])forbid(productivity,marker,'questions-only section');
+
+const questionPaper=read('questions-paper-runtime.js');
+for(const marker of ['__ABU_QUESTION_COMPLETION_LOAD_GUARD_V1__','loadCompletionGuarded','delete opts.characterData',"listener?.name==='queueDraft'",'EventTarget.prototype.addEventListener=nativeAdd'])need(questionPaper,marker,'question completion load guard');
+const questionFinal=read('questions-final-fixes-runtime.js');
+for(const marker of ['__ABU_QUESTION_SINGLE_AUTOSAVE_V1__','window.scheduleQuestionDraft=schedule','canvas.width=1;canvas.height=1'])need(questionFinal,marker,'question final fixes');
+forbid(questionFinal,'new MutationObserver','question final fixes duplicate observer');
 
 const recovery=read('feature-recovery-runtime.js');
 for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','installRecoverySignals','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
@@ -38,10 +44,10 @@ const repair=fs.readFileSync(path.join(root,'scripts','patch-startup-stability.m
 for(const marker of ["const BUILD_NUMBER = '500'",'event-based recovery signals','Startup stability repair refuses global MutationObserver recovery','Startup stability repair refuses runtime pointer-events mutation','named mixed-format compressed image saving'])need(repair,marker,'startup repair tool');
 for(const marker of ["const BUILD_NUMBER = '432'",'const newObserver =','debounced recovery observer'])forbid(repair,marker,'startup repair tool');
 
-for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','feature-recovery-runtime.js','touch-stability-runtime.js','questions-gesture-runtime.js','device-name-runtime.js']){
+for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','questions-paper-runtime.js','questions-final-fixes-runtime.js','feature-recovery-runtime.js','touch-stability-runtime.js','questions-gesture-runtime.js','device-name-runtime.js']){
   try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
 }
 try{new vm.Script(repair,{filename:'patch-startup-stability.mjs'})}catch(error){if(!/Cannot use import statement outside a module/.test(String(error.message)))errors.push(`patch-startup-stability.mjs: ${error.message}`)}
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: lazy questions/compressor, V2 A4 editor, no global touch/DOM interception, native-only question gestures, v5 isolated device identity, WebView renderer recovery, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, no global touch/DOM interception, native-only question gestures, v5 isolated device identity, WebView renderer recovery, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
