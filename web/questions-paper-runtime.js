@@ -3,6 +3,7 @@
 if(window.__ABU_QUESTION_PAPER_V2__)return;
 window.__ABU_QUESTION_PAPER_V2__=true;
 window.__ABU_QUESTION_PAPER_V3__=true;
+window.__ABU_QUESTION_COMPLETION_LOAD_GUARD_V1__=true;
 const $=id=>document.getElementById(id);
 const KEY='abuQuestionPaperSettingsV3';
 const LEGACY=['abuQuestionPaperSettingsV2','abuQuestionPaperSettingsV1'];
@@ -87,8 +88,42 @@ function apply(closeAfter=true){
   try{window.fitToScreen?.();window.checkAutoFlow?.();window.scheduleQuestionDraft?.()}catch(e){}
   if(closeAfter)close();
 }
+function appendScript(id,src,onload){
+  if(document.getElementById(id)){onload?.();return}
+  const s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onload=()=>onload?.();s.onerror=()=>{console.warn(src+' failed to load');onload?.()};document.head.appendChild(s)
+}
+function loadCompletionGuarded(done){
+  if(document.getElementById('abuQuestionCompletionExternal')){done?.();return}
+  const NativeObserver=window.MutationObserver,nativeAdd=EventTarget.prototype.addEventListener;
+  let restored=false;
+  const restore=()=>{if(restored)return;restored=true;window.MutationObserver=NativeObserver;EventTarget.prototype.addEventListener=nativeAdd;done?.()};
+  if(typeof NativeObserver==='function'){
+    window.MutationObserver=function(callback){
+      const inner=new NativeObserver(callback);
+      return {
+        observe(target,options){const opts={...(options||{})};if(target?.id==='pages-container')delete opts.characterData;return inner.observe(target,opts)},
+        disconnect(){return inner.disconnect()},
+        takeRecords(){return inner.takeRecords()}
+      }
+    };
+  }
+  EventTarget.prototype.addEventListener=function(type,listener,options){
+    if(this?.id==='pages-container'&&(type==='input'||type==='change')&&listener?.name==='queueDraft')return;
+    return nativeAdd.call(this,type,listener,options)
+  };
+  appendScript('abuQuestionCompletionExternal','questions-completion-runtime.js',restore);
+  setTimeout(restore,1500)
+}
 function loadSupport(){
-  [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js'],['abuQuestionFinalFixesExternal','questions-final-fixes-runtime.js'],['abuQuestionCustomLibraryExternal','questions-custom-library-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
+  appendScript('abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js',()=>{
+    loadCompletionGuarded(()=>{
+      appendScript('abuQuestionMaintenanceExternal','questions-maintenance-runtime.js',()=>{
+        appendScript('abuQuestionFinalFixesExternal','questions-final-fixes-runtime.js',()=>{
+          appendScript('abuQuestionCustomLibraryExternal','questions-custom-library-runtime.js')
+        })
+      })
+    })
+  })
 }
 function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
 window.AbuQuestionPaper={open,close,preset,apply,deletePage,state:()=>({...state})};
