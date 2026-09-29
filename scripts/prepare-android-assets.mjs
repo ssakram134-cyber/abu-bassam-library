@@ -8,6 +8,7 @@ const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'asset
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
 const DOWNLOAD_TIMEOUT_MS = 45000;
 const TOUCH_RUNTIME = 'touch-stability-runtime.js';
+const LEGACY_GLOBAL_TOUCH_RE = /\*\{([^{}]*?)touch-action\s*:\s*manipulation;?([^{}]*?)\}/gi;
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
 const OCR_ASSETS = [
@@ -75,6 +76,21 @@ async function download(urls,path,minBytes){
   throw new Error(`Failed to prepare required offline OCR asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
 }
 
+async function neutralizeLegacyGlobalTouchPolicy(){
+  const entryPath=resolve(destination,'index.html');
+  let html=await readFile(entryPath,'utf8');
+  let replacements=0;
+  html=html.replace(LEGACY_GLOBAL_TOUCH_RE,(_,before,after)=>{
+    replacements+=1;
+    return `*{${before}${after}}`;
+  });
+  if(/\*\{[^{}]*touch-action\s*:\s*manipulation/i.test(html)){
+    throw new Error('Android web entry point still contains a global touch-action:manipulation rule');
+  }
+  if(replacements>0)await writeFile(entryPath,html,'utf8');
+  process.stdout.write(`Android legacy global touch policy neutralized (${replacements} replacement${replacements===1?'':'s'}).\n`);
+}
+
 async function injectTouchStabilityRuntime(){
   const runtimePath=resolve(destination,TOUCH_RUNTIME);
   if(!(await existsEnough(runtimePath,1000)))throw new Error(`Required Android touch runtime is missing or incomplete: ${TOUCH_RUNTIME}`);
@@ -96,6 +112,7 @@ async function injectTouchStabilityRuntime(){
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
+await neutralizeLegacyGlobalTouchPolicy();
 await injectTouchStabilityRuntime();
 
 for(const [relative,urls,minBytes] of OCR_ASSETS){
