@@ -1,0 +1,23 @@
+name: Runner smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fresh-rebuild-20260928-release6]
+    paths:
+      - '.github/workflows/runner-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm hosted runner allocation
+        shell: bash
+        run: |
+          echo "GitHub-hosted runner allocated successfully."
+          echo "RUNNER_OS=$RUNNER_OS"
+          echo "RUNNER_ARCH=$RUNNER_ARCH"
