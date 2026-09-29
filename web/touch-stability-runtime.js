@@ -10,8 +10,9 @@ function installCssGuards(){
   const style=document.createElement('style');
   style.id=STYLE_ID;
   style.textContent=`
-html,body,.app{touch-action:auto!important}
-button,a,label,input,select,textarea,[role="button"],[onclick]{touch-action:manipulation!important}
+html,body,.app,.app *{touch-action:auto!important}
+.app button,.app a,.app label,.app select,.app [role="button"],.app [onclick]{touch-action:manipulation!important}
+.paper-zoom,.paper-zoom-stage{touch-action:none!important}
 #splash.hide,#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.sheet:not(.show),.paper-zoom:not(.show),.nat-modal:not(.show),.nat-zoom:not(.show),.abu-device-modal:not(.show),.cs-modal:not(.show),.v-modal:not(.show),.v-busy:not(.show),.abu-settings-modal:not(.show),.abu-security-gate.hide,#abuRecoveryModal[style*="display: none"]{pointer-events:none!important}
 `;
   (document.head||document.documentElement).appendChild(style);
@@ -23,6 +24,7 @@ function signalReady(){
     }
   }catch(_){}
 }
+function signalVisible(){if(!document.hidden)signalReady()}
 function start(){
   try{installCssGuards()}catch(_){}
   signalReady();
@@ -30,4 +32,5 @@ function start(){
 window.AbuBassamTouchStability={version:2,repair:start};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 window.addEventListener('pageshow',signalReady,{passive:true});
+document.addEventListener('visibilitychange',signalVisible,{passive:true});
 })();
