@@ -27,7 +27,7 @@ for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','installR
 for(const marker of ['new MutationObserver','MutationObserver(','observer.observe(document.documentElement','inert=true','style.pointerEvents='])forbid(recovery,marker,'cards/startup UI');
 
 const touch=read('touch-stability-runtime.js');
-for(const marker of ['__ABU_TOUCH_STABILITY_V2__','window.AbuBassamTouchStability={version:2','pointer-events:none!important'])need(touch,marker,'touch stability');
+for(const marker of ['__ABU_TOUCH_STABILITY_V2__','window.AbuBassamTouchStability={version:2','html,body,.app,.app *{touch-action:auto!important}','paper-zoom,.paper-zoom-stage{touch-action:none!important}','visibilitychange','pointer-events:none!important'])need(touch,marker,'touch stability');
 for(const marker of ['new MutationObserver','MutationObserver(','pointerup','touchend','inert=true','style.pointerEvents='])forbid(touch,marker,'touch stability');
 
 const gestures=read('questions-gesture-runtime.js');
@@ -40,6 +40,9 @@ for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismiss
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
 for(const marker of ['webInstanceKey','recoverWebRenderer','onRenderProcessGone',"const APP_VERSION = '5.0.0'","const BUILD_NUMBER = '500'"])need(native,marker,'native renderer recovery');
 
+const assets=fs.readFileSync(path.join(root,'scripts','prepare-android-assets.mjs'),'utf8');
+for(const marker of ['LEGACY_GLOBAL_TOUCH_RE','neutralizeLegacyGlobalTouchPolicy','Android web entry point still contains a global touch-action:manipulation rule','await neutralizeLegacyGlobalTouchPolicy();'])need(assets,marker,'Android touch asset hardening');
+
 const repair=fs.readFileSync(path.join(root,'scripts','patch-startup-stability.mjs'),'utf8');
 for(const marker of ["const BUILD_NUMBER = '500'",'event-based recovery signals','Startup stability repair refuses global MutationObserver recovery','Startup stability repair refuses runtime pointer-events mutation','named mixed-format compressed image saving'])need(repair,marker,'startup repair tool');
 for(const marker of ["const BUILD_NUMBER = '432'",'const newObserver =','debounced recovery observer'])forbid(repair,marker,'startup repair tool');
@@ -50,4 +53,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 try{new vm.Script(repair,{filename:'patch-startup-stability.mjs'})}catch(error){if(!/Cannot use import statement outside a module/.test(String(error.message)))errors.push(`patch-startup-stability.mjs: ${error.message}`)}
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, no global touch/DOM interception, native-only question gestures, v5 isolated device identity, WebView renderer recovery, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity, WebView renderer recovery, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
