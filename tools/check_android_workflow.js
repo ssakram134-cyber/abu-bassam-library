@@ -42,7 +42,9 @@ const repair=String(packageJson.scripts?.['repair:source']||'');
 for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker)){process.stderr.write(`repair:source missing compatibility repair ${marker}.\n`);process.exit(1)}
 const assetRequired=[
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",'const DOWNLOAD_TIMEOUT_MS = 45000;',
-  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",'async function injectTouchStabilityRuntime()','await injectTouchStabilityRuntime();',
+  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",'const LEGACY_GLOBAL_TOUCH_RE =','async function neutralizeLegacyGlobalTouchPolicy()',
+  'Android web entry point still contains a global touch-action:manipulation rule','await neutralizeLegacyGlobalTouchPolicy();',
+  'async function injectTouchStabilityRuntime()','await injectTouchStabilityRuntime();',
   'Touch stability runtime was not injected into Android web entry point','await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });','for(const [relative,urls,minBytes] of OCR_ASSETS)',
   'await download(urls,resolve(vendorRoot,relative),minBytes);','async function fetchWithTimeout(url)',
@@ -53,7 +55,8 @@ const assetRequired=[
   'Required offline OCR asset is missing or incomplete','canonical web source remains unchanged'
 ];
 for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing safeguard: ${marker}\n`);process.exit(1)}
-const touchRequired=['__ABU_TOUCH_STABILITY_V2__','__ABU_TOUCH_STABILITY_V1__','html,body,.app{touch-action:auto!important}',
+const touchRequired=['__ABU_TOUCH_STABILITY_V2__','__ABU_TOUCH_STABILITY_V1__','html,body,.app,.app *{touch-action:auto!important}',
+  '.app button,.app a,.app label,.app select','.paper-zoom,.paper-zoom-stage{touch-action:none!important}','visibilitychange',
   '.sheet:not(.show)','.nat-modal:not(.show)','.cs-modal:not(.show)','.v-modal:not(.show)','.v-busy:not(.show)',
   '.abu-settings-modal:not(.show)','#abuRecoveryModal','pointer-events:none!important',"JSON.stringify({type:'webBootReady'",'window.AbuBassamTouchStability={version:2'];
 const touchMissing=touchRequired.filter(marker=>!touch.includes(marker));
@@ -67,8 +70,14 @@ const nativeRequired=["message.type === 'webBootReady'",'const STARTUP_WATCHDOG_
 const nativeMissing=nativeRequired.filter(marker=>!native.includes(marker));
 if(nativeMissing.length){process.stderr.write('Native WebView recovery/startup safeguards missing:\n'+nativeMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated OCR source: ${forbiddenAsset}\n`);process.exit(1)}
-const copyAt=assets.indexOf('await cp(source, destination');const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||injectTouchAt<0||downloadAt<0||copyAt>injectTouchAt||injectTouchAt>downloadAt){process.stderr.write('Android assets must copy canonical source, inject touch runtime, then generate OCR assets.\n');process.exit(1)}
+const copyAt=assets.indexOf('await cp(source, destination');
+const neutralizeAt=assets.indexOf('await neutralizeLegacyGlobalTouchPolicy();');
+const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');
+const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
+if(copyAt<0||neutralizeAt<0||injectTouchAt<0||downloadAt<0||copyAt>neutralizeAt||neutralizeAt>injectTouchAt||injectTouchAt>downloadAt){
+  process.stderr.write('Android assets must copy canonical source, neutralize legacy global touch policy, inject touch runtime, then generate OCR assets.\n');
+  process.exit(1);
+}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
   ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
@@ -85,4 +94,4 @@ const fallbackRequired=[
 ];
 const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
 if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: clean-build artifact purge, v5 APK naming, non-invasive touch runtime, WebView renderer recreation, pinned OCR assets, embedded bundle/signature/certificate verification, SHA-256 output, and read-only CI are enforced.\n');
+process.stdout.write('Android build check passed: clean-build artifact purge, v5 APK naming, Android legacy global touch neutralization, non-invasive touch runtime, WebView renderer recreation, pinned OCR assets, embedded bundle/signature/certificate verification, SHA-256 output, and read-only CI are enforced.\n');
