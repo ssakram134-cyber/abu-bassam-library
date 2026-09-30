@@ -43,6 +43,9 @@ for(const marker of ['webInstanceKey','recoverWebRenderer','onRenderProcessGone'
 const assets=fs.readFileSync(path.join(root,'scripts','prepare-android-assets.mjs'),'utf8');
 for(const marker of ['LEGACY_GLOBAL_TOUCH_RE','neutralizeLegacyGlobalTouchPolicy','Android web entry point still contains a global touch-action:manipulation rule','await neutralizeLegacyGlobalTouchPolicy();'])need(assets,marker,'Android touch asset hardening');
 
+const localBuild=fs.readFileSync(path.join(root,'scripts','build-android-local.mjs'),'utf8');
+for(const marker of ['STALE_INSTALLER_RE','CLEAN_SCAN_SKIP_DIRS',"new Set(['.git','node_modules'])",'removeInstallerArtifactsRecursively(root)','findInstallerArtifactsRecursively(root)','Stale Android installer artifacts remain after cleanup'])need(localBuild,marker,'local installer cleanup');
+
 const repair=fs.readFileSync(path.join(root,'scripts','patch-startup-stability.mjs'),'utf8');
 for(const marker of ["const BUILD_NUMBER = '500'",'event-based recovery signals','Startup stability repair refuses global MutationObserver recovery','Startup stability repair refuses runtime pointer-events mutation','named mixed-format compressed image saving'])need(repair,marker,'startup repair tool');
 for(const marker of ["const BUILD_NUMBER = '432'",'const newObserver =','debounced recovery observer'])forbid(repair,marker,'startup repair tool');
@@ -53,4 +56,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 try{new vm.Script(repair,{filename:'patch-startup-stability.mjs'})}catch(error){if(!/Cannot use import statement outside a module/.test(String(error.message)))errors.push(`patch-startup-stability.mjs: ${error.message}`)}
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity, WebView renderer recovery, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity, WebView renderer recovery, recursive stale installer cleanup, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
