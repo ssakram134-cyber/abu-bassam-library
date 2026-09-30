@@ -17,9 +17,12 @@ if(pkg.main!=='index-auth.js')throw new Error('account center check failed: pack
 for(const marker of [
   "file: 'account-center-runtime.js'",
   "file: 'account-recovery-hardening-runtime.js'",
-  "'abuBassamLockedDeviceIdV3', \"'abuBassamLockedDeviceIdV5'\"",
-  "'abuBassamLockedDeviceNameV3', \"'abuBassamLockedDeviceNameV5'\"",
-  "'abuBassamLockedDeviceCreatedV3', \"'abuBassamLockedDeviceCreatedV5'\"",
+  "'abuBassamLockedDeviceIdV3'",
+  "'abuBassamLockedDeviceIdV5'",
+  "'abuBassamLockedDeviceNameV3'",
+  "'abuBassamLockedDeviceNameV5'",
+  "'abuBassamLockedDeviceCreatedV3'",
+  "'abuBassamLockedDeviceCreatedV5'",
   "APP='5.0.0'",
   "const APP='5.0.0';",
   'Android v5 runtime still references legacy device identity'
