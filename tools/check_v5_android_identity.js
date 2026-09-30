@@ -12,8 +12,12 @@ const specs=[
       ["const APP_VERSION='4.3.2';","const APP_VERSION='5.0.0';"],
       ["const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';","const DEVICE_ID_KEY='abuBassamLockedDeviceIdV5';"],
       ["const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';","const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV5';"],
+      ["if(action==='secureGet')return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');","if(action==='secureGet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+      ["if(action==='secureSet'){localStorage.setItem('__dev_secure_'+payload.key,String(payload.value||''));return Promise.resolve(true)}","if(action==='secureSet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+      ["if(action==='secureDelete'){localStorage.removeItem('__dev_secure_'+payload.key);return Promise.resolve(true)}","if(action==='secureDelete')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
     ],
-    required:["const APP_VERSION='5.0.0';",'abuBassamLockedDeviceIdV5','abuBassamLockedDeviceNameV5','p_app_version:APP_VERSION'],
+    required:["const APP_VERSION='5.0.0';",'abuBassamLockedDeviceIdV5','abuBassamLockedDeviceNameV5','p_app_version:APP_VERSION',"if(action==='secureGet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));", "if(action==='secureSet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));", "if(action==='secureDelete')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+    forbidden:['__dev_secure_'],
   },
   {
     file:'web/security-hardening-runtime.js',
@@ -129,11 +133,12 @@ for(const marker of [
 
 const secondary=read('scripts/harden-v5-secondary-runtime.mjs');
 for(const marker of [
-  "settings-corrections-runtime.js",'abuBassamLockedDeviceIdV5',"device.app_version||'5.0.0'",
-  "settings-enhancements-runtime.js",'SECURE_STORAGE_REQUIRED','__dev_secure_',
+  'app-security-runtime.js',"secureGet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'))", "secureSet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'))", "secureDelete')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'))",'__dev_secure_',
+  'settings-corrections-runtime.js','abuBassamLockedDeviceIdV5',"device.app_version||'5.0.0'",
+  'settings-enhancements-runtime.js','SECURE_STORAGE_REQUIRED',
   'runtimeFiles','Generated Android runtime still contains legacy V3 device identity references',
   'no V3 device-id/name/created references remain'
 ])if(!secondary.includes(marker))fail(`harden-v5-secondary-runtime.mjs: missing ${marker}`);
 
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android v5 identity check passed: generated APK runtime uses one v5 device identity through login, device registry, offline trust, recovery, branch vault, owner settings and backup/update metadata; final generated JS/HTML is scanned for legacy V3 identity; owner-sensitive settings fail closed without native SecureStore; app/package/native identities agree on 5.0.0 / 500 / com.abubassam.libraryv5.\n');
+process.stdout.write('Android v5 identity check passed: generated APK runtime uses one v5 device identity through login, device registry, offline trust, recovery, branch vault, owner settings and backup/update metadata; final generated JS/HTML is scanned for legacy V3 identity; app-security secret get/set/delete and owner-sensitive settings fail closed without native SecureStore; app/package/native identities agree on 5.0.0 / 500 / com.abubassam.libraryv5.\n');
