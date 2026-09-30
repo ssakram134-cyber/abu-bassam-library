@@ -61,6 +61,28 @@ await patch('settings-enhancements-runtime.js',[],[
   "Promise.reject(new Error('SECURE_STORAGE_REQUIRED'))",
 ],['__dev_secure_',...LEGACY]);
 
+await patch('notification-center-runtime.js',[
+  ["localStorage.getItem('abuBassamLockedDeviceIdV3')","localStorage.getItem('abuBassamLockedDeviceIdV5')"],
+  ["localStorage.getItem('abuBassamLockedDeviceNameV3')","localStorage.getItem('abuBassamLockedDeviceNameV5')"],
+],[
+  'abuBassamLockedDeviceIdV5',
+  'abuBassamLockedDeviceNameV5',
+  "Promise.reject(new Error('SECURE_STORAGE_REQUIRED'))",
+  'abu_bassam_record_device_activity',
+],LEGACY);
+
+await patch('operation-log-corrections-runtime.js',[
+  ["localStorage.getItem('abuBassamLockedDeviceIdV3')","localStorage.getItem('abuBassamLockedDeviceIdV5')"],
+  ["localStorage.getItem('abuBassamLockedDeviceNameV3')","localStorage.getItem('abuBassamLockedDeviceNameV5')"],
+  ["if(!(window.Android&&typeof Android.security==='function'))return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');","if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));"],
+],[
+  'abuBassamLockedDeviceIdV5',
+  'abuBassamLockedDeviceNameV5',
+  "Promise.reject(new Error('SECURE_STORAGE_REQUIRED'))",
+  'abu_bassam_owner_activity_devices',
+  'abu_bassam_owner_activity_report',
+],['__dev_secure_',...LEGACY]);
+
 const identityLeftovers=[];
 const secretFallbackLeftovers=[];
 for(const file of await runtimeFiles(assets)){
@@ -78,4 +100,4 @@ if(secretFallbackLeftovers.length){
   throw new Error('Generated Android runtime still contains insecure legacy localStorage secret references outside cleanup guards:\n'+secretFallbackLeftovers.join('\n'));
 }
 
-process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain; app-security secret get/set/delete and owner-sensitive settings fail closed without native SecureStore; __dev_secure_ is allowed only in legacy-cleanup guards; settings corrections use V5.\n');
+process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain; app-security, owner settings and operation-log secret access fail closed without native SecureStore; notifications and operation audit use V5 identity; __dev_secure_ is allowed only in legacy-cleanup guards.\n');
