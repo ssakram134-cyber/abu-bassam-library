@@ -42,6 +42,20 @@ for(const marker of ['webInstanceKey','recoverWebRenderer','onRenderProcessGone'
 
 const assets=fs.readFileSync(path.join(root,'scripts','prepare-android-assets.mjs'),'utf8');
 for(const marker of ['LEGACY_GLOBAL_TOUCH_RE','neutralizeLegacyGlobalTouchPolicy','Android web entry point still contains a global touch-action:manipulation rule','await neutralizeLegacyGlobalTouchPolicy();'])need(assets,marker,'Android touch asset hardening');
+for(const marker of [
+  'V5_RUNTIME_PATCHES','hardenV5RuntimeIdentity','await hardenV5RuntimeIdentity();',
+  "file: 'app-security-runtime.js'","file: 'security-hardening-runtime.js'","file: 'account-center-runtime.js'","file: 'account-recovery-hardening-runtime.js'",
+  "file: 'app-update-runtime.js'","file: 'app-settings-runtime.js'",
+  "abuBassamLockedDeviceIdV5","abuBassamLockedDeviceNameV5","abuBassamLockedDeviceCreatedV5",
+  "const APP_VERSION='5.0.0';","const APP='5.0.0';","BUILD_NUMBER=500","BUILD_NUMBER='500'",
+  'Android v5 runtime still references legacy device identity','Primary device runtime is not v5-isolated'
+])need(assets,marker,'Android v5 runtime identity hardening');
+const copyAt=assets.indexOf('await cp(source, destination');
+const touchAt=assets.indexOf('await neutralizeLegacyGlobalTouchPolicy();');
+const injectAt=assets.indexOf('await injectTouchStabilityRuntime();');
+const v5At=assets.indexOf('await hardenV5RuntimeIdentity();');
+const ocrAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
+if(copyAt<0||touchAt<0||injectAt<0||v5At<0||ocrAt<0||!(copyAt<touchAt&&touchAt<injectAt&&injectAt<v5At&&v5At<ocrAt))errors.push('Android asset order must be copy -> touch neutralization -> touch runtime -> v5 runtime identity hardening -> OCR');
 
 const localBuild=fs.readFileSync(path.join(root,'scripts','build-android-local.mjs'),'utf8');
 for(const marker of ['STALE_INSTALLER_RE','CLEAN_SCAN_SKIP_DIRS',"new Set(['.git','node_modules'])",'removeInstallerArtifactsRecursively(root)','findInstallerArtifactsRecursively(root)','Stale Android installer artifacts remain after cleanup'])need(localBuild,marker,'local installer cleanup');
@@ -56,4 +70,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 try{new vm.Script(repair,{filename:'patch-startup-stability.mjs'})}catch(error){if(!/Cannot use import statement outside a module/.test(String(error.message)))errors.push(`patch-startup-stability.mjs: ${error.message}`)}
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity, WebView renderer recovery, recursive stale installer cleanup, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity across security/account/recovery/update runtime assets, WebView renderer recovery, recursive stale installer cleanup, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');
