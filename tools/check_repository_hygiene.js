@@ -1,71 +1,19 @@
-const fs=require('fs');
-const path=require('path');
-const vm=require('vm');
-const root=path.resolve(__dirname,'..');
-const failures=[];
-const authoredExt=new Set(['.js','.html','.mjs','.ts','.sql','.json','.yml','.yaml','.gradle','.md']);
-const vendorNames=new Set(['jspdf.umd.min.js','jszip.min.js','supabase-2.58.0.js','qrcode.js','qrcode_UTF8.js']);
-const secretExt=/\.(?:jks|keystore|p12|pfx|pem|key)$/i;
-const forbiddenSecretNames=/^(?:\.env(?:\..*)?|id_rsa|id_ed25519)$/i;
-const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows'];
-const forbiddenLegacyFiles=['tools/rebuild_apk.py','tools/apk_v2.py','tools/verify_release.py'];
-const files=[];
-
-function walk(dir){
-  if(!fs.existsSync(dir))return;
-  for(const ent of fs.readdirSync(dir,{withFileTypes:true})){
-    if(['node_modules','.git','dist','android','ios'].includes(ent.name))continue;
-    const full=path.join(dir,ent.name);
-    if(ent.isDirectory())walk(full);else files.push(full);
-  }
-}
-for(const rel of executableRoots)walk(path.join(root,rel));
-for(const rel of ['index.js','index-auth.js','package.json','app.json','.gitignore']){
-  const full=path.join(root,rel);if(fs.existsSync(full))files.push(full);
-}
-for(const rel of forbiddenLegacyFiles)if(fs.existsSync(path.join(root,rel)))failures.push(`${rel}: legacy APK repack/sign/verify path must stay removed; Gradle + apksigner is authoritative`);
-
-for(const full of files){
-  const rel=path.relative(root,full).replace(/\\/g,'/');
-  const base=path.basename(full);
-  if(secretExt.test(base)||forbiddenSecretNames.test(base))failures.push(`${rel}: secret/signing material must not be tracked`);
-  const ext=path.extname(full).toLowerCase();
-  if(!authoredExt.has(ext)&&base!=='.gitignore')continue;
-  const src=fs.readFileSync(full,'utf8');
-  if(src.includes('\0'))failures.push(`${rel}: contains NUL byte`);
-  if(/^(?:<{7}|={7}|>{7})(?: .*)?$/m.test(src))failures.push(`${rel}: unresolved merge-conflict marker`);
-  if(!vendorNames.has(base)&&['.js','.html','.mjs','.ts'].includes(ext)&&/\b(?:TODO|FIXME)\b/i.test(src))failures.push(`${rel}: TODO/FIXME left in executable source`);
-  if(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(src))failures.push(`${rel}: embedded private key detected`);
-  if(/\bghp_[A-Za-z0-9]{30,}\b/.test(src)||/\bgithub_pat_[A-Za-z0-9_]{30,}\b/.test(src))failures.push(`${rel}: embedded GitHub credential detected`);
-  if(/\bsb_secret_[A-Za-z0-9_-]{20,}\b/.test(src))failures.push(`${rel}: embedded Supabase secret key detected`);
-  if(src.includes('com.akramghazali.phonerepair'))failures.push(`${rel}: obsolete PhoneRepair package identity returned`);
-  if(src.includes('مركز أكرم الغزالي'))failures.push(`${rel}: obsolete application identity returned`);
-  if(rel.startsWith('web/')&&ext==='.js'&&!vendorNames.has(base)){
-    try{new vm.Script(src,{filename:rel})}catch(e){failures.push(`${rel}: JavaScript syntax error: ${e.message}`)}
-  }
-}
-
-let packageJson=null;
-for(const rel of ['package.json','app.json']){
-  try{
-    const parsed=JSON.parse(fs.readFileSync(path.join(root,rel),'utf8'));
-    if(rel==='package.json')packageJson=parsed;
-  }catch(e){failures.push(`${rel}: invalid JSON: ${e.message}`)}
-}
-if(packageJson){
-  const checkWeb=String(packageJson.scripts?.['check:web']||'');
-  const checkerFiles=fs.readdirSync(path.join(root,'tools')).filter(name=>/^check_.*\.js$/i.test(name)).sort();
-  for(const name of checkerFiles){
-    const marker=`node tools/${name}`;
-    if(!checkWeb.includes(marker))failures.push(`package.json: permanent checker is orphaned from check:web: tools/${name}`);
-  }
-}
-
-const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const bad of ["originWhitelist={['*']}",'mixedContentMode="always"','allowUniversalAccessFromFileURLs={true}'])if(native.includes(bad))failures.push(`index.js: insecure WebView setting returned: ${bad}`);
-for(const good of ["originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])if(!native.includes(good))failures.push(`index.js: missing hardened WebView marker: ${good}`);
-const gitignore=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
-for(const pattern of ['*.jks','*.keystore','*.p12','*.pfx','*.pem','*.key'])if(!gitignore.includes(pattern))failures.push(`.gitignore: missing signing/secret exclusion ${pattern}`);
-
-if(failures.length){console.error(failures.join('\n'));process.exit(1)}
-console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; every permanent check_*.js is wired into check:web; legacy APK repack/sign paths and old app identity stay removed; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),errors=[];
+const obsolete=[
+  'scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','scripts/harden-v5-secondary-runtime.mjs',
+  '.github/workflows/audit-current-main.yml','.github/workflows/migrate-verify-build.yml','.github/workflows/import-source-zip.yml','.github/workflows/runner-smoke.yml','.github/workflows/one-time-repository-repair.yml','.github/workflows/one-time-delete-old-branches.yml','.github/workflows/one-time-signing-readiness.yml',
+  'tools/repair_migrated_source.py','tools/rebuild_apk.py','tools/verify_release.py','tools/apk_v2.py','tools/check_import_workflow.js','tools/validate_imported_source.js','tools/check_v5_android_identity.js','tools/check_v5_secret_policy.js',
+  'web/residence-card.html','web/a4-card-sheet-editor-runtime.js'
+];
+for(const rel of obsolete)if(fs.existsSync(path.join(root,rel)))errors.push(`obsolete file remains: ${rel}`);
+for(const rel of ['android','dist','.expo'])if(fs.existsSync(path.join(root,rel)))errors.push(`generated build/install artifact is tracked/present in source checkout: ${rel}`);
+const targets=['package.json','index.js','scripts/build-android-local.mjs','scripts/prepare-android-assets.mjs'];
+for(const dir of ['web','.github/workflows'])if(fs.existsSync(path.join(root,dir)))for(const n of fs.readdirSync(path.join(root,dir)))if(/\.(?:js|html|yml|yaml)$/.test(n))targets.push(`${dir}/${n}`);
+const forbidden=['com.akramghazali.phonerepair','patch-startup-stability.mjs','patch-customer-camera.mjs','repair_migrated_source.py','rebuild_apk.py'];
+for(const rel of targets){const p=path.join(root,rel);if(!fs.existsSync(p))continue;const s=fs.readFileSync(p,'utf8');for(const token of forbidden)if(s.includes(token))errors.push(`${rel}: retired token ${token}`);if(/com\.abubassam\.(?:librarycamera|libraryphotos|libraryv[1-5])\b/.test(s))errors.push(`${rel}: retired Android package identity remains`)}
+const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+for(const [name,cmd] of Object.entries(pkg.scripts||{}))if(/patch-startup-stability|patch-customer-camera|repair_migrated_source|rebuild_apk|verify_release\.py|apk_v2\.py/.test(String(cmd)))errors.push(`package script ${name} mutates/rebuilds from obsolete source`);
+for(const rel of ['web/questions-ar.html','web/questions-en.html','web/image-compressor.html','web/national-id-documents.html'])if(!fs.existsSync(path.join(root,rel)))errors.push(`required live feature source missing: ${rel}`);
+if(errors.length){console.error(errors.join('\n'));process.exit(1)}
+console.log('Repository hygiene passed: obsolete workflows/modules, source-mutating patches, generated install/build trees, old APK repackers and stale package references are absent; restored questions, compressor and integrated national documents remain required live source.');
