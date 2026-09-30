@@ -1,10 +1,11 @@
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
 const assets=resolve(root,'android','app','src','main','assets','library');
 const LEGACY=['abuBassamLockedDeviceIdV3','abuBassamLockedDeviceNameV3','abuBassamLockedDeviceCreatedV3'];
+const LEGACY_SECRET_CLEANUP_ALLOWLIST=new Set(['security-bootstrap-guard-runtime.js','security-hardening-runtime.js']);
 
 async function patch(relative,replacements,required=[],forbidden=[]){
   const file=resolve(assets,relative);
@@ -60,14 +61,21 @@ await patch('settings-enhancements-runtime.js',[],[
   "Promise.reject(new Error('SECURE_STORAGE_REQUIRED'))",
 ],['__dev_secure_',...LEGACY]);
 
-const leftovers=[];
+const identityLeftovers=[];
+const secretFallbackLeftovers=[];
 for(const file of await runtimeFiles(assets)){
   const source=await readFile(file,'utf8');
   const found=LEGACY.filter(marker=>source.includes(marker));
-  if(found.length)leftovers.push(`${file.slice(assets.length+1)}: ${found.join(', ')}`);
+  if(found.length)identityLeftovers.push(`${file.slice(assets.length+1)}: ${found.join(', ')}`);
+  if(source.includes('__dev_secure_')&&!LEGACY_SECRET_CLEANUP_ALLOWLIST.has(basename(file))){
+    secretFallbackLeftovers.push(file.slice(assets.length+1));
+  }
 }
-if(leftovers.length){
-  throw new Error('Generated Android runtime still contains legacy V3 device identity references:\n'+leftovers.join('\n'));
+if(identityLeftovers.length){
+  throw new Error('Generated Android runtime still contains legacy V3 device identity references:\n'+identityLeftovers.join('\n'));
+}
+if(secretFallbackLeftovers.length){
+  throw new Error('Generated Android runtime still contains insecure legacy localStorage secret references outside cleanup guards:\n'+secretFallbackLeftovers.join('\n'));
 }
 
-process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain; app-security secret get/set/delete and owner-sensitive settings fail closed without native SecureStore; settings corrections use V5.\n');
+process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain; app-security secret get/set/delete and owner-sensitive settings fail closed without native SecureStore; __dev_secure_ is allowed only in legacy-cleanup guards; settings corrections use V5.\n');
