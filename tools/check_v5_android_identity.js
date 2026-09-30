@@ -66,6 +66,14 @@ const specs=[
     forbidden:['__dev_secure_'],
   },
   {
+    file:'web/settings-corrections-runtime.js',
+    replacements:[
+      ["localStorage.getItem('abuBassamLockedDeviceIdV3')","localStorage.getItem('abuBassamLockedDeviceIdV5')"],
+      ["device.app_version||'4.3.2'","device.app_version||'5.0.0'"],
+    ],
+    required:['abuBassamLockedDeviceIdV5',"device.app_version||'5.0.0'",'AbuBassamDevices?.ensure?.().id'],
+  },
+  {
     file:'web/backup-center-runtime.js',
     replacements:[["APP='4.3.2'","APP='5.0.0'"]],
     required:["APP='5.0.0'",'appVersion:APP','app_version:APP','branchDeviceId:'],
@@ -108,6 +116,7 @@ if(Number(app.android?.versionCode)!==500)fail(`app.json: expected versionCode 5
 const pkg=JSON.parse(read('package.json'));
 if(pkg.version!=='5.0.0')fail(`package.json: expected version 5.0.0, found ${pkg.version}`);
 if(!String(pkg.scripts?.['check:web']||'').includes('node tools/check_v5_android_identity.js'))fail('package.json: check:web does not run v5 Android identity validation');
+if(pkg.scripts?.['assets:android']!=='node scripts/prepare-android-assets.mjs && node scripts/harden-v5-secondary-runtime.mjs')fail('package.json: assets:android must run both primary v5 hardening and final generated-runtime scan');
 const native=read('index.js');
 for(const marker of ["const APP_VERSION = '5.0.0'","const BUILD_NUMBER = '500'"])if(!native.includes(marker))fail(`index.js: missing ${marker}`);
 
@@ -118,5 +127,13 @@ for(const marker of [
   'Android v5 runtime still references legacy device identity','Android v5 runtime contains forbidden insecure fallback','Primary device runtime is not v5-isolated'
 ])if(!assets.includes(marker))fail(`prepare-android-assets.mjs: missing ${marker}`);
 
+const secondary=read('scripts/harden-v5-secondary-runtime.mjs');
+for(const marker of [
+  "settings-corrections-runtime.js",'abuBassamLockedDeviceIdV5',"device.app_version||'5.0.0'",
+  "settings-enhancements-runtime.js",'SECURE_STORAGE_REQUIRED','__dev_secure_',
+  'runtimeFiles','Generated Android runtime still contains legacy V3 device identity references',
+  'no V3 device-id/name/created references remain'
+])if(!secondary.includes(marker))fail(`harden-v5-secondary-runtime.mjs: missing ${marker}`);
+
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android v5 identity check passed: generated APK runtime uses one v5 device identity through login, device registry, offline trust, recovery, branch vault, owner settings and backup/update metadata; owner-sensitive settings fail closed without native SecureStore; app/package/native identities agree on 5.0.0 / 500 / com.abubassam.libraryv5.\n');
+process.stdout.write('Android v5 identity check passed: generated APK runtime uses one v5 device identity through login, device registry, offline trust, recovery, branch vault, owner settings and backup/update metadata; final generated JS/HTML is scanned for legacy V3 identity; owner-sensitive settings fail closed without native SecureStore; app/package/native identities agree on 5.0.0 / 500 / com.abubassam.libraryv5.\n');
