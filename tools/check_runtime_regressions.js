@@ -13,18 +13,61 @@ for(const marker of ['__ABU_ENVELOPE_AGREEMENT_V3__','REMOVED_KEY','markRemoved'
 forbid(envelope,'new MutationObserver','envelope optional fields');
 
 const productivity=read('productivity-tools-runtime.js');
-for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame'])need(productivity,marker,'startup lazy loading');
-for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"'])forbid(productivity,marker,'questions-only section');
+for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame','a4-card-sheet-editor-v2-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V2__','const proto=win.EventTarget?.prototype',"listener?.name==='schedule'",'proto.addEventListener=nativeAdd'])need(productivity,marker,'startup lazy loading');
+for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"','a4-card-sheet-editor-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V1__'])forbid(productivity,marker,'questions-only section');
+
+const questionPaper=read('questions-paper-runtime.js');
+for(const marker of ['__ABU_QUESTION_COMPLETION_LOAD_GUARD_V1__','loadCompletionGuarded','delete opts.characterData',"listener?.name==='queueDraft'",'EventTarget.prototype.addEventListener=nativeAdd'])need(questionPaper,marker,'question completion load guard');
+const questionFinal=read('questions-final-fixes-runtime.js');
+for(const marker of ['__ABU_QUESTION_SINGLE_AUTOSAVE_V1__','window.scheduleQuestionDraft=schedule','canvas.width=1;canvas.height=1'])need(questionFinal,marker,'question final fixes');
+forbid(questionFinal,'new MutationObserver','question final fixes duplicate observer');
 
 const recovery=read('feature-recovery-runtime.js');
-for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
+for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','installRecoverySignals','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
+for(const marker of ['new MutationObserver','MutationObserver(','observer.observe(document.documentElement','inert=true','style.pointerEvents='])forbid(recovery,marker,'cards/startup UI');
+
+const touch=read('touch-stability-runtime.js');
+for(const marker of ['__ABU_TOUCH_STABILITY_V2__','window.AbuBassamTouchStability={version:2','html,body,.app,.app *{touch-action:auto!important}','paper-zoom,.paper-zoom-stage{touch-action:none!important}','visibilitychange','pointer-events:none!important'])need(touch,marker,'touch stability');
+for(const marker of ['new MutationObserver','MutationObserver(','pointerup','touchend','inert=true','style.pointerEvents='])forbid(touch,marker,'touch stability');
+
+const gestures=read('questions-gesture-runtime.js');
+for(const marker of ['__ABU_QUESTION_GESTURES_DISABLED__','disabled:true','version:2'])need(gestures,marker,'question gestures');
+for(const marker of ['touchstart','touchmove','pointerdown','pointermove','MutationObserver','style.touchAction','style.pointerEvents','inert='])forbid(gestures,marker,'question gestures');
 
 const device=read('device-name-runtime.js');
-for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-throttle-fix-runtime.js','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-throttle-fix-runtime.js','login-input-direction-runtime.js',"abuBassamLockedDeviceIdV5","const APP_VERSION = '5.0.0'"])need(device,marker,'startup/login guards');
 
-for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','feature-recovery-runtime.js','device-name-runtime.js']){
+const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
+for(const marker of ['webInstanceKey','recoverWebRenderer','onRenderProcessGone',"const APP_VERSION = '5.0.0'","const BUILD_NUMBER = '500'"])need(native,marker,'native renderer recovery');
+
+const assets=fs.readFileSync(path.join(root,'scripts','prepare-android-assets.mjs'),'utf8');
+for(const marker of ['LEGACY_GLOBAL_TOUCH_RE','neutralizeLegacyGlobalTouchPolicy','Android web entry point still contains a global touch-action:manipulation rule','await neutralizeLegacyGlobalTouchPolicy();'])need(assets,marker,'Android touch asset hardening');
+for(const marker of [
+  'V5_RUNTIME_PATCHES','hardenV5RuntimeIdentity','await hardenV5RuntimeIdentity();',
+  "file: 'app-security-runtime.js'","file: 'security-hardening-runtime.js'","file: 'account-center-runtime.js'","file: 'account-recovery-hardening-runtime.js'",
+  "file: 'app-update-runtime.js'","file: 'app-settings-runtime.js'",
+  "abuBassamLockedDeviceIdV5","abuBassamLockedDeviceNameV5","abuBassamLockedDeviceCreatedV5",
+  "const APP_VERSION='5.0.0';","const APP='5.0.0';","BUILD_NUMBER=500","BUILD_NUMBER='500'",
+  'Android v5 runtime still references legacy device identity','Primary device runtime is not v5-isolated'
+])need(assets,marker,'Android v5 runtime identity hardening');
+const copyAt=assets.indexOf('await cp(source, destination');
+const touchAt=assets.indexOf('await neutralizeLegacyGlobalTouchPolicy();');
+const injectAt=assets.indexOf('await injectTouchStabilityRuntime();');
+const v5At=assets.indexOf('await hardenV5RuntimeIdentity();');
+const ocrAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
+if(copyAt<0||touchAt<0||injectAt<0||v5At<0||ocrAt<0||!(copyAt<touchAt&&touchAt<injectAt&&injectAt<v5At&&v5At<ocrAt))errors.push('Android asset order must be copy -> touch neutralization -> touch runtime -> v5 runtime identity hardening -> OCR');
+
+const localBuild=fs.readFileSync(path.join(root,'scripts','build-android-local.mjs'),'utf8');
+for(const marker of ['STALE_INSTALLER_RE','CLEAN_SCAN_SKIP_DIRS',"new Set(['.git','node_modules'])",'removeInstallerArtifactsRecursively(root)','findInstallerArtifactsRecursively(root)','Stale Android installer artifacts remain after cleanup'])need(localBuild,marker,'local installer cleanup');
+
+const repair=fs.readFileSync(path.join(root,'scripts','patch-startup-stability.mjs'),'utf8');
+for(const marker of ["const BUILD_NUMBER = '500'",'event-based recovery signals','Startup stability repair refuses global MutationObserver recovery','Startup stability repair refuses runtime pointer-events mutation','named mixed-format compressed image saving'])need(repair,marker,'startup repair tool');
+for(const marker of ["const BUILD_NUMBER = '432'",'const newObserver =','debounced recovery observer'])forbid(repair,marker,'startup repair tool');
+
+for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','questions-paper-runtime.js','questions-final-fixes-runtime.js','feature-recovery-runtime.js','touch-stability-runtime.js','questions-gesture-runtime.js','device-name-runtime.js']){
   try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
 }
+try{new vm.Script(repair,{filename:'patch-startup-stability.mjs'})}catch(error){if(!/Cannot use import statement outside a module/.test(String(error.message)))errors.push(`patch-startup-stability.mjs: ${error.message}`)}
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, lazy startup frames, Cards envelope placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: lazy questions/compressor, guarded Arabic/English autosave loading, V2 A4 editor, Android global touch policy neutralization, non-invasive touch/DOM recovery, native-only question gestures, v5 isolated device identity across security/account/recovery/update runtime assets, WebView renderer recovery, recursive stale installer cleanup, v5-safe startup repair tooling, Cards placement, splash watchdog, and login guards.\n');

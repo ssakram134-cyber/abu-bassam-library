@@ -11,8 +11,8 @@ const forbid=(src,token,label)=>{if(src.includes(token))errors.push(`${label}: f
 const required=[
   'index.html','security-bootstrap-guard-runtime.js','app-security-runtime.js','security-hardening-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-name-runtime.js','device-reconcile-runtime.js',
   'cards-studio-runtime.js','card-template-library.js','card-models-runtime.js','card-free-layout-runtime.js','cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','envelopes.html','certificates.html','student-thanks-cards.html','thanks-letter.html',
-  'questions-ar.html','questions-en.html','questions-paper-runtime.js','questions-en-fixes-runtime.js','questions-templates-runtime.js','questions-final-fixes-runtime.js','questions-custom-library-runtime.js','question-type-runtime.js','image-compressor.html',
-  'document-vault-runtime.js','document-vault-advanced-runtime.js','customer-documents-runtime.js','notification-center-runtime.js','notification-excel-runtime.js','operation-log-privacy-runtime.js','productivity-tools-runtime.js','photo-print-advanced-runtime.js','poster-project-runtime.js',
+  'questions-ar.html','questions-en.html','questions-paper-runtime.js','questions-en-fixes-runtime.js','questions-templates-runtime.js','questions-final-fixes-runtime.js','questions-custom-library-runtime.js','question-type-runtime.js','questions-gesture-runtime.js','image-compressor.html',
+  'document-vault-runtime.js','document-vault-advanced-runtime.js','customer-documents-runtime.js','notification-center-runtime.js','notification-excel-runtime.js','operation-log-privacy-runtime.js','productivity-tools-runtime.js','photo-print-advanced-runtime.js','poster-project-runtime.js','a4-card-sheet-editor-v2-runtime.js',
   'supabase-2.58.0.js','qrcode.js','jszip.min.js','fonts/Cairo-Regular.ttf','fonts/Cairo-Bold.ttf','fonts/Tajawal-Regular.ttf','fonts/Tajawal-Bold.ttf'
 ];
 for(const f of required){const p=path.join(web,f);if(!fs.existsSync(p))errors.push(`Missing web asset: ${f}`);else if(fs.statSync(p).size===0)errors.push(`Empty required asset: ${f}`)}
@@ -23,11 +23,13 @@ for(const filename of ['index.html','questions-ar.html','questions-en.html','ima
   while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${filename}#${index}`})}catch(e){errors.push(`${filename} inline script ${index}: ${e.message}`)}}
 }
 const packageJson=JSON.parse(readRoot('package.json'));
-if(packageJson.version!=='4.3.2')errors.push(`package.json: expected version 4.3.2, got ${packageJson.version}`);
+if(packageJson.version!=='5.0.0')errors.push(`package.json: expected version 5.0.0, got ${packageJson.version}`);
 for(const dep of ['expo','react-native','react-native-webview','expo-print','expo-secure-store','expo-local-authentication','expo-camera'])if(!packageJson.dependencies?.[dep])errors.push(`package.json: missing ${dep}`);
 const appJson=JSON.parse(readRoot('app.json'));const android=appJson.expo?.android||{};
-if(android.package!=='com.abubassam.librarycamera3')errors.push(`app.json: unexpected Android package ${android.package||'missing'}`);
-if(String(android.versionCode)!=='432')errors.push(`app.json: expected versionCode 432, got ${android.versionCode}`);
+if(appJson.expo?.version!=='5.0.0')errors.push(`app.json: expected version 5.0.0, got ${appJson.expo?.version}`);
+if(android.package!=='com.abubassam.libraryv5')errors.push(`app.json: unexpected Android package ${android.package||'missing'}`);
+if(String(android.versionCode)!=='500')errors.push(`app.json: expected versionCode 500, got ${android.versionCode}`);
+if(appJson.expo?.icon!=='./assets/icon.png')errors.push('app.json: approved application icon path changed');
 const librarySource=read('card-template-library.js');const sandbox={window:{}};vm.runInNewContext(librarySource,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
 if(!Array.isArray(groups))errors.push('card-template-library.js: library did not load');
 else{
@@ -39,19 +41,21 @@ forbid(qAr,'A4 فقط','Arabic question paper');
 const qEn=read('questions-en-fixes-runtime.js');for(const t of ['A4P','A4L','A5P','A5L','Custom size','Model answer / notes','Day /','window.checkAutoFlow'])has(qEn,t,'English question tools');
 forbid(qEn,'A4 only','English question tools');
 const qTemplates=read('questions-templates-runtime.js');for(const t of ['التاريخ / ${esc(profile.date','اليوم / ${esc(profile.day','أكرم حاتم الغزالي'])has(qTemplates,t,'question templates');
-const gestures=read('questions-gesture-runtime.js');has(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','question gestures');for(const t of ['touchstart','touchmove','pointerdown','pointermove'])forbid(gestures,t,'question gestures');
-const productivity=read('productivity-tools-runtime.js');for(const t of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"'])has(productivity,t,'productivity host');
+const gestures=read('questions-gesture-runtime.js');has(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','question gestures');for(const t of ['touchstart','touchmove','pointerdown','pointermove','MutationObserver','style.touchAction','pointerEvents','inert='])forbid(gestures,t,'question gestures');
+const productivity=read('productivity-tools-runtime.js');for(const t of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"','a4-card-sheet-editor-v2-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V2__'])has(productivity,t,'productivity host');
+for(const t of ['a4-card-sheet-editor-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V1__'])forbid(productivity,t,'productivity host');
 const bootstrap=read('security-bootstrap-guard-runtime.js');for(const t of ['__ABU_SECURITY_BOOTSTRAP_GUARD_V1__','localStorage.removeItem(LEGACY_TRUST_KEY)','sec.offlineUnlock=denyLegacyOffline','stopImmediatePropagation'])has(bootstrap,t,'security bootstrap guard');
-const deviceLoader=read('device-name-runtime.js');for(const t of ['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()'])has(deviceLoader,t,'security startup order');
+const deviceLoader=read('device-name-runtime.js');for(const t of ['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()',"abuBassamLockedDeviceIdV5","const APP_VERSION = '5.0.0'"])has(deviceLoader,t,'security startup order');
 const native=readRoot('index.js');for(const t of [
   'expo-local-authentication','expo-secure-store','expo-screen-capture','expo-print','ANDROID_BRIDGE','BackHandler.exitApp','STARTUP_WATCHDOG_MS',
   "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest',"if (message.type === 'webBootReady')",
   'cameraFrameKind','cardDocumentFrame','photoDocumentFrame','openCamera(message.mode, message.frameKind)',
-  'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);'
+  'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);',
+  "const APP_VERSION = '5.0.0'","const BUILD_NUMBER = '500'",'webInstanceKey','recoverWebRenderer','onRenderProcessGone'
 ])has(native,t,'index.js');
 for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
 for(const t of ['Print.printAsync','Print.printToFileAsync','StorageAccessFramework.createFileAsync'])has(native,t,'native print/export');
-const workflow=readRoot('.github/workflows/android.yml');for(const t of ['npm ci --no-audit --no-fund','npm run check:web','assembleRelease','assets/index.android.bundle','apksigner','sha256sum'])has(workflow,t,'android workflow');
+const workflow=readRoot('.github/workflows/android.yml');for(const t of ['Remove stale build and installer artifacts','npm ci --no-audit --no-fund','npm run check:web','assembleRelease','assets/index.android.bundle','apksigner','sha256sum','Abu_Bassam_Library_5.0.0.apk'])has(workflow,t,'android workflow');
 const deviceLimit=readRoot('supabase/migrations/202609240009_strict_device_registration_identity.sql');for(const t of ['pg_advisory_xact_lock','DEVICE_LIMIT_REACHED',"v_role:=case when v_count=0 then 'owner' else 'secondary' end","if v_row.active=false then raise exception 'DEVICE_DISABLED'"])has(deviceLimit,t,'strict device migration');
 const configurable=readRoot('supabase/migrations/202609240001_configurable_device_limit.sql');for(const t of ['device_limit between 1 and 50','abu_bassam_set_device_limit','DEVICE_LIMIT_BELOW_CURRENT_COUNT'])has(configurable,t,'device limit migration');
 const projectText=fs.readdirSync(web).filter(n=>/\.(?:html|js)$/i.test(n)&&n!=='supabase-2.58.0.js').map(n=>read(n)).join('\n');
@@ -59,4 +63,4 @@ for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGI
 if(/Ahmed Hassan|أحمد حسن/i.test(projectText))errors.push('Project contains a previous designer name');
 if(!projectText.includes('أكرم حاتم الغزالي')&&!projectText.includes('Akram Hatem Al-Ghazali'))errors.push('Approved programmer identity is missing');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write(`Project checks passed (${required.length} required assets): canonical native startup security, smart camera frames, bounded named image saving, secure bootstrap ordering, syntax, approved card counts, A4/A5/custom questions, native print/PDF, strict device identity, configurable device limit, and secret/designer checks.\n`);
+process.stdout.write(`Project checks passed (${required.length} required assets): v5 isolated Android identity, preserved icon, native WebView renderer recovery, non-invasive touch policy, canonical security, camera, approved card counts, A4/A5/custom questions, lazy compressor, native print/PDF, strict device identity, configurable device limit, and secret/designer checks.\n`);

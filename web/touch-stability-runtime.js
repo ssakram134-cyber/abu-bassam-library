@@ -1,95 +1,36 @@
 (()=>{
 'use strict';
-if(window.__ABU_TOUCH_STABILITY_V1__)return;
+if(window.__ABU_TOUCH_STABILITY_V2__)return;
+window.__ABU_TOUCH_STABILITY_V2__=true;
 window.__ABU_TOUCH_STABILITY_V1__=true;
 
-const STYLE_ID='abuTouchStabilityStyle';
-const GUARDED='abuTouchGuarded';
-const SHOW_GUARDED_CLASSES=['busy','sheet-backdrop','sheet','paper-zoom','nat-modal','nat-zoom','abu-device-modal','cs-modal','v-modal','v-busy','abu-settings-modal'];
-const GUARDED_SELECTOR='#splash,#busyOverlay,.busy,.sheet-backdrop,.sheet,.paper-zoom,.nat-modal,.nat-zoom,.abu-device-modal,.abu-security-gate,.cs-modal,.v-modal,.v-busy,.abu-settings-modal,#abuRecoveryModal';
-let scheduled=false;
-
-function addStyle(){
+const STYLE_ID='abuTouchStabilityStyleV2';
+function installCssGuards(){
   if(document.getElementById(STYLE_ID))return;
   const style=document.createElement('style');
   style.id=STYLE_ID;
   style.textContent=`
-html,body,.app{touch-action:auto!important}
-button,a,label,input,select,textarea,[role="button"],[onclick]{touch-action:manipulation!important}
-#splash.hide,#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.sheet:not(.show),.paper-zoom:not(.show),.nat-modal:not(.show),.nat-zoom:not(.show),.abu-device-modal:not(.show),.cs-modal:not(.show),.v-modal:not(.show),.v-busy:not(.show),.abu-settings-modal:not(.show),.abu-security-gate.hide{pointer-events:none!important}
+html,body,.app,.app *{touch-action:auto!important}
+.app button,.app a,.app label,.app select,.app [role="button"],.app [onclick]{touch-action:manipulation!important}
+.paper-zoom,.paper-zoom-stage{touch-action:none!important}
+#splash.hide,#splash[aria-hidden="true"],#busyOverlay:not(.show),.busy:not(.show),.sheet-backdrop:not(.show),.sheet:not(.show),.paper-zoom:not(.show),.nat-modal:not(.show),.nat-zoom:not(.show),.abu-device-modal:not(.show),.cs-modal:not(.show),.v-modal:not(.show),.v-busy:not(.show),.abu-settings-modal:not(.show),.abu-security-gate.hide,#abuRecoveryModal[style*="display: none"]{pointer-events:none!important}
 `;
   (document.head||document.documentElement).appendChild(style);
 }
-
-function hiddenByStyle(el){
-  if(!el||el.hidden)return true;
-  try{
-    const style=getComputedStyle(el);
-    return style.display==='none'||style.visibility==='hidden'||(Number(style.opacity)===0&&el.id==='splash');
-  }catch(_){return false}
-}
-
-function shouldBeDisabled(el){
-  if(!el)return false;
-  if(hiddenByStyle(el))return true;
-  if(el.id==='splash')return el.classList.contains('hide')||el.getAttribute('aria-hidden')==='true';
-  if(el.id==='busyOverlay')return !el.classList.contains('show');
-  if(SHOW_GUARDED_CLASSES.some(name=>el.classList.contains(name)))return !el.classList.contains('show');
-  if(el.classList.contains('abu-security-gate'))return el.classList.contains('hide');
-  return false;
-}
-
-function guardElement(el){
-  if(!el)return;
-  if(shouldBeDisabled(el)){
-    if(el.dataset[GUARDED]!=='1'){
-      el.dataset[GUARDED]='1';
-      el.style.pointerEvents='none';
-      try{el.inert=true}catch(_){}
-    }
-    return;
-  }
-  if(el.dataset[GUARDED]==='1'){
-    delete el.dataset[GUARDED];
-    el.style.removeProperty('pointer-events');
-    try{el.inert=false}catch(_){}
-  }
-}
-
-function repair(){
-  scheduled=false;
-  try{
-    addStyle();
-    if(document.documentElement.style.touchAction!=='auto')document.documentElement.style.touchAction='auto';
-    if(document.body&&document.body.style.touchAction!=='auto')document.body.style.touchAction='auto';
-    document.querySelectorAll(GUARDED_SELECTOR).forEach(guardElement);
-  }catch(_){}
-}
-
-function scheduleRepair(){
-  if(scheduled)return;
-  scheduled=true;
-  if(typeof requestAnimationFrame==='function')requestAnimationFrame(repair);else setTimeout(repair,0);
-}
-
-function start(){
-  repair();
-  try{
-    const observer=new MutationObserver(scheduleRepair);
-    observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']});
-  }catch(_){}
-  ['pageshow','focus','resize'].forEach(type=>window.addEventListener(type,scheduleRepair,{passive:true}));
-  document.addEventListener('visibilitychange',scheduleRepair,{passive:true});
-  document.addEventListener('pointerup',scheduleRepair,{capture:true,passive:true});
-  document.addEventListener('touchend',scheduleRepair,{capture:true,passive:true});
-  [100,400,1000,2500].forEach(ms=>setTimeout(repair,ms));
+function signalReady(){
   try{
     if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){
-      window.ReactNativeWebView.postMessage(JSON.stringify({type:'webBootReady'}));
+      window.ReactNativeWebView.postMessage(JSON.stringify({type:'webBootReady',source:'touch-stability-v2',at:Date.now()}));
     }
   }catch(_){}
 }
-
-window.AbuBassamTouchStability={repair:scheduleRepair};
+function signalVisible(){if(!document.hidden)signalReady()}
+function start(){
+  try{installCssGuards()}catch(_){}
+  signalReady();
+}
+window.AbuBassamTouchStability={version:2,repair:start};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+window.addEventListener('pageshow',signalReady,{passive:true});
+document.addEventListener('visibilitychange',signalVisible,{passive:true});
 })();

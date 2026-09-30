@@ -9,10 +9,15 @@ const migration=read('supabase/migrations/20260926215416_app_release_update_cent
 const publishMigration=read('supabase/migrations/202609270001_app_release_publish_rpc.sql');
 const publisherGuard=read('supabase/migrations/202609270002_app_release_publisher_guard.sql');
 const signingBaseline=read('supabase/migrations/202609270003_release_signing_baseline.sql');
+const currentRelease=read('supabase/migrations/202609300001_v6_release_baseline.sql');
 const pinnedCertificate=read('config/release-signing-certificate.sha256').trim().toLowerCase();
 const publisher=read('scripts/publish-app-update.mjs');
 const pkg=JSON.parse(read('package.json'));
 new vm.Script(runtime,{filename:'app-update-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
+const app=JSON.parse(read('app.json')).expo;
+const updateIdentity=runtime.match(/const APP_VERSION='([^']+)',BUILD_NUMBER=(\d+)/);
+if(!updateIdentity||updateIdentity[1]!==String(app.version)||Number(updateIdentity[2])!==Number(app.android?.versionCode))throw new Error('app update check failed: runtime release identity must match app.json');
+for(const m of ["'6.0.0', 600","channel='stable'",'active=false','active=true'])need(currentRelease,m,'current release baseline '+m);
 if(!/^[0-9a-f]{64}$/.test(pinnedCertificate))throw new Error('app update check failed: pinned production signing fingerprint is invalid');
 for(const m of ['__ABU_APP_UPDATE_V1__','current_code','Authorization','download_ready','validDownloadUrl','dlbxcqkbmvnrcrbhuttv.supabase.co','Android.openExternal','لا يحتوي التطبيق على GitHub Token'])need(runtime,m,m);
 for(const m of ['loadAppUpdate','app-update-runtime.js','__ABU_APP_UPDATE_V1__','setTimeout(loadAppUpdate,240)'])need(loader,m,'loader '+m);
@@ -23,8 +28,5 @@ for(const m of ['storage.objects',"bucket_id='abu-bassam-private'",'RELEASE_APK_
 need(signingBaseline,pinnedCertificate,'signing baseline migration must match pinned fingerprint');
 for(const m of ['release-signing-certificate.sha256','signed-production-release-with-embedded-js','SUPABASE_SERVICE_ROLE_KEY','APK SHA-256 does not match dist/SHA256.txt','certificate SHA-256 digest','Production signing certificate mismatch','app-releases/${v}/${apkName}','abu-bassam-private','x-upsert','/storage/v1/object/authenticated/','Stored APK size mismatch','Stored APK SHA-256 mismatch','abu_bassam_publish_app_release','p_signing_cert_sha256','p_min_supported_code'])need(publisher,m,'publisher '+m);
 if(pkg.scripts?.['publish:update']!=='node scripts/publish-app-update.mjs')throw new Error('app update check failed: package publish:update command missing');
-forbid(runtime,'github.com','GitHub download URL in client');
-forbid(runtime,'ghp_','GitHub personal access token');
-forbid(edge,'verify_jwt = false','unauthenticated update gateway');
-forbid(publisher,'console.log(serviceKey)','publisher must never print service role key');
+forbid(runtime,'github.com','GitHub download URL in client');forbid(runtime,'ghp_','GitHub personal access token');forbid(edge,'verify_jwt = false','unauthenticated update gateway');forbid(publisher,'console.log(serviceKey)','publisher must never print service role key');
 console.log('app update checks passed: authenticated metadata gateway, integrity metadata required before download, service-role-only publication, verified APK existence, pinned production signing certificate continuity and downgrade prevention, production-build/hash/certificate checks before upload, post-upload size/SHA-256 verification, private Storage, signed short-lived URL, and no GitHub token in the APK source.');
