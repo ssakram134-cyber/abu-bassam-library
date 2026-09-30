@@ -10,6 +10,60 @@ const DOWNLOAD_TIMEOUT_MS = 45000;
 const TOUCH_RUNTIME = 'touch-stability-runtime.js';
 const LEGACY_GLOBAL_TOUCH_RE = /\*\{([^{}]*?)touch-action\s*:\s*manipulation;?([^{}]*?)\}/gi;
 
+const V5_RUNTIME_PATCHES = [
+  {
+    file: 'app-security-runtime.js',
+    replacements: [
+      ["const APP_VERSION='4.3.2';", "const APP_VERSION='5.0.0';"],
+      ["const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';", "const DEVICE_ID_KEY='abuBassamLockedDeviceIdV5';"],
+      ["const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';", "const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV5';"],
+    ],
+    required: ["const APP_VERSION='5.0.0';", "abuBassamLockedDeviceIdV5", "abuBassamLockedDeviceNameV5", "p_app_version:APP_VERSION"],
+  },
+  {
+    file: 'security-hardening-runtime.js',
+    replacements: [
+      ["const APP_VERSION='4.3.2';", "const APP_VERSION='5.0.0';"],
+      ["localStorage.getItem('abuBassamLockedDeviceIdV3')", "localStorage.getItem('abuBassamLockedDeviceIdV5')"],
+    ],
+    required: ["const APP_VERSION='5.0.0';", "abuBassamLockedDeviceIdV5", "trust?.appVersion!==APP_VERSION", "p_app_version:APP_VERSION"],
+  },
+  {
+    file: 'account-center-runtime.js',
+    replacements: [
+      ["APP='4.3.2'", "APP='5.0.0'"],
+      ["'abuBassamLockedDeviceIdV3'", "'abuBassamLockedDeviceIdV5'"],
+      ["'abuBassamLockedDeviceNameV3'", "'abuBassamLockedDeviceNameV5'"],
+      ["'abuBassamLockedDeviceCreatedV3'", "'abuBassamLockedDeviceCreatedV5'"],
+    ],
+    required: ["APP='5.0.0'", "abuBassamLockedDeviceIdV5", "abuBassamLockedDeviceNameV5", "abuBassamLockedDeviceCreatedV5", "p_app_version:APP"],
+  },
+  {
+    file: 'account-recovery-hardening-runtime.js',
+    replacements: [
+      ["const APP='4.3.2';", "const APP='5.0.0';"],
+      ["'abuBassamLockedDeviceIdV3'", "'abuBassamLockedDeviceIdV5'"],
+      ["'abuBassamLockedDeviceNameV3'", "'abuBassamLockedDeviceNameV5'"],
+      ["'abuBassamLockedDeviceCreatedV3'", "'abuBassamLockedDeviceCreatedV5'"],
+    ],
+    required: ["const APP='5.0.0';", "abuBassamLockedDeviceIdV5", "abuBassamLockedDeviceNameV5", "abuBassamLockedDeviceCreatedV5", "p_app_version:APP"],
+  },
+  {
+    file: 'app-update-runtime.js',
+    replacements: [
+      ["const APP_VERSION='4.3.2',BUILD_NUMBER=432", "const APP_VERSION='5.0.0',BUILD_NUMBER=500"],
+    ],
+    required: ["const APP_VERSION='5.0.0',BUILD_NUMBER=500", "current_code=${BUILD_NUMBER}"],
+  },
+  {
+    file: 'app-settings-runtime.js',
+    replacements: [
+      ["const APP_VERSION='4.3.2',BUILD_NUMBER='432',RELEASE_DATE='2026-09-20';", "const APP_VERSION='5.0.0',BUILD_NUMBER='500',RELEASE_DATE='2026-09-30';"],
+    ],
+    required: ["const APP_VERSION='5.0.0',BUILD_NUMBER='500',RELEASE_DATE='2026-09-30';"],
+  },
+];
+
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
 const OCR_ASSETS = [
   ['tesseract.min.js', pair(
@@ -107,6 +161,40 @@ async function injectTouchStabilityRuntime(){
   process.stdout.write(`Android touch stability runtime enabled: ${TOUCH_RUNTIME}\n`);
 }
 
+async function hardenV5RuntimeIdentity(){
+  const forbiddenLegacyMarkers=['abuBassamLockedDeviceIdV3','abuBassamLockedDeviceNameV3','abuBassamLockedDeviceCreatedV3'];
+  for(const spec of V5_RUNTIME_PATCHES){
+    const runtimePath=resolve(destination,spec.file);
+    let sourceText=await readFile(runtimePath,'utf8');
+    let changed=false;
+    for(const [legacy,current] of spec.replacements){
+      if(sourceText.includes(legacy)){
+        sourceText=sourceText.split(legacy).join(current);
+        changed=true;
+      }
+      if(!sourceText.includes(current)){
+        throw new Error(`Android v5 runtime identity hardening could not verify ${spec.file}: ${current}`);
+      }
+    }
+    if(changed)await writeFile(runtimePath,sourceText,'utf8');
+    const verified=await readFile(runtimePath,'utf8');
+    for(const marker of spec.required){
+      if(!verified.includes(marker))throw new Error(`Android v5 runtime identity requirement missing in ${spec.file}: ${marker}`);
+    }
+    for(const marker of forbiddenLegacyMarkers){
+      if(verified.includes(marker))throw new Error(`Android v5 runtime still references legacy device identity in ${spec.file}: ${marker}`);
+    }
+    if(verified.includes("APP_VERSION='4.3.2'")||verified.includes("APP='4.3.2'")){
+      throw new Error(`Android v5 runtime still reports legacy app version in ${spec.file}`);
+    }
+  }
+  const deviceRuntime=await readFile(resolve(destination,'device-name-runtime.js'),'utf8');
+  for(const marker of ["abuBassamLockedDeviceIdV5","abuBassamLockedDeviceNameV5","abuBassamLockedDeviceCreatedV5","const APP_VERSION = '5.0.0'"]){
+    if(!deviceRuntime.includes(marker))throw new Error(`Primary device runtime is not v5-isolated: ${marker}`);
+  }
+  process.stdout.write('Android v5 runtime identity hardened: security, offline trust, account recovery, settings and update metadata use the v5 device namespace/build.\n');
+}
+
 // Canonical source is read-only during normal builds. Generate only the disposable
 // Android asset tree created by expo prebuild; never write downloaded files into web/.
 await rm(destination, { recursive: true, force: true });
@@ -114,6 +202,7 @@ await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
 await neutralizeLegacyGlobalTouchPolicy();
 await injectTouchStabilityRuntime();
+await hardenV5RuntimeIdentity();
 
 for(const [relative,urls,minBytes] of OCR_ASSETS){
   await download(urls,resolve(vendorRoot,relative),minBytes);
