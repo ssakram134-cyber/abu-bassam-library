@@ -1,19 +1,27 @@
-# هوية الحزمة والتحديث دون فقد البيانات
+# هوية الحزمة الحالية
 
-توجد سلسلتان تاريخيتان في الملفات السابقة:
+الحالة المعتمدة للمصدر الحالي فقط:
 
-| السلسلة | الحزمة | التوقيع المختصر | الحالة |
-|---|---|---|---|
-| Android v3.0 القديمة | `com.abubassam.libraryphotos3` | `be60ee7490415f74` | مفتاحها الخاص غير موجود ضمن الملفات المتاحة |
-| Android v3.2 ثم v4.x | `com.abubassam.librarycamera3` | `9ed30ea3d1b0faaa` | مفتاح التحديث محفوظ خارج المستودع |
+- اسم التطبيق: `مكتبة أبو بسام`
+- الإصدار: `6.0.0`
+- Android `versionCode`: `600`
+- Android package: `com.abubassam.libraryv6`
+- مخزن هوية الجهاز التشغيلي: مفاتيح V5 الحالية فقط؛ لا يوجد fallback إلى namespaces أقدم.
+- الأسرار: عبر Android SecureStore فقط. أي قيمة قديمة في Web Storage تُمسح بواسطة حارس التنظيف ولا تُستخدم للمصادقة.
+- التحديثات: `app-update-runtime.js` و`app.json` و`package.json` و`index.js` يجب أن تحمل الإصدار والبناء نفسيهما.
 
-الإصدار 4.2 يتبع السلسلة الثانية لأنه يستطيع التحديث فوق v3.2 وv4.0 وv4.1 بالتوقيع نفسه والحفاظ على بياناتها.
-
-إذا كانت النسخة المثبتة على الهاتف تحمل `com.abubassam.libraryphotos3` فلا يمكن تقنيًا توقيع تحديث مطابق دون المفتاح الخاص الأصلي. لا تحذفها قبل تصدير ما يلزم. ثبّت نسخة 4.2 كتطبيق مستقل أو نفّذ انتقالًا يدويًا عبر النسخة الاحتياطية. لا يمكن حل اختلاف توقيع Android بحذف ملف Data فقط.
-
-للتحقق عبر ADB:
+للتحقق من النسخة الحالية عبر ADB:
 
 ```bash
 adb shell pm list packages | grep com.abubassam
-adb shell dumpsys package com.abubassam.librarycamera3 | grep versionName
+adb shell dumpsys package com.abubassam.libraryv6 | grep -E 'versionName|versionCode'
 ```
+
+أي تغيير لاحق للإصدار يجب أن يمر عبر:
+
+```bash
+npm run release:prepare -- <version> <versionCode>
+npm run check:web
+```
+
+ولا يُعتمد APK إنتاجي قبل التحقق من التوقيع وSHA-256 ومن وجود `assets/index.android.bundle` داخله.
