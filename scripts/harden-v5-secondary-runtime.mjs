@@ -34,6 +34,18 @@ async function runtimeFiles(dir,out=[]){
 
 await stat(assets).catch(()=>{throw new Error('Generated Android web assets are missing; run prepare-android-assets first')});
 
+await patch('app-security-runtime.js',[
+  ["if(action==='secureGet')return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');","if(action==='secureGet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+  ["if(action==='secureSet'){localStorage.setItem('__dev_secure_'+payload.key,String(payload.value||''));return Promise.resolve(true)}","if(action==='secureSet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+  ["if(action==='secureDelete'){localStorage.removeItem('__dev_secure_'+payload.key);return Promise.resolve(true)}","if(action==='secureDelete')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));"],
+],[
+  "if(action==='secureGet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));",
+  "if(action==='secureSet')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));",
+  "if(action==='secureDelete')return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));",
+  'abuBassamLockedDeviceIdV5',
+  'abuBassamLockedDeviceNameV5',
+],['__dev_secure_',...LEGACY]);
+
 await patch('settings-corrections-runtime.js',[
   ["localStorage.getItem('abuBassamLockedDeviceIdV3')","localStorage.getItem('abuBassamLockedDeviceIdV5')"],
   ["device.app_version||'4.3.2'","device.app_version||'5.0.0'"],
@@ -58,4 +70,4 @@ if(leftovers.length){
   throw new Error('Generated Android runtime still contains legacy V3 device identity references:\n'+leftovers.join('\n'));
 }
 
-process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain, settings corrections use V5, and owner-sensitive settings have no localStorage secret fallback.\n');
+process.stdout.write('Generated Android runtime v5 identity verified: no V3 device-id/name/created references remain; app-security secret get/set/delete and owner-sensitive settings fail closed without native SecureStore; settings corrections use V5.\n');
