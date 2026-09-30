@@ -7,19 +7,19 @@ const $=id=>document.getElementById(id);
 const LEGACY_TRUST_KEY='abuBassamSecurityTrustV1';
 const SECURE_TRUST_KEY='abu_bassam_offline_trust_v2';
 const SECRET_KEY='abu_bassam_device_secret_v1';
-const APP_VERSION='4.3.2';
+const APP_VERSION='6.0.0';
 const OFFLINE_GRACE_MS=12*60*60*1000;
 const CLOCK_SKEW_MS=5*60*1000;
 const LOCK_MINUTES_KEY='abuBassamSecurityLockMinutesV1';
 const pending=new Map();let seq=0,bridgeInstalled=false,patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0;
 
-function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV3')||''}
+function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV5')||''}
 function nativeAvailable(){return !!(window.Android&&typeof Android.security==='function')}
 function online(){return !!(navigator.onLine&&window.AbuBassamCloud?.isConnected?.())}
 function enc(v){return new TextEncoder().encode(String(v||''))}
 function hex(bytes){return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('')}
 function constantTime(a,b){a=String(a||'');b=String(b||'');if(a.length!==b.length)return false;let out=0;for(let i=0;i<a.length;i++)out|=a.charCodeAt(i)^b.charCodeAt(i);return out===0}
-function cleanLegacy(){localStorage.removeItem(LEGACY_TRUST_KEY);if(nativeAvailable()){for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i)||'';if(k.startsWith('__dev_secure_'))localStorage.removeItem(k)}}}
+function cleanLegacy(){localStorage.removeItem(LEGACY_TRUST_KEY);}
 function installBridge(){if(bridgeInstalled)return;bridgeInstalled=true;const previous=window.AbuBassamNativeSecurityResult;window.AbuBassamNativeSecurityResult=function(message){const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(_){return{}}})():message||{},slot=pending.get(data.requestId);if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);data.ok===false?slot.reject(new Error(data.error||'تعذر تنفيذ العملية الأمنية')):slot.resolve(data.value);return}if(typeof previous==='function')previous(message)}}
 function nativeRequest(action,payload={}){installBridge();if(!nativeAvailable())return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return new Promise((resolve,reject)=>{const requestId='hard-sec-'+Date.now()+'-'+(++seq),timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة العملية الأمنية'))},12000);pending.set(requestId,{resolve,reject,timer});Android.security(action,requestId,payload)})}
 async function hmac(body,secret){if(!crypto?.subtle)throw new Error('CRYPTO_UNAVAILABLE');const key=await crypto.subtle.importKey('raw',enc(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return hex(await crypto.subtle.sign('HMAC',key,enc(body)))}
