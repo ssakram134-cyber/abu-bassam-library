@@ -9,6 +9,8 @@ const root = path.resolve(here, '..');
 const win = process.platform === 'win32';
 const requireReleaseKey = process.argv.includes('--require-release-key');
 const signingVars = ['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'];
+const STALE_INSTALLER_RE = /\.(?:apk|aab|apks)$/i;
+const CLEAN_SCAN_SKIP_DIRS = new Set(['.git','node_modules']);
 
 function run(cmd, args, cwd = root, env = process.env) {
   const r = spawnSync(cmd, args, { cwd, env, stdio: 'inherit', shell: win });
@@ -42,13 +44,34 @@ function validateSigningConfiguration() {
   return configured;
 }
 
+function removeInstallerArtifactsRecursively(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && CLEAN_SCAN_SKIP_DIRS.has(entry.name)) continue;
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) removeInstallerArtifactsRecursively(target);
+    else if (entry.isFile() && STALE_INSTALLER_RE.test(entry.name)) fs.rmSync(target, { force: true });
+  }
+}
+
+function findInstallerArtifactsRecursively(dir, found = []) {
+  if (!fs.existsSync(dir)) return found;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && CLEAN_SCAN_SKIP_DIRS.has(entry.name)) continue;
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) findInstallerArtifactsRecursively(target, found);
+    else if (entry.isFile() && STALE_INSTALLER_RE.test(entry.name)) found.push(target);
+  }
+  return found;
+}
+
 function removeStaleBuildArtifacts() {
   for (const dir of ['android','dist','.expo']) {
     fs.rmSync(path.join(root, dir), { recursive: true, force: true });
   }
-  for (const name of fs.readdirSync(root)) {
-    if (/\.(?:apk|aab|apks)$/i.test(name)) fs.rmSync(path.join(root, name), { force: true });
-  }
+  removeInstallerArtifactsRecursively(root);
+  const leftovers = findInstallerArtifactsRecursively(root);
+  if (leftovers.length) throw new Error(`Stale Android installer artifacts remain after cleanup: ${leftovers.join(', ')}`);
 }
 
 function findApk(dir) {
