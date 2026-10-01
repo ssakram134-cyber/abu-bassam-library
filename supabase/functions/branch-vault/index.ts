@@ -70,5 +70,5 @@ Deno.serve(async(req:Request)=>{
       return json({ok:true});
     }
     return json({error:'UNSUPPORTED_ACTION'},400);
-  }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=/NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE/.test(message)?403:500;return json({error:message},status)}
+  }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=message==='NOT_AUTHENTICATED'?401:/NOT_ALLOWED|DEVICE/.test(message)?403:500;return json({error:message},status)}
 });
