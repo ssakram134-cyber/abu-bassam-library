@@ -42,13 +42,7 @@ function installNativeBridge(){
 }
 function native(action,payload={}){
   installNativeBridge();
-  if(!(window.Android&&typeof Android.security==='function')){
-    const key='__dev_secure_'+String(payload.key||'');
-    if(action==='secureGet')return Promise.resolve(localStorage.getItem(key)||'');
-    if(action==='secureSet'){localStorage.setItem(key,String(payload.value||''));return Promise.resolve(true)}
-    if(action==='secureDelete'){localStorage.removeItem(key);return Promise.resolve(true)}
-    return Promise.reject(new Error('NATIVE_SECURITY_UNAVAILABLE'));
-  }
+  if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));
   return new Promise((resolve,reject)=>{
     const requestId='pw-recovery-'+Date.now()+'-'+(++seq);
     const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة التخزين الآمن'))},12000);
