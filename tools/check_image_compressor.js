@@ -18,7 +18,7 @@ for(const m of [
   'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
 ])need(html,m,'image compressor');
 const patch=read(path.join(root,'scripts','patch-startup-stability.mjs'));
-for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','named mixed-format compressed image saving'])need(patch,m,'Android compressor patch');
+for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(patch,m,'Android compressor patch');
 const index=read(path.join(root,'index.js'));
 for(const m of ['encodedNameMatch','itemMime','requestedName || fallbackName'])need(index,m,'patched Android index');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
