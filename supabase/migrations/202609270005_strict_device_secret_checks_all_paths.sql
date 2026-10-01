@@ -77,28 +77,6 @@ begin
   return query select d.device_id,d.device_name,d.role,d.active,d.last_seen from public.abu_bassam_devices d where d.user_id=v_uid order by (case when d.role='owner' then 0 else 1 end),d.device_name;
 end $$;
 
-create or replace function public.abu_bassam_manage_device(p_actor_device_id text,p_actor_secret text,p_target_device_id text,p_device_name text default null,p_active boolean default null,p_permissions jsonb default null)
-returns public.abu_bassam_devices
-language plpgsql security definer set search_path=public,extensions
-as $$
-declare v_uid uuid:=auth.uid();v_actor public.abu_bassam_devices%rowtype;v_hash text;v_target public.abu_bassam_devices%rowtype;
-begin
-  if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
-  if coalesce(trim(p_actor_device_id),'')='' or coalesce(p_actor_secret,'')='' then raise exception 'OWNER_REQUIRED'; end if;
-  v_hash:=encode(digest(p_actor_secret,'sha256'),'hex');
-  select * into v_actor from public.abu_bassam_devices where user_id=v_uid and device_id=p_actor_device_id limit 1;
-  if not found or v_actor.role<>'owner' or v_actor.active=false or coalesce(v_actor.secret_hash,'')='' or v_actor.secret_hash<>v_hash then raise exception 'OWNER_REQUIRED'; end if;
-  if p_target_device_id=p_actor_device_id and p_active=false then raise exception 'OWNER_CANNOT_BE_DISABLED'; end if;
-  update public.abu_bassam_devices
-     set device_name=coalesce(nullif(trim(p_device_name),''),device_name),
-         active=coalesce(p_active,active),
-         permissions=coalesce(p_permissions,permissions)
-   where user_id=v_uid and device_id=p_target_device_id
-   returning * into v_target;
-  if not found then raise exception 'DEVICE_NOT_FOUND'; end if;
-  return v_target;
-end $$;
-
 create or replace function public.abu_bassam_customer_document_set_edit_meta(p_device_id text,p_device_secret text,p_document_id uuid,p_original_storage_path text default null,p_original_mime text default null,p_original_size_bytes bigint default 0,p_edit_meta jsonb default '{}'::jsonb)
 returns boolean
 language plpgsql security definer set search_path=public,extensions
@@ -140,12 +118,10 @@ revoke all on function public.abu_bassam_register_device(text,text,text,text,tex
 revoke all on function public.abu_bassam_touch_device(text,text,text,text,text,text) from public,anon;
 revoke all on function public.abu_bassam_remove_device(text,text,text) from public,anon;
 revoke all on function public.abu_bassam_owner_activity_devices(text,text) from public,anon;
-revoke all on function public.abu_bassam_manage_device(text,text,text,text,boolean,jsonb) from public,anon;
 grant execute on function public.abu_bassam_register_device(text,text,text,text,text,text) to authenticated,service_role;
 grant execute on function public.abu_bassam_touch_device(text,text,text,text,text,text) to authenticated,service_role;
 grant execute on function public.abu_bassam_remove_device(text,text,text) to authenticated,service_role;
 grant execute on function public.abu_bassam_owner_activity_devices(text,text) to authenticated,service_role;
-grant execute on function public.abu_bassam_manage_device(text,text,text,text,boolean,jsonb) to authenticated,service_role;
 
 revoke all on function public.abu_bassam_customer_document_set_edit_meta(text,text,uuid,text,text,bigint,jsonb) from public,anon,authenticated;
 revoke all on function public.abu_bassam_customer_prepare_document(text,text,uuid,uuid,text,text,text,text,text,text,text,bigint,integer) from public,anon,authenticated;
