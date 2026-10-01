@@ -20,6 +20,8 @@ for(const t of ['branch-vault-runtime.js','document-vault-hardening-runtime.js',
 no(loader,'loadBranchVault();','branch vault must load only after the fail-closed guard');
 for(const t of ['abu_bassam_branch_vault','branch_device_id','_abu_bassam_vault_authorized','VAULT_VIEW_NOT_ALLOWED','VAULT_SYNC_NOT_ALLOWED','vaultDelete','kind <> \'vault\'','branch-vault','as restrictive'])need(migration,t,'server isolation '+t);
 for(const t of ['SUPABASE_SERVICE_ROLE_KEY','sha256Hex','secret_hash','branch-vault','createSignedUploadUrl','createSignedUrl','VAULT_PATH_INVALID','vaultSync','vaultView','vaultDelete',"DEFAULT_ALLOWED = new Set(['vaultView','vaultAdd','vaultEdit','vaultDelete','vaultSync'])",'function permissionEnabled','typeof permissions[key]===\'boolean\'','return DEFAULT_ALLOWED.has(key)',"context(req,'vaultSync')","context(req,'vaultView')","context(req,'vaultDelete')","existing?'vaultEdit':'vaultAdd'"])need(edge,t,'edge gateway '+t);
+need(edge,"message==='NOT_AUTHENTICATED'?401",'expired or invalid auth must return HTTP 401');
+no(edge,'/NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE/','auth failures must not be folded into permission/device HTTP 403');
 no(edge,'permissions?.[permission]!==false','implicit allow permission fallback');
 no(edge,'service_role"','hardcoded service role');
 for(const t of ["searchParams.get('permission')","body?.permission","body.permission","headers.get('x-permission')"])no(edge,t,'client must never choose the server permission key: '+t);
@@ -28,4 +30,4 @@ if(!allowedMatch)throw new Error('branch vault check failed: DEFAULT_ALLOWED set
 const allowed=[...allowedMatch[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
 const expected=['vaultView','vaultAdd','vaultEdit','vaultDelete','vaultSync'];
 if(allowed.length!==expected.length||expected.some((k,i)=>allowed[i]!==k))throw new Error(`branch vault check failed: DEFAULT_ALLOWED must stay exactly ${expected.join(',')}; found ${allowed.join(',')}`);
-console.log('branch-private vault checks passed: exact Device ID + Device Secret scope, native secure-store requirement, exact closed five-key default permission allowlist, no client-selected permission key, fail-closed startup ordering, bulk deletion stops on storage failure before metadata removal, admin permissions, modal-action guards, full view hiding, signed storage gateway, local scope lock, safe branch-bound restore, and encrypted backup option');
+console.log('branch-private vault checks passed: exact Device ID + Device Secret scope, native secure-store requirement, exact closed five-key default permission allowlist, HTTP 401 for authentication failures, no client-selected permission key, fail-closed startup ordering, bulk deletion stops on storage failure before metadata removal, admin permissions, modal-action guards, full view hiding, signed storage gateway, local scope lock, safe branch-bound restore, and encrypted backup option');

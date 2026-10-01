@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+const fs=require('node:fs');
+const path=require('node:path');
 
 const root=process.cwd();
 const recovery=fs.readFileSync(path.join(root,'web/password-recovery-runtime.js'),'utf8');
