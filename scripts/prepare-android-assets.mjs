@@ -8,6 +8,9 @@ const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'asset
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
 const DOWNLOAD_TIMEOUT_MS = 45000;
 const TOUCH_RUNTIME = 'touch-stability-runtime.js';
+const PASSWORD_RECOVERY_RUNTIME = 'password-recovery-runtime.js';
+const LEGACY_ACCOUNT_EMAIL = 'akrama1992@gmail.com';
+const ACCOUNT_EMAIL = 'akramag1992@gmail.com';
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
 const OCR_ASSETS = [
@@ -75,20 +78,44 @@ async function download(urls,path,minBytes){
   throw new Error(`Failed to prepare required offline OCR asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
 }
 
-async function injectTouchStabilityRuntime(){
-  const runtimePath=resolve(destination,TOUCH_RUNTIME);
-  if(!(await existsEnough(runtimePath,1000)))throw new Error(`Required Android touch runtime is missing or incomplete: ${TOUCH_RUNTIME}`);
+async function patchAccountEmail(){
+  const files=['app-security-runtime.js','secure-sync-runtime.js'];
+  for(const relative of files){
+    const path=resolve(destination,relative);
+    let sourceText=await readFile(path,'utf8');
+    if(sourceText.includes(LEGACY_ACCOUNT_EMAIL)){
+      sourceText=sourceText.replaceAll(LEGACY_ACCOUNT_EMAIL,ACCOUNT_EMAIL);
+      await writeFile(path,sourceText,'utf8');
+    }
+    const verified=await readFile(path,'utf8');
+    if(verified.includes(LEGACY_ACCOUNT_EMAIL))throw new Error(`Legacy account email remains in Android asset: ${relative}`);
+    if(!verified.includes(ACCOUNT_EMAIL))throw new Error(`Current account email is missing from Android asset: ${relative}`);
+  }
+  process.stdout.write(`Android account email normalized to ${ACCOUNT_EMAIL}\n`);
+}
+
+async function injectRequiredRuntimes(){
+  const runtimes=[TOUCH_RUNTIME,PASSWORD_RECOVERY_RUNTIME];
+  for(const runtime of runtimes){
+    const runtimePath=resolve(destination,runtime);
+    if(!(await existsEnough(runtimePath,1000)))throw new Error(`Required Android runtime is missing or incomplete: ${runtime}`);
+  }
   const entryPath=resolve(destination,'index.html');
   let html=await readFile(entryPath,'utf8');
-  const tag=`<script src="${TOUCH_RUNTIME}"></script>`;
-  if(!html.includes(tag)){
-    if(!html.includes('</body>'))throw new Error('Android web entry point is missing </body>; cannot install touch stability runtime');
-    html=html.replace('</body>',`${tag}\n</body>`);
-    await writeFile(entryPath,html,'utf8');
+  for(const runtime of runtimes){
+    const tag=`<script src="${runtime}"></script>`;
+    if(!html.includes(tag)){
+      if(!html.includes('</body>'))throw new Error(`Android web entry point is missing </body>; cannot install ${runtime}`);
+      html=html.replace('</body>',`${tag}\n</body>`);
+    }
   }
+  await writeFile(entryPath,html,'utf8');
   const verified=await readFile(entryPath,'utf8');
-  if(!verified.includes(tag))throw new Error('Touch stability runtime was not injected into Android web entry point');
-  process.stdout.write(`Android touch stability runtime enabled: ${TOUCH_RUNTIME}\n`);
+  for(const runtime of runtimes){
+    const tag=`<script src="${runtime}"></script>`;
+    if(!verified.includes(tag))throw new Error(`Required runtime was not injected into Android web entry point: ${runtime}`);
+  }
+  process.stdout.write(`Android runtimes enabled: ${runtimes.join(', ')}\n`);
 }
 
 // Canonical source is read-only during normal builds. Generate only the disposable
@@ -96,7 +123,8 @@ async function injectTouchStabilityRuntime(){
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
-await injectTouchStabilityRuntime();
+await patchAccountEmail();
+await injectRequiredRuntimes();
 
 for(const [relative,urls,minBytes] of OCR_ASSETS){
   await download(urls,resolve(vendorRoot,relative),minBytes);
