@@ -68,9 +68,11 @@ const assetRequired=[
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
   'const DOWNLOAD_TIMEOUT_MS = 45000;',
   "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",
-  'async function injectTouchStabilityRuntime()',
-  'await injectTouchStabilityRuntime();',
-  'Touch stability runtime was not injected into Android web entry point',
+  "const PASSWORD_RECOVERY_RUNTIME = 'password-recovery-runtime.js';",
+  'async function injectRequiredRuntimes()',
+  'const runtimes=[TOUCH_RUNTIME,PASSWORD_RECOVERY_RUNTIME];',
+  'await injectRequiredRuntimes();',
+  'Required runtime was not injected into Android web entry point',
   'await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });',
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
@@ -113,9 +115,9 @@ const nativeTouchMissing=nativeTouchRequired.filter(marker=>!native.includes(mar
 if(nativeTouchMissing.length){process.stderr.write('Native WebView touch/startup bridge missing required safeguards:\n'+nativeTouchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
 for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
 const copyAt=assets.indexOf('await cp(source, destination');
-const injectTouchAt=assets.indexOf('await injectTouchStabilityRuntime();');
+const injectRequiredAt=assets.indexOf('await injectRequiredRuntimes();');
 const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||injectTouchAt<0||downloadAt<0||copyAt>injectTouchAt||injectTouchAt>downloadAt){process.stderr.write('Android assets must copy canonical web source, inject touch stability runtime, then generate OCR assets.\n');process.exit(1)}
+if(copyAt<0||injectRequiredAt<0||downloadAt<0||copyAt>injectRequiredAt||injectRequiredAt>downloadAt){process.stderr.write('Android assets must copy canonical web source, inject required touch/recovery runtimes, then generate OCR assets.\n');process.exit(1)}
 const fallbackRequired=[
   ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
   ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
