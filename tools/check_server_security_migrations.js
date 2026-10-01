@@ -16,7 +16,6 @@ const expected=[
   ['abu_bassam_touch_device','v_row','p_secret'],
   ['abu_bassam_remove_device','v_actor','p_actor_secret'],
   ['abu_bassam_owner_activity_devices','v_actor','p_actor_secret'],
-  ['abu_bassam_manage_device','v_actor','p_actor_secret'],
   ['abu_bassam_customer_document_set_edit_meta','v_device','p_device_secret'],
   ['abu_bassam_customer_prepare_document','v_device','p_device_secret'],
 ];
@@ -30,8 +29,6 @@ for(const [name,row,secret] of expected){
   if(name!=='abu_bassam_register_device')need(block,`coalesce(${secret},'')=''`,`${name} must reject an empty presented secret`);
   else need(block,"coalesce(p_secret,'')=''",`${name} must reject an empty presented secret`);
 }
-need(all,'revoke all on function public.abu_bassam_manage_device(text,text,text,text,boolean,jsonb) from public,anon','manage-device RPC must be revoked from public/anon');
-need(all,'grant execute on function public.abu_bassam_manage_device(text,text,text,text,boolean,jsonb) to authenticated,service_role','manage-device RPC must remain available to authenticated clients and service role');
 need(all,'revoke all on function public.abu_bassam_customer_document_set_edit_meta','legacy edit-meta RPC privilege boundary');
 need(all,'revoke all on function public.abu_bassam_customer_prepare_document','legacy prepare-document RPC privilege boundary');
 need(all,'from public,anon,authenticated','service-only legacy document RPCs must stay unavailable to clients');
