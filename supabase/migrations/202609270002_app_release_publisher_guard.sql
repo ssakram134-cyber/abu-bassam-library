@@ -68,6 +68,9 @@ begin
     if p_version_code < v_previous.version_code then
       raise exception 'RELEASE_DOWNGRADE_NOT_ALLOWED';
     end if;
+    if p_version_code = v_previous.version_code and v_version <> v_previous.version then
+      raise exception 'RELEASE_CODE_REUSE_NOT_ALLOWED';
+    end if;
     if nullif(replace(lower(coalesce(v_previous.signing_cert_sha256,'')),':',''),'') is not null
        and replace(lower(v_previous.signing_cert_sha256),':','') <> v_cert then
       raise exception 'SIGNING_CERTIFICATE_MISMATCH';
