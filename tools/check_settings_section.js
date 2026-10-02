@@ -32,6 +32,8 @@ no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const typography=read(path.join(web,'typography-runtime.js'));
 need(typography,'if(!save()){custom=before','custom font import rollback on persistence failure');
 need(typography,'return false','font persistence failure must be observable');
+need(typography,'function reloadPersisted()','restored typography must reload persisted state');
+need(typography,'custom=load(CUSTOM_KEY,[])','restored custom fonts must reload from storage');
 const loader=read(path.join(web,'device-name-runtime.js'));
 for(const marker of ['settings-corrections-runtime.js','loadSettingsCorrections()','await loadSettingsCorrections();'])need(loader,marker,'settings loader');
 no(loader,'wifi-sync-guard-runtime.js','obsolete Wi-Fi guard loader');
