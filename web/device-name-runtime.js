@@ -54,7 +54,6 @@
   const loadAccountRecoveryHardening=()=>loadScript('abuAccountRecoveryHardeningRuntime','account-recovery-hardening-runtime.js','__ABU_ACCOUNT_RECOVERY_HARDENING_V1__');
   const loadAccountCenter=async()=>{await loadScript('abuAccountCenterRuntime','account-center-runtime.js','__ABU_ACCOUNT_CENTER_V1__');await loadAccountRecoveryHardening()};
   const loadDocumentVaultPermissionGuard=()=>loadScript('abuDocumentVaultPermissionGuardRuntime','document-vault-permission-guard-runtime.js','__ABU_DOCUMENT_VAULT_PERMISSION_GUARD_V1__');
-  const loadEncryptedVaultHardening=()=>loadScript('abuEncryptedVaultHardeningRuntime','encrypted-vault-hardening-runtime.js','__ABU_ENCRYPTED_VAULT_HARDENING_V1__');
   const loadOperationLogStorageMigration=()=>loadScript('abuOperationLogStorageMigrationRuntime','operation-log-storage-migration-runtime.js','__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__');
   const loadOperationLogCorrections=async()=>{await loadScript('abuOperationLogCorrectionsRuntime','operation-log-corrections-runtime.js','__ABU_OPERATION_LOG_CORRECTIONS_V2__');await loadOperationLogStorageMigration()};
   const loadSecurityExtras=()=>loadScript('abuSecurityExtrasRuntime','security-extras-runtime.js','__ABU_SECURITY_EXTRAS_V1__');
@@ -92,7 +91,6 @@
     await loadAccountCenter();
     await loadAppUpdate();
     await loadDocumentVaultPermissionGuard();
-    await loadEncryptedVaultHardening();
     await loadSettingsCorrections();
     await loadOperationLogCorrections()
   }
