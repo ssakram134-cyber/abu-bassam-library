@@ -57,7 +57,8 @@ for(const [marker,label] of [
   ["'scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js'",'obsolete patch file rejection'],
   ['forbiddenExt','signing/secret file rejection'],
   ["cp.spawnSync(process.execPath,['--check',file]",'JavaScript syntax validation'],
-  ["if(rel==='index.js')continue;",'React Native JSX entry excluded from plain Node syntax checker']
+  ["if(rel==='index.js')continue;",'React Native JSX entry excluded from plain Node syntax checker'],
+  ["const userFacingIdentityScan=!rel.replaceAll('\\\\','/').startsWith('tools/');",'tooling excluded only from user-facing designer identity scan']
 ]) need(validator,marker,label);
 
 for(const [marker,label] of [
