@@ -13,7 +13,8 @@ const VIEW_KEY='abuBassamVaultViewV5';
 const SYSTEM_FOLDERS=['المستمسكات','المعاملات','الباجات'];
 function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function syncKey(key){return key+':'+syncScope()}
-function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+const LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY]);
+function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null&&LEGACY_SYNC_PREFS.has(key)){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
 const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
 
