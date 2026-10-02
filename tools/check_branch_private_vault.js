@@ -14,4 +14,6 @@ no(loader,'fail-closed-runtime.js','obsolete fail-closed patch loader');
 for(const t of ['_abu_bassam_vault_authorized',"coalesce((v.permissions->>p_permission)::boolean,false)",'p_offset integer default 0','VAULT_VIEW_NOT_ALLOWED','VAULT_SYNC_NOT_ALLOWED','as restrictive'])need(migration,t,'server fail-closed isolation '+t);
 for(const t of ['SUPABASE_SERVICE_ROLE_KEY','sha256Hex','secret_hash','createSignedUploadUrl','createSignedUrl','crypto.randomUUID()',"permissionEnabled","return permissions[key]===true","context(req,'vaultSync')","context(req,'vaultView')","context(req,'vaultDelete')"])need(edge,t,'edge gateway '+t);
 for(const t of ['DEFAULT_ALLOWED','return DEFAULT_ALLOWED.has','permissions?.[permission]!==false','service_role"'])no(edge,t,'edge fail-open/secret behavior '+t);
+need(edge,"message==='NOT_AUTHENTICATED'?401",'expired or invalid auth must return HTTP 401');
+no(edge,'/NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE/','auth failures must not be folded into permission/device HTTP 403');
 console.log('branch-private vault checks passed: central adapter, SecureStore-only device secret, explicit granular permissions, pageable server metadata, immutable upload revisions, branch-bound atomic restore, and no default-allow lists.');
