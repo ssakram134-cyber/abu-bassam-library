@@ -6,8 +6,9 @@ const recovery=fs.readFileSync(path.join(root,'web/password-recovery-runtime.js'
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-android-assets.mjs'),'utf8');
 const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
 const requiredRecovery=[
-  "const ACCOUNT_EMAIL='akrama1992@gmail.com'",
-  "resetPasswordForEmail(ACCOUNT_EMAIL",
+  "const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com'",
+  "function accountEmail()",
+  "resetPasswordForEmail(accountEmail()",
   "exchangeCodeForSession(code)",
   "updateUser({password})",
   "abu-bassam-library://auth/callback",
@@ -15,6 +16,7 @@ const requiredRecovery=[
   "PASSWORD_RECOVERY"
 ];
 for(const needle of requiredRecovery){if(!recovery.includes(needle))throw new Error(`password recovery missing: ${needle}`)}
+if(recovery.includes('akramag1992@gmail.com'))throw new Error('password recovery contains obsolete incorrect account email');
 const requiredPrepare=[
   "const source = resolve(projectRoot, 'web')",
   "await rm(destination, { recursive: true, force: true });",
