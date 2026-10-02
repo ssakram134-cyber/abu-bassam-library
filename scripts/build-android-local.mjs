@@ -13,6 +13,12 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 
 const appVersion = String(packageJson.version || '').trim();
 if (!appVersion) throw new Error('package.json version is missing');
 
+function buildEnvironment() {
+  const env = { ...process.env };
+  for (const name of [...signingVars, 'ANDROID_KEYSTORE_TYPE', 'ANDROID_KEYSTORE_BASE64']) delete env[name];
+  return env;
+}
+
 function run(cmd, args, cwd = root, env = process.env) {
   const r = spawnSync(cmd, args, { cwd, env, stdio: 'inherit', shell: win });
   if (r.error) throw r.error;
@@ -66,17 +72,6 @@ function findReleaseApk(dir) {
   }
   if (apks.length !== 1) throw new Error(`Expected exactly one release APK, found ${apks.length}`);
   return apks[0];
-}
-
-function ensureReleaseSigningHook(configured) {
-  if (!configured) return;
-  const gradle = path.join(root, 'android', 'app', 'build.gradle');
-  const hook = 'apply from: file("../../scripts/android-release-signing.gradle")';
-  let src = fs.readFileSync(gradle, 'utf8');
-  if (!src.includes(hook)) {
-    src += `\n${hook}\n`;
-    fs.writeFileSync(gradle, src);
-  }
 }
 
 function verifyBundle(apk) {
@@ -148,29 +143,49 @@ try {
   console.log(`Signing mode: ${customSigning ? 'production/custom key' : 'test/default key'}`);
   if (!customSigning && !requireReleaseKey) console.warn('WARNING: local test build only; do not distribute as production release.');
 
-  console.log('1/6 Checking project...');
-  run(win ? 'npm.cmd' : 'npm', ['run', 'check:web']);
+  const cleanBuildEnv = buildEnvironment();
 
-  console.log('2/6 Generating Android project and offline assets...');
-  run(win ? 'npm.cmd' : 'npm', ['run', 'android:prebuild'], root, { ...process.env, CI: '1' });
-  ensureReleaseSigningHook(customSigning);
+  console.log('1/6 Checking project without signing secrets...');
+  run(win ? 'npm.cmd' : 'npm', ['run', 'check:web'], root, cleanBuildEnv);
 
-  console.log('3/6 Building release APK...');
+  console.log('2/6 Generating Android project and offline assets without signing secrets...');
+  run(win ? 'npm.cmd' : 'npm', ['run', 'android:prebuild'], root, { ...cleanBuildEnv, CI: '1' });
+
+  console.log('3/6 Building release APK without signing secrets...');
   const androidDir = path.join(root, 'android');
   const gradle = win ? 'gradlew.bat' : './gradlew';
-  run(gradle, ['assembleRelease', '--no-daemon'], androidDir);
+  run(gradle, ['assembleRelease', '--no-daemon'], androidDir, cleanBuildEnv);
 
   console.log('4/6 Verifying embedded JS bundle...');
   const apk = findReleaseApk(path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release'));
   if (!fs.statSync(apk).size) throw new Error('Release APK was not produced');
   verifyBundle(apk);
 
-  console.log('5/6 Verifying APK signature and certificate...');
-  const certificate = verifySignature(apk);
+  console.log('5/6 Verifying/signing APK and certificate...');
+  let finalApk = apk;
+  let certificate = verifySignature(apk);
   if (customSigning) {
+    const apksigner = findApksigner();
+    if (!apksigner) throw new Error('Android SDK apksigner was not found; cannot sign production APK');
+    const signedApk = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release', '.production-signed.apk');
+    fs.rmSync(signedApk, { force: true });
+    const signEnv = { ...buildEnvironment(), ANDROID_KEYSTORE_PASSWORD: process.env.ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD: process.env.ANDROID_KEY_PASSWORD };
+    run(apksigner, [
+      'sign',
+      '--ks', process.env.ANDROID_KEYSTORE_FILE,
+      '--ks-type', String(process.env.ANDROID_KEYSTORE_TYPE || 'PKCS12'),
+      '--ks-key-alias', process.env.ANDROID_KEY_ALIAS,
+      '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD',
+      '--key-pass', 'env:ANDROID_KEY_PASSWORD',
+      '--out', signedApk,
+      apk,
+    ], root, signEnv);
+    finalApk = signedApk;
+    certificate = verifySignature(finalApk);
     const expected = expectedReleaseCertificateDigest();
     const actual = certificateDigest(certificate);
     if (actual !== expected) throw new Error(`Production signing certificate mismatch. Expected ${expected}, got ${actual}`);
+    verifyBundle(finalApk);
   }
 
   console.log('6/6 Preparing distributable files...');
@@ -183,7 +198,7 @@ try {
   }
   const apkFileName = `Abu_Bassam_Library_${appVersion}.apk`;
   const out = path.join(dist, apkFileName);
-  fs.copyFileSync(apk, out);
+  fs.copyFileSync(finalApk, out);
   const hash = sha256(out);
   fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  ${apkFileName}\n`);
   fs.writeFileSync(path.join(dist, 'SIGNING_CERTIFICATE.txt'), certificate);
