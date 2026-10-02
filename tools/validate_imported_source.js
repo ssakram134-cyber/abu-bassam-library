@@ -22,8 +22,18 @@ if(pkg.name!=='abu-bassam-library-native')fail('unexpected package name');
 if(typeof pkg.version!=='string'||!pkg.version.trim()||app.version!==pkg.version)fail('package.json and app.json versions must match');
 const versionCode=Number(app.android?.versionCode);
 if(!Number.isInteger(versionCode)||versionCode<=0)fail('Android versionCode must be a positive integer');
+function semverCore(value){
+  const m=String(value||'').trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/);
+  return m?[Number(m[1]),Number(m[2]),Number(m[3])]:null
+}
+function compareCore(a,b){for(let i=0;i<3;i+=1){if(a[i]!==b[i])return a[i]-b[i]}return 0}
+const importedVersionCore=semverCore(pkg.version);
+if(!importedVersionCore)fail('app version must use semantic version format x.y.z');
 const trustedVersion=String(process.env.ABU_TRUSTED_APP_VERSION||'').trim();
 const trustedVersionCode=Number(process.env.ABU_TRUSTED_VERSION_CODE||0);
+const trustedVersionCore=trustedVersion?semverCore(trustedVersion):null;
+if(trustedVersion&&!trustedVersionCore)fail('trusted app version is not valid semantic version');
+if(trustedVersionCore&&compareCore(importedVersionCore,trustedVersionCore)<0)fail(`app version downgrade is not allowed: imported ${pkg.version}, trusted ${trustedVersion}`);
 if(Number.isInteger(trustedVersionCode)&&trustedVersionCode>0){
   if(versionCode<trustedVersionCode)fail(`Android versionCode downgrade is not allowed: imported ${versionCode}, trusted ${trustedVersionCode}`);
   if(trustedVersion&&pkg.version!==trustedVersion&&versionCode===trustedVersionCode)fail('a changed app version must increment Android versionCode');
@@ -32,6 +42,8 @@ if(pkg.main!=='index-auth.js')fail('package main must remain index-auth.js so au
 if(app.slug!=='abu-bassam-library')fail('unexpected Expo slug');
 if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Android package');
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
+const lockRoot=lock.packages?.[''];
+if(!lockRoot||lockRoot.name!==pkg.name||lockRoot.version!==pkg.version)fail('package-lock root package identity/version does not match package.json');
 if(pkg.engines?.node!=='>=20 <25')fail('Node engine must remain >=20 <25');
 if(pkg.scripts?.['build:apk:local']!=='node scripts/build-android-local.mjs')fail('local APK test build command is missing or changed');
 if(pkg.scripts?.['build:apk:release']!=='node scripts/build-android-local.mjs --require-release-key')fail('strict production APK build command is missing or changed');
