@@ -40,8 +40,25 @@ const ANDROID_BRIDGE = `
     try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
     catch (error) {}
   }
+  var fileSaveSeq = 0, fileSavePending = {};
+  window.AbuBassamNativeFileSaveResult = function (payload) {
+    var id = String(payload && payload.requestId || ''), pending = fileSavePending[id];
+    if (!pending) return;
+    delete fileSavePending[id]; clearTimeout(pending.timer);
+    if (payload && payload.ok) pending.resolve(payload.value || true);
+    else pending.reject(new Error(String(payload && payload.error || 'تعذر حفظ الملف')));
+  };
+  function confirmedFileSave(name, mime, data) {
+    return new Promise(function (resolve, reject) {
+      var requestId = 'file-' + Date.now() + '-' + (++fileSaveSeq);
+      var timer = setTimeout(function () { delete fileSavePending[requestId]; reject(new Error('انتهت مهلة تأكيد حفظ الملف')); }, 120000);
+      fileSavePending[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      send('saveBase64Confirmed', { requestId: requestId, name: name, mime: mime, data: data });
+    });
+  }
   window.Android = {
     saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
+    saveBase64Confirmed: confirmedFileSave,
     saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
     printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
@@ -186,18 +203,35 @@ function App() {
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
-    try {
-      const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
-      const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
-      const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
-      const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
-      const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
-      await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
-      Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
+  const writeBase64Download = useCallback(async ({ name, mime, data }) => {
+    const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
+    const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
+    const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
+    const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+    if (!permission.granted) throw new Error('تم إلغاء اختيار مجلد الحفظ');
+    const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+    return { uri, finalName };
   }, []);
+
+  const saveBase64 = useCallback(async (message) => {
+    try {
+      const result = await writeBase64Download(message);
+      Alert.alert('تم الحفظ', `تم حفظ ${result.finalName} بنجاح.`);
+    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
+  }, [writeBase64Download]);
+
+  const saveBase64Confirmed = useCallback(async (message) => {
+    const requestId = String(message?.requestId || '');
+    try {
+      const result = await writeBase64Download(message);
+      inject('AbuBassamNativeFileSaveResult', { requestId, ok: true, value: { name: result.finalName } });
+      Alert.alert('تم الحفظ', `تم حفظ ${result.finalName} بنجاح.`);
+    } catch (error) {
+      inject('AbuBassamNativeFileSaveResult', { requestId, ok: false, error: String(error?.message || error) });
+      Alert.alert('تعذر الحفظ', String(error?.message || error));
+    }
+  }, [inject, writeBase64Download]);
 
   const saveToGallery = useCallback(async ({ name, mime, data }) => {
     try {
@@ -364,6 +398,7 @@ function App() {
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
+    if (message.type === 'saveBase64Confirmed') return saveBase64Confirmed(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
     if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
     if (message.type === 'printPages') return printPages(message);
@@ -377,7 +412,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, saveBase64Confirmed, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
