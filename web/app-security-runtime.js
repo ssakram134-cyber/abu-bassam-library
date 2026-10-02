@@ -67,6 +67,8 @@ window.AbuBassamNativeSecurityResult=function(message){
   if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);return}
   if(typeof previousNativeSecurityResult==='function')return previousNativeSecurityResult(message);
 };
+window.AbuBassamNativeSecurity={request:nativeRequest,available:nativeAvailable};
+
 window.AbuBassamNativeAppState=function(payload){
   const state=payload?.state||payload;
   if(state==='background'||state==='inactive'){lastBackgroundAt=Number(payload?.at)||Date.now();return}
