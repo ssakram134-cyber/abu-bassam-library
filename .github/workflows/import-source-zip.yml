@@ -34,6 +34,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Capture trusted validator and baseline before extraction
         shell: bash
@@ -187,6 +188,8 @@ jobs:
       - name: Create review branch
         id: branch
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if git diff --quiet && git diff --cached --quiet; then
@@ -200,7 +203,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Review imported Abu Bassam source ZIP"
+          CLEAN_ORIGIN="https://github.com/${GITHUB_REPOSITORY}.git"
+          AUTH_ORIGIN="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote set-url origin "$AUTH_ORIGIN"
           git push --set-upstream origin "$BRANCH"
+          git remote set-url origin "$CLEAN_ORIGIN"
+          unset GH_TOKEN AUTH_ORIGIN
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
