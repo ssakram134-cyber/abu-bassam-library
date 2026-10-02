@@ -35,10 +35,13 @@ for(const marker of [
   '[بريد محجوب]',
   '[تفاصيل زبون محجوبة]',
   'normalizeLocal(op={}){const d=device(),safe=safeOperation(op)',
-  'setInterval(patch,2500)',
+  "hasMarker(ops.add,'__abuOpsPrivacyV2')",
+  "document.addEventListener('abu-runtime-loaded',patch)",
   "deviceName||d.name||'هذا الجهاز'"
 ])need(runtime,marker,'operation log');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
+for(const marker of ['setInterval(patch,2500)','setInterval(()=>{attempts++;patch()','new MutationObserver(()=>{retargetButtons()'])no(runtime,marker,'operation log polling');
+no(scrub,'setInterval(()=>{attempts++;if(migrate()','operation storage migration polling');
 for(const marker of ['__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__','api.scrub(item)',"localStorage.removeItem('abuBassamOpsV3')","localStorage.removeItem('abuBassamOpsV2')"])need(scrub,marker,'operation storage scrub');
 for(const marker of ['operation-log-corrections-runtime.js','loadOperationLogCorrections()','operation-log-storage-migration-runtime.js','loadOperationLogStorageMigration'])need(loader,marker,'operation log loader');
 for(const marker of [
