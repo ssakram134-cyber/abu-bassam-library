@@ -24,13 +24,13 @@ function loadScript(id,src,guard){
 }
 function loadSecondaryPrivacy(){loadScript('abuSecondaryNotificationPrivacyRuntime','secondary-notification-privacy-runtime.js','__ABU_SECONDARY_NOTIFICATION_PRIVACY_V1__')}
 function loadCorrections(){loadScript('abuNotificationCenterCorrectionsRuntime','notification-center-corrections-runtime.js','__ABU_NOTIFICATION_CENTER_CORRECTIONS_V2__')}
-function rootOriginal(fn){let current=fn,guard=0;while(current&&current.__abuOriginal&&guard++<12)current=current.__abuOriginal;return current||fn}
+function hasMarker(fn,key){let current=fn,guard=0;while(current&&guard++<12){if(current[key])return true;current=current.__abuOriginal}return false}
 function install(){
   const ops=window.AbuBassamOps,center=window.AbuBassamNotifications;
   if(!ops||!center||typeof ops.add!=='function'||typeof ops.list!=='function'||typeof center.fromOperation!=='function')return false;
   loadSecondaryPrivacy();loadCorrections();
-  if(ops.add.__abuStableNotifyBridge)return true;
-  const original=rootOriginal(ops.add);
+  if(hasMarker(ops.add,'__abuStableNotifyBridge'))return true;
+  const original=ops.add;
   const wrapped=function(input,...rest){
     const previousId=ops.list?.()?.[0]?.id||'';
     const result=original.call(this,input,...rest);
@@ -50,7 +50,6 @@ function install(){
   ops.add=wrapped;
   return true;
 }
-let attempts=0;const timer=setInterval(()=>{attempts++;install();if(attempts>50)clearInterval(timer)},120);
-setTimeout(()=>{clearInterval(timer);install();loadSecondaryPrivacy();loadCorrections()},7000);
-if(document.readyState!=='loading')install();else document.addEventListener('DOMContentLoaded',install,{once:true});
+function boot(){if(!install())throw new Error('NOTIFICATION_OPS_DEPENDENCIES_REQUIRED');loadSecondaryPrivacy();loadCorrections();document.addEventListener('abu-runtime-loaded',install)}
+if(document.readyState!=='loading')boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 })();
