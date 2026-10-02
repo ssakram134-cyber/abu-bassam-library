@@ -8,6 +8,8 @@ for(const marker of ['__ABU_BACKUP_CENTER_V1__','AbuBassamDocumentVaultV4','CHUN
 forbid(runtime,'__dev_secure_','backup center must never read the device secret from localStorage');
 for(const marker of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','setTimeout(loadBackupCenter,120)'])need(loader,marker,'loader '+marker);
 for(const marker of ["const TABLE='abu_bassam_backups'","const MAX_BYTES=512*1024*1024","MAX_PARTS=120","createSignedUploadUrl","upload","commit","BACKUP_PART_MISSING","BACKUP_SIZE_MISMATCH","createSignedUrl","backupCreate","backupRestore","backupDelete","branch_device_id","ready',true","retention","cleanupPending"])need(edge,marker,'edge '+marker);
+need(edge,"message==='NOT_AUTHENTICATED'?401",'expired or invalid JWT must return HTTP 401');
+forbid(edge,'NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE|SCOPE','authentication failures must not be grouped into HTTP 403');
 for(const marker of ['create table if not exists public.abu_bassam_backups','enable row level security','revoke all on table public.abu_bassam_backups from public,anon,authenticated','backup-vault','alter policy abu_bassam_storage_no_direct_vault_select','alter policy abu_bassam_storage_no_direct_vault_insert','alter policy abu_bassam_storage_no_direct_vault_update','alter policy abu_bassam_storage_no_direct_vault_delete'])need(migration,marker,'migration '+marker);
 for(const marker of ['ready boolean not null default false','committed_at timestamptz','abu_bassam_backups_pending_idx'])need(state,marker,'state '+marker);
 for(const marker of ['abu_bassam_backups_direct_deny','as restrictive','for all','to anon,authenticated','using (false)','with check (false)'])need(deny,marker,'direct deny '+marker);
