@@ -3,7 +3,8 @@
 if(window.__ABU_PASSWORD_RECOVERY_V1__)return;
 window.__ABU_PASSWORD_RECOVERY_V1__=true;
 
-const ACCOUNT_EMAIL='akramag1992@gmail.com';
+const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com';
+function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||DEFAULT_ACCOUNT_EMAIL).trim().toLowerCase()}
 const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const FLOW='password-recovery';
@@ -42,13 +43,7 @@ function installNativeBridge(){
 }
 function native(action,payload={}){
   installNativeBridge();
-  if(!(window.Android&&typeof Android.security==='function')){
-    const key='__dev_secure_'+String(payload.key||'');
-    if(action==='secureGet')return Promise.resolve(localStorage.getItem(key)||'');
-    if(action==='secureSet'){localStorage.setItem(key,String(payload.value||''));return Promise.resolve(true)}
-    if(action==='secureDelete'){localStorage.removeItem(key);return Promise.resolve(true)}
-    return Promise.reject(new Error('NATIVE_SECURITY_UNAVAILABLE'));
-  }
+  if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
   return new Promise((resolve,reject)=>{
     const requestId='pw-recovery-'+Date.now()+'-'+(++seq);
     const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة التخزين الآمن'))},12000);
@@ -73,7 +68,7 @@ function addUi(){
   }
   const modal=document.createElement('div');
   modal.id='abuPasswordResetModal';modal.className='abu-password-reset-modal';
-  modal.innerHTML=`<div class="abu-password-reset-card"><h3>🔑 تعيين كلمة مرور جديدة</h3><p>تم التحقق من رابط الاستعادة المرسل إلى<br><b>${ACCOUNT_EMAIL}</b></p><input id="abuNewPassword" type="password" autocomplete="new-password" placeholder="كلمة المرور الجديدة — 8 أحرف على الأقل"><input id="abuNewPasswordConfirm" type="password" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة"><div class="abu-password-reset-actions"><button id="abuSaveNewPassword" type="button">حفظ كلمة المرور</button><button id="abuCancelNewPassword" type="button" class="secondary">إلغاء</button></div><div id="abuPasswordResetStatus" class="abu-password-reset-status"></div></div>`;
+  modal.innerHTML=`<div class="abu-password-reset-card"><h3>🔑 تعيين كلمة مرور جديدة</h3><p>تم التحقق من رابط الاستعادة المرسل إلى<br><b>${accountEmail()}</b></p><input id="abuNewPassword" type="password" autocomplete="new-password" placeholder="كلمة المرور الجديدة — 12 محرفًا على الأقل مع حرف ورقم ورمز"><input id="abuNewPasswordConfirm" type="password" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة القوية"><div class="abu-password-reset-actions"><button id="abuSaveNewPassword" type="button">حفظ كلمة المرور</button><button id="abuCancelNewPassword" type="button" class="secondary">إلغاء</button></div><div id="abuPasswordResetStatus" class="abu-password-reset-status"></div></div>`;
   document.body.appendChild(modal);
   $('abuSaveNewPassword').addEventListener('click',saveNewPassword);
   $('abuCancelNewPassword').addEventListener('click',()=>closeResetModal(true));
@@ -97,9 +92,9 @@ async function requestPasswordReset(){
   try{
     await cloud()?.ready?.();
     const c=client();if(!c?.auth?.resetPasswordForEmail)throw new Error('خدمة استعادة كلمة المرور غير جاهزة');
-    const {error}=await c.auth.resetPasswordForEmail(ACCOUNT_EMAIL,{redirectTo:`${CALLBACK}?flow=${FLOW}`});
+    const {error}=await c.auth.resetPasswordForEmail(accountEmail(),{redirectTo:`${CALLBACK}?flow=${FLOW}`});
     if(error)throw error;
-    setLoginMessage(`تم إرسال رابط الاستعادة إلى ${ACCOUNT_EMAIL}. افتح الرسالة واضغط الرابط ثم ارجع إلى التطبيق.`);
+    setLoginMessage(`تم إرسال رابط الاستعادة إلى ${accountEmail()}. افتح الرسالة واضغط الرابط ثم ارجع إلى التطبيق.`);
   }catch(error){
     const text=String(error?.message||error||'تعذر إرسال رابط الاستعادة');
     setLoginMessage(/rate limit|too many/i.test(text)?'تم طلب الاستعادة عدة مرات. انتظر قليلًا ثم حاول مجددًا.':text,true);
@@ -116,7 +111,7 @@ async function consumeRecoveryCallback(){
     const base=`${url.protocol}//${url.host}${url.pathname}`;
     if(base!==CALLBACK)return;
     const flow=String(url.searchParams.get('flow')||'');
-    if(flow&&flow!==FLOW)return;
+    if(flow!==FLOW)return;
     const callbackError=url.searchParams.get('error_description')||url.searchParams.get('error');
     if(callbackError){
       await native('secureDelete',{key:CALLBACK_KEY});
@@ -130,7 +125,7 @@ async function consumeRecoveryCallback(){
     const {data,error}=await c.auth.exchangeCodeForSession(code);
     if(error)throw error;
     const email=String(data?.session?.user?.email||data?.user?.email||'').toLowerCase();
-    if(email&&email!==ACCOUNT_EMAIL.toLowerCase()){
+    if(email&&email!==accountEmail()){
       await c.auth.signOut({scope:'local'}).catch(()=>{});
       throw new Error('رابط الاستعادة لا يخص حساب مكتبة أبو بسام المعتمد');
     }
@@ -148,7 +143,9 @@ async function saveNewPassword(){
   if(passwordBusy)return;
   const password=String($('abuNewPassword')?.value||'');
   const confirmPassword=String($('abuNewPasswordConfirm')?.value||'');
-  if(password.length<8)return resetStatus('كلمة المرور يجب أن تكون 8 أحرف على الأقل.',true);
+  const policy=window.AbuBassamStrongPasswordWeakness||window.AbuBassamSecurityExtras?.passwordWeakness;
+  const problem=typeof policy==='function'?policy(password):(password.length<12?'استخدم 12 محرفًا على الأقل.':!/\p{L}/u.test(password)?'أضف حرفًا واحدًا على الأقل.':!/\p{N}/u.test(password)?'أضف رقمًا واحدًا على الأقل.':!/[^\p{L}\p{N}\s]/u.test(password)?'أضف رمزًا خاصًا مثل ! أو # أو @.':'');
+  if(problem)return resetStatus(problem,true);
   if(password!==confirmPassword)return resetStatus('كلمتا المرور غير متطابقتين.',true);
   passwordBusy=true;const button=$('abuSaveNewPassword');if(button)button.disabled=true;resetStatus('جاري حفظ كلمة المرور الجديدة...');
   try{
@@ -156,7 +153,7 @@ async function saveNewPassword(){
     const {data,error}=await c.auth.updateUser({password});
     if(error)throw error;
     const email=String(data?.user?.email||'').toLowerCase();
-    if(email&&email!==ACCOUNT_EMAIL.toLowerCase())throw new Error('الحساب المفتوح لا يطابق البريد المعتمد');
+    if(email&&email!==accountEmail())throw new Error('الحساب المفتوح لا يطابق البريد المعتمد');
     await c.auth.signOut({scope:'local'}).catch(()=>{});
     await closeResetModal(false);
     setLoginMessage('تم تغيير كلمة المرور بنجاح ✓ سجّل الدخول الآن بكلمة المرور الجديدة.');
@@ -172,7 +169,7 @@ function installAuthListener(){
   c.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){
       const email=String(session?.user?.email||'').toLowerCase();
-      if(!email||email===ACCOUNT_EMAIL.toLowerCase())openResetModal();
+      if(!email||email===accountEmail())openResetModal();
     }
   });
 }
@@ -195,6 +192,6 @@ async function boot(){
   [300,900,1800,3500].forEach(ms=>setTimeout(()=>{addUi();installAuthListener();consumeRecoveryCallback()},ms));
 }
 
-window.AbuBassamPasswordRecovery={email:ACCOUNT_EMAIL,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword};
+window.AbuBassamPasswordRecovery={email:accountEmail,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
