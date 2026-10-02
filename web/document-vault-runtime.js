@@ -315,7 +315,7 @@ async function syncNow(manual=true){
     }
 
     setSyncStatus('جاري استقبال تغييرات الأجهزة...');
-    const rows=await service.list('vault',1000),local=new Map((await dbAll()).map(item=>[String(item.id),item]));
+    const rows=await service.list('vault',10000),local=new Map((await dbAll()).map(item=>[String(item.id),item]));
     for(const row of rows){
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
