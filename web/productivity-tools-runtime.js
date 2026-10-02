@@ -29,7 +29,7 @@ function loadOne(id,src,flag){
   }
   return new Promise((resolve,reject)=>{
     const script=document.createElement('script');script.id=id;script.src=src;script.async=false;
-    script.onload=()=>{script.dataset.abuLoaded='1';resolve(true)};
+    script.onload=()=>{script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
     script.onerror=()=>reject(new Error(src+' failed to load'));
     document.body.appendChild(script)
   })
