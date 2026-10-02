@@ -26,7 +26,7 @@ for(const [id,n] of Object.entries(expected)){const g=groups?.find?.(x=>x.id===i
 const ration=read('ration-card.html');for(let i=1;i<=10;i++)need(ration,`value="t${i}"`,`ration model ${i}`);
 const mawkib=read('mawkib-cards.html');for(let i=1;i<=4;i++)need(mawkib,`value="t${i}"`,`mawkib model ${i}`);
 const thanks=read('thanks-letter.html');for(let i=1;i<=10;i++)need(thanks,`value="t${i}"`,`thanks model ${i}`);
-const studio=read('design-studio-runtime.js');for(const m of ['Array.from({length:10}','env-10','cardsManageCustomTemplates','cardsTemplatesDelete','cardsEditText'])need(studio,m,'Design Studio');
+const studio=read('design-studio-runtime.js');for(const m of ['Array.from({length:10}','id:`env-${i+1}`','envelopeTemplate(i)','cardsManageCustomTemplates','cardsTemplatesDelete','cardsEditText'])need(studio,m,'Design Studio');
 const layouts=read('standalone-card-layouts-plus-runtime.js');for(const m of ['abuBassamStandaloneCardLayoutV2','safeTextTarget','abu-recovery-frame-load'])need(layouts,m,'standalone layouts');forbid(layouts,'new MutationObserver(watch)','standalone layouts');
 
 const appSecurity=read('app-security-runtime.js');for(const m of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','recordCredentialFailure','clearCredentialFailures','signOut({scope:\'local\'})'])need(appSecurity,m,'core login security');
