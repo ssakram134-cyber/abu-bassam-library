@@ -37,6 +37,20 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Build and verify APK before exposing production secrets
+        run: npm run build:apk:local
+
+      - name: Verify pre-signing artifact is non-production
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -qx 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES' dist/BUILD_TYPE.txt
+          mapfile -t APKS < <(find dist -maxdepth 1 -type f -name 'Abu_Bassam_Library_*.apk' -print)
+          test "${#APKS[@]}" -eq 1
+          test -s "${APKS[0]}"
+          test -s dist/SHA256.txt
+          test -s dist/SIGNING_CERTIFICATE.txt
+
       - name: Decode production signing key
         shell: bash
         env:
@@ -48,28 +62,64 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/abu-bassam-release-key.p12"
           test -s "$RUNNER_TEMP/abu-bassam-release-key.p12"
 
-      - name: Build and verify production APK
+      - name: Sign and verify production APK
+        shell: bash
         env:
-          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/abu-bassam-release-key.p12
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_KEYSTORE_TYPE: PKCS12
-        run: npm run build:apk:release
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          for name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            test -n "${!name:-}" || { echo "Missing production signing secret: $name" >&2; exit 1; }
+          done
+          EXPECTED_CERT="$(tr -d '[:space:]' < config/release-signing-certificate.sha256 | tr 'A-F' 'a-f')"
+          printf '%s' "$EXPECTED_CERT" | grep -Eq '^[0-9a-f]{64}$' || {
+            echo "Invalid production certificate digest configuration." >&2
+            exit 1
+          }
+          mapfile -t APKS < <(find dist -maxdepth 1 -type f -name 'Abu_Bassam_Library_*.apk' -print)
+          test "${#APKS[@]}" -eq 1
+          TEST_APK="${APKS[0]}"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          test -n "$BUILD_TOOLS"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$APKSIGNER"
+          SIGNED_APK="$RUNNER_TEMP/abu-bassam-production.apk"
+          "$APKSIGNER" sign             --ks "$RUNNER_TEMP/abu-bassam-release-key.p12"             --ks-type PKCS12             --ks-key-alias "$ANDROID_KEY_ALIAS"             --ks-pass env:ANDROID_KEYSTORE_PASSWORD             --key-pass env:ANDROID_KEY_PASSWORD             --out "$SIGNED_APK"             "$TEST_APK"
+          "$APKSIGNER" verify --verbose "$SIGNED_APK"
+          "$APKSIGNER" verify --print-certs "$SIGNED_APK" > "$RUNNER_TEMP/production-signing-certificate.txt"
+          ACTUAL_CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/production-signing-certificate.txt" | head -n1 | tr -d ':[:space:]' | tr 'A-F' 'a-f')"
+          test -n "$ACTUAL_CERT"
+          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
+            echo "Production signing certificate mismatch." >&2
+            echo "Expected: $EXPECTED_CERT" >&2
+            echo "Actual:   $ACTUAL_CERT" >&2
+            exit 1
+          fi
+          unzip -l "$SIGNED_APK" | grep -q 'assets/index.android.bundle'
+          mv "$SIGNED_APK" "$TEST_APK"
+          cp "$RUNNER_TEMP/production-signing-certificate.txt" dist/SIGNING_CERTIFICATE.txt
+          sha256sum "$TEST_APK" > dist/SHA256.txt
+          printf 'signed-production-release-with-embedded-js\n' > dist/BUILD_TYPE.txt
 
       - name: Enforce production artifact
         shell: bash
         run: |
           set -euo pipefail
           grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt
-          test -n "$(find dist -maxdepth 1 -type f -name 'Abu_Bassam_Library_*.apk' -print -quit)"
+          mapfile -t APKS < <(find dist -maxdepth 1 -type f -name 'Abu_Bassam_Library_*.apk' -print)
+          test "${#APKS[@]}" -eq 1
+          test -s "${APKS[0]}"
           test -s dist/SHA256.txt
           test -s dist/SIGNING_CERTIFICATE.txt
+          sha256sum -c dist/SHA256.txt
 
       - name: Remove decoded signing key
         if: ${{ always() }}
         shell: bash
-        run: rm -f "$RUNNER_TEMP/abu-bassam-release-key.p12"
+        run: rm -f "$RUNNER_TEMP/abu-bassam-release-key.p12" "$RUNNER_TEMP/production-signing-certificate.txt" "$RUNNER_TEMP/abu-bassam-production.apk"
 
       - name: Upload production APK artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
