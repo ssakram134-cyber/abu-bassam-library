@@ -12,7 +12,7 @@ const patch=read('scripts/patch-customer-camera.mjs');
 const migration=read('supabase/migrations/202609240004_customer_documents.sql');
 const workflowMigration=read('supabase/migrations/202609240005_customer_documents_workflow.sql');
 const atomicMigration=read('supabase/migrations/202609240010_atomic_customer_document_revisions.sql');
-const volatilityMigration=read('supabase/migrations/20261002001251_customer_document_upload_plan_volatility.sql');
+const volatilityMigration=read('supabase/migrations/20261002001245_customer_document_upload_plan_volatility.sql');
 const permissionMigration=read('supabase/migrations/202609250004_customer_permissions_enforcement.sql');
 const edge=read('supabase/functions/customer-documents/index.ts');
 new Function(ui);new Function(workflow);new Function(hard);new Function(quality);new Function(frame);
