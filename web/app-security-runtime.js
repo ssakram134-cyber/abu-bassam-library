@@ -44,31 +44,15 @@ function identity(){return window.AbuBassamDevices?.ensure?.()||{id:localStorage
 function roleLabel(){return currentDevice?.role==='owner'?'رئيسي':'فرعي'}
 function permissions(){return currentDevice?.role==='owner'?OWNER_PERMISSIONS:Object.assign({},SECONDARY_DEFAULT,currentDevice?.permissions||{})}
 function can(name){return !!permissions()[name]}
-function nativeAvailable(){return !!(window.Android&&typeof Android.security==='function')}
-
+function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
 function nativeRequest(action,payload={}){
-  if(!nativeAvailable()){
-    if(action==='deviceInfo')return Promise.resolve({name:'متصفح الاختبار',model:'Browser',os:'web',androidVersion:'',appVersion:APP_VERSION});
-    if(action==='biometricStatus')return Promise.resolve({available:false,enrolled:false,types:[]});
-    if(action==='biometricAuth')return Promise.resolve({success:false,error:'native_unavailable'});
-    return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
-  }
-  return new Promise((resolve,reject)=>{
-    const requestId='sec-'+Date.now()+'-'+(++requestSeq);
-    const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة الاتصال بالنظام'))},15000);
-    pending.set(requestId,{resolve,reject,timer});
-    Android.security(action,requestId,payload);
-  })
+  const api=window.AbuBassamNativeSecurity;
+  if(api?.request)return api.request(action,payload);
+  if(action==='deviceInfo')return Promise.resolve({name:'متصفح الاختبار',model:'Browser',os:'web',androidVersion:'',appVersion:APP_VERSION});
+  if(action==='biometricStatus')return Promise.resolve({available:false,enrolled:false,types:[]});
+  if(action==='biometricAuth')return Promise.resolve({success:false,error:'native_unavailable'});
+  return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'))
 }
-const previousNativeSecurityResult=window.AbuBassamNativeSecurityResult;
-window.AbuBassamNativeSecurityResult=function(message){
-  const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(e){return{}}})():message||{};
-  const slot=pending.get(data.requestId);
-  if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);return}
-  if(typeof previousNativeSecurityResult==='function')return previousNativeSecurityResult(message);
-};
-window.AbuBassamNativeSecurity={request:nativeRequest,available:nativeAvailable};
-
 window.AbuBassamNativeAppState=function(payload){
   const state=payload?.state||payload;
   if(state==='background'||state==='inactive'){lastBackgroundAt=Number(payload?.at)||Date.now();return}
