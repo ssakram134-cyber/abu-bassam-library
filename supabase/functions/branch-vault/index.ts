@@ -29,7 +29,7 @@ async function context(req:Request,permission:string){
   if(!permissionEnabled(device,permission))throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
   return{user,userApi,admin,deviceId,device};
 }
-function scopedPath(userId:string,deviceId:string,itemId:string){return `${userId}/branch-vault/${safePart(deviceId)}/${safePart(itemId)}`}
+function scopedPath(userId:string,deviceId:string,itemId:string,revision=''){const base=`${userId}/branch-vault/${safePart(deviceId)}/${safePart(itemId)}`;return revision?`${base}/${safePart(revision)}`:base}
 function isScoped(path:string,userId:string,deviceId:string){return String(path||'').startsWith(`${userId}/branch-vault/${safePart(deviceId)}/`)}
 
 Deno.serve(async(req:Request)=>{
@@ -43,7 +43,7 @@ Deno.serve(async(req:Request)=>{
       const {data:existing}=await base.admin.from('abu_bassam_branch_vault').select('client_id').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
       const permission=existing?'vaultEdit':'vaultAdd';
       if(!permissionEnabled(base.device,permission))return json({error:permission.toUpperCase()+'_NOT_ALLOWED'},403);
-      const path=scopedPath(base.user.id,base.deviceId,itemId),{data,error}=await base.admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:true});
+      const path=scopedPath(base.user.id,base.deviceId,itemId,crypto.randomUUID()),{data,error}=await base.admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:false});
       if(error||!data)return json({error:error?.message||'SIGNED_UPLOAD_FAILED'},500);
       return json({ok:true,path,token:data.token,mime:mime||'application/octet-stream'});
     }
