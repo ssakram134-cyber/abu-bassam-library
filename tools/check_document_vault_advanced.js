@@ -3,13 +3,14 @@ function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.
 function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
 function forbid(src,token,label){if(src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
 const vault=read('web/document-vault-runtime.js');
+const hardening=read('web/document-vault-hardening-runtime.js');
 const advanced=read('web/document-vault-advanced-runtime.js');
 const offline=read('web/document-vault-offline-ocr-runtime.js');
 const encrypted=read('web/document-vault-encrypted-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const startup=read('web/device-name-runtime.js');
 const assets=read('scripts/prepare-android-assets.mjs');
-new Function(vault);new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
+new Function(vault);new Function(hardening);new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
 need(loader,'document-vault-advanced-runtime.js','advanced vault runtime loader');
 need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader');
 need(loader,'document-vault-encrypted-runtime.js','encrypted vault runtime loader');
@@ -17,6 +18,7 @@ need(vault,"document.visibilityState!=='hidden'&&automaticDue()",'periodic sync 
 need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must resume when visible');
 need(vault,'LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY])','only legacy sync preferences may migrate across scopes');
 need(vault,'LEGACY_SYNC_PREFS.has(key)','last-sync state must remain scoped');
+need(hardening,"!key.includes(':')",'settings backup must exclude scoped branch/account keys');
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
