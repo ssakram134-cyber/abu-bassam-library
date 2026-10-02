@@ -16,12 +16,13 @@ for(const marker of [
   'Require production signing only when explicitly requested',
   "github.event_name == 'workflow_dispatch' && inputs.production",
   'Production signing was requested, but one or more Android release signing secrets are missing.',
+  'uses: actions/checkout@v7','uses: actions/setup-node@v7','node-version: 24','uses: actions/setup-java@v6','verify-signature: true','uses: actions/upload-artifact@v7',
   'npm ci --no-audit --no-fund','./gradlew assembleRelease --no-daemon',
   'assets/index.android.bundle','apksigner" verify --verbose','apksigner" verify --print-certs',
   'SIGNING_CERTIFICATE.txt','dist/Abu_Bassam_Library_4.3.2.apk',
   'sha256sum dist/Abu_Bassam_Library_4.3.2.apk','Upload APK artifacts','retention-days: 14'
 ])need(workflow,marker,'Android workflow missing safeguard: '+marker);
-for(const marker of ['./gradlew assembleDebug --no-daemon','contents: write','git push','npm install --no-audit --no-fund'])
+for(const marker of ['./gradlew assembleDebug --no-daemon','contents: write','git push','npm install --no-audit --no-fund','actions/checkout@v4','actions/setup-node@v4','actions/setup-java@v4','actions/upload-artifact@v4','node-version: 20'])
   reject(workflow,marker,'Android workflow contains unsafe behavior: '+marker);
 
 const checkWeb=String(pkg.scripts?.['check:web']||'');
