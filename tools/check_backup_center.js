@@ -8,6 +8,7 @@ for(const m of ['__ABU_BACKUP_CENTER_V1__','CHUNK=5*1024*1024','MAX_ZIP=120*1024
 forbid(runtime,'__dev_secure_','device secret must never use web storage');
 forbid(runtime,'window.AbuBassamNativeSecurityResult','Backup Center must not install another native callback');
 for(const src of [runtime,vaultHardening]){need(src,"abubassamcustomfontsv5'?8*1024*1024:500000",'custom font backup size allowance');need(src,'settingValueLimit(','per-setting backup size guard')}
+for(const m of ['captureSettings()','replaceSettingsSnapshot(before)','value.length>=settingValueLimit(k)','if(archiveApplied)','await applyAtomic(existing,{replaceAll:true})'])need(vaultHardening,m,'atomic restore rollback '+m);
 for(const m of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','await loadBackupCenter();'])need(loader,m,'deterministic loader '+m);
 
 for(const m of ["const TABLE='abu_bassam_backups'","const MAX_BYTES=512*1024*1024","MAX_PARTS=120",'sha256','verifyParts','hasher.update(bytes)','BACKUP_PART_MISSING','BACKUP_SIZE_MISMATCH','BACKUP_SHA256_MISMATCH','sha256_verified:true','cleanupReady','backup_kind===\'pre_restore\'','createSignedUploadUrl','createSignedUrl','backupCreate','backupRestore','backupDelete','branch_device_id',"ready:true"])need(edge,m,'edge '+m);
