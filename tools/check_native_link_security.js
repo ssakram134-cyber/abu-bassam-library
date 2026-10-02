@@ -6,10 +6,13 @@ need(src,"if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url))",'external navi
 forbid(src,"https?:|tel:",'external navigation must not accept plaintext HTTP');
 need(src,"if (!/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(value))",'openExternal must allow HTTPS and approved app schemes only');
 need(src,"originWhitelist={['file://*','about:*']}",'WebView must stay local-only');
+need(src,'allowFileAccess={false}','arbitrary file-system access must stay disabled');
+need(src,'allowFileAccessFromFileURLs={false}','file-to-file cross-origin access must stay disabled');
 need(src,'mixedContentMode="never"','mixed content must stay disabled');
 need(src,'const STARTUP_WATCHDOG_MS = 12000;','canonical startup watchdog');
 need(src,"message.type === 'webBootReady'",'canonical web boot handshake');
 forbid(src,"originWhitelist={['*']}",'wildcard WebView origin whitelist');
 forbid(src,'mixedContentMode="always"','unsafe mixed content');
+forbid(src,'allowFileAccess allowFileAccessFromFileURLs','legacy broad file access flags');
 if(fs.existsSync('scripts/patch-startup-stability.mjs'))throw new Error('native link security check failed: obsolete startup patch returned');
 console.log('native link security checks passed: canonical WebView keeps external web navigation HTTPS-only and no startup patch source remains.');
