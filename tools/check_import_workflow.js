@@ -56,7 +56,8 @@ for(const [marker,label] of [
   ["Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source')",'obsolete repair script rejection'],
   ["'scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js'",'obsolete patch file rejection'],
   ['forbiddenExt','signing/secret file rejection'],
-  ["cp.spawnSync(process.execPath,['--check',file]",'JavaScript syntax validation']
+  ["cp.spawnSync(process.execPath,['--check',file]",'JavaScript syntax validation'],
+  ["if(rel==='index.js')continue;",'React Native JSX entry excluded from plain Node syntax checker']
 ]) need(validator,marker,label);
 
 for(const [marker,label] of [
