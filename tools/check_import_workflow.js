@@ -39,7 +39,8 @@ for(const [marker,label] of [
   ['cmp -s tools/validate_imported_source.js "$RUNNER_TEMP/abu-trusted/validate_imported_source.js"','trusted validator byte comparison'],
   ['source-import-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}','isolated import branch'],
   ['gh pr create','review PR creation'],
-  ['--base main','PR targets main']
+  ['--base main','PR targets main'],
+  ['manually run the Android checks and test build workflow','manual post-review build instruction']
 ]) need(workflow,marker,label);
 
 for(const [marker,label] of [
