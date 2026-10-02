@@ -1,13 +1,7 @@
-name: Android checks and build
+name: Android checks and test build
 
 on:
   workflow_dispatch:
-    inputs:
-      production:
-        description: "Require a production-signed APK from main (fails if release signing secrets are missing or mismatched)"
-        required: false
-        default: false
-        type: boolean
   push:
     branches: [main]
   pull_request:
@@ -16,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: android-test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -24,8 +18,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'source-import-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    env:
-      PRODUCTION_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.production }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,125 +40,24 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Check web application
-        run: npm run check:web
+      - name: Build and verify standalone test APK
+        run: npm run build:apk:local
 
-      - name: Generate Android project and copy offline assets
-        env:
-          CI: "1"
-        run: npm run android:prebuild
-
-      - name: Configure production release key
-        if: ${{ env.PRODUCTION_REQUESTED == 'true' }}
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            echo "Production signing is allowed only from refs/heads/main." >&2
-            exit 1
-          fi
-          missing=0
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing production signing secret: $name" >&2
-              missing=1
-            fi
-          done
-          test "$missing" -eq 0
-          EXPECTED_CERT="$(tr -d '[:space:]' < config/release-signing-certificate.sha256 | tr 'A-F' 'a-f')"
-          if ! printf '%s' "$EXPECTED_CERT" | grep -Eq '^[0-9a-f]{64}$'; then
-            echo "config/release-signing-certificate.sha256 must contain exactly one SHA-256 certificate digest." >&2
-            exit 1
-          fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.p12
-          test -s android/app/release-key.p12
-          printf '\napply from: file("../../scripts/android-release-signing.gradle")\n' >> android/app/build.gradle
-
-      - name: Build standalone APK with test signing
-        if: ${{ env.PRODUCTION_REQUESTED != 'true' }}
-        working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
-
-      - name: Build production standalone APK
-        if: ${{ env.PRODUCTION_REQUESTED == 'true' }}
-        working-directory: android
-        env:
-          ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/android/app/release-key.p12
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_KEYSTORE_TYPE: PKCS12
-        run: ./gradlew assembleRelease --no-daemon
-
-      - name: Verify standalone APK, signature, and production certificate
+      - name: Enforce non-production artifact
         shell: bash
         run: |
           set -euo pipefail
-          APK="$(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
-          test -n "$APK"
-          test -s "$APK"
-          unzip -l "$APK" | grep -q 'assets/index.android.bundle'
-          BUNDLE_SIZE="$(unzip -p "$APK" assets/index.android.bundle | wc -c)"
-          test "$BUNDLE_SIZE" -gt 1000
-          echo "Embedded JS bundle size: $BUNDLE_SIZE bytes"
-          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          test -n "$BUILD_TOOLS"
-          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
-          "$BUILD_TOOLS/apksigner" verify --print-certs "$APK" > dist-signing-certificate.txt
-          test -s dist-signing-certificate.txt
-          if [ "$PRODUCTION_REQUESTED" = "true" ]; then
-            EXPECTED_CERT="$(tr -d '[:space:]' < config/release-signing-certificate.sha256 | tr 'A-F' 'a-f')"
-            ACTUAL_CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' dist-signing-certificate.txt | head -n1 | tr -d ':[:space:]' | tr 'A-F' 'a-f')"
-            test -n "$ACTUAL_CERT"
-            if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
-              echo "Production signing certificate mismatch." >&2
-              echo "Expected: $EXPECTED_CERT" >&2
-              echo "Actual:   $ACTUAL_CERT" >&2
-              exit 1
-            fi
-          fi
-
-      - name: Prepare distributable APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          APK="$(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
-          APP_VERSION="$(node -p "require('./package.json').version")"
-          OUT="dist/Abu_Bassam_Library_${APP_VERSION}.apk"
-          cp "$APK" "$OUT"
-          cp dist-signing-certificate.txt dist/SIGNING_CERTIFICATE.txt
-          if [ "$PRODUCTION_REQUESTED" = "true" ]; then
-            printf 'signed-production-release-with-embedded-js\n' > dist/BUILD_TYPE.txt
-          else
-            printf 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES\n' > dist/BUILD_TYPE.txt
-          fi
-          test -s "$OUT"
-          unzip -l "$OUT" | grep -q 'assets/index.android.bundle'
-          sha256sum "$OUT" > dist/SHA256.txt
-          printf '%s\n' "$(basename "$OUT")" > dist/APK_FILE.txt
-          ls -lh "$OUT"
-
-      - name: Enforce requested production signature
-        if: ${{ env.PRODUCTION_REQUESTED == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
-          grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt
+          grep -qx 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES' dist/BUILD_TYPE.txt
+          test -n "$(find dist -maxdepth 1 -type f -name 'Abu_Bassam_Library_*.apk' -print -quit)"
+          test -s dist/SHA256.txt
+          test -s dist/SIGNING_CERTIFICATE.txt
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: abu-bassam-android-${{ github.sha }}
+          name: abu-bassam-android-test-${{ github.sha }}
           path: |
             dist/*.apk
-            dist/APK_FILE.txt
             dist/BUILD_TYPE.txt
             dist/SHA256.txt
             dist/SIGNING_CERTIFICATE.txt
