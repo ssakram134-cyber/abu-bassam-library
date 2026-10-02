@@ -52,8 +52,8 @@ const native=readRoot('index.js');for(const t of [
 for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
 for(const t of ['Print.printAsync','Print.printToFileAsync','StorageAccessFramework.createFileAsync'])has(native,t,'native print/export');
 const workflow=readRoot('.github/workflows/android.yml');for(const t of ['npm ci --no-audit --no-fund','npm run check:web','assembleRelease','assets/index.android.bundle','apksigner','sha256sum'])has(workflow,t,'android workflow');
-const deviceLimit=readRoot('supabase/migrations/202609240009_strict_device_registration_identity.sql');for(const t of ['pg_advisory_xact_lock','DEVICE_LIMIT_REACHED',"v_role:=case when v_count=0 then 'owner' else 'secondary' end","if v_row.active=false then raise exception 'DEVICE_DISABLED'"])has(deviceLimit,t,'strict device migration');
-const configurable=readRoot('supabase/migrations/202609240001_configurable_device_limit.sql');for(const t of ['device_limit between 1 and 50','abu_bassam_set_device_limit','DEVICE_LIMIT_BELOW_CURRENT_COUNT'])has(configurable,t,'device limit migration');
+const deviceLimit=readRoot('supabase/migrations/20260924140905_strict_device_registration_identity.sql');for(const t of ['pg_advisory_xact_lock','DEVICE_LIMIT_REACHED',"v_role:=case when v_count=0 then 'owner' else 'secondary' end","if v_row.active=false then raise exception 'DEVICE_DISABLED'"])has(deviceLimit,t,'strict device migration');
+const configurable=readRoot('supabase/migrations/20260924100414_configurable_device_limit.sql');for(const t of ['device_limit between 1 and 50','abu_bassam_set_device_limit','DEVICE_LIMIT_BELOW_CURRENT_COUNT'])has(configurable,t,'device limit migration');
 const projectText=fs.readdirSync(web).filter(n=>/\.(?:html|js)$/i.test(n)&&n!=='supabase-2.58.0.js').map(n=>read(n)).join('\n');
 for(const forbidden of ['api.telegram.org/bot','service_role','sb_secret_','BEGIN PRIVATE KEY'])if(projectText.includes(forbidden))errors.push(`Forbidden secret marker found: ${forbidden}`);
 if(/Ahmed Hassan|أحمد حسن/i.test(projectText))errors.push('Project contains a previous designer name');
