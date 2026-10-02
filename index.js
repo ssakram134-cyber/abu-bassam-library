@@ -24,8 +24,9 @@ import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 
 const APP_URL = 'file:///android_asset/library/index.html';
-const APP_VERSION = '4.3.2';
-const BUILD_NUMBER = '432';
+const APP_CONFIG = require('./app.json').expo;
+const APP_VERSION = String(APP_CONFIG.version || '');
+const BUILD_NUMBER = String(APP_CONFIG.android?.versionCode || '');
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
