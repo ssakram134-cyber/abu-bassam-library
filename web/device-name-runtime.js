@@ -19,7 +19,7 @@
       if(document.getElementById(id)||(guard&&window[guard])){resolve(true);return}
       const script=document.createElement('script');
       script.id=id;script.src=src;script.async=false;
-      script.onload=()=>resolve(true);
+      script.onload=()=>{document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
       script.onerror=()=>reject(new Error(src+' failed to load'));
       (document.head||document.documentElement).appendChild(script)
     })
