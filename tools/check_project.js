@@ -42,6 +42,7 @@ forbid(qEn,'A4 only','English question tools');
 const qTemplates=read('questions-templates-runtime.js');for(const t of ['التاريخ / ${esc(profile.date','اليوم / ${esc(profile.day','أكرم حاتم الغزالي'])has(qTemplates,t,'question templates');
 const gestures=read('questions-gesture-runtime.js');has(gestures,'__ABU_QUESTION_GESTURES_DISABLED__','question gestures');for(const t of ['touchstart','touchmove','pointerdown','pointermove'])forbid(gestures,t,'question gestures');
 const productivity=read('productivity-tools-runtime.js');for(const t of ['صياغة الأسئلة','questionsFrame','src="about:blank"','data-src="questions-ar.html"','compressorFrame','data-src="image-compressor.html"'])has(productivity,t,'productivity host');
+const poster=read('poster-project-runtime.js');has(poster,'s.onload=ensureUi','poster completion load event');has(poster,"old.addEventListener('load',ensureUi,{once:true})",'poster existing script load event');forbid(poster,'setInterval(()=>{loadCompletion()','poster startup polling');
 const bootstrap=read('security-bootstrap-guard-runtime.js');for(const t of ['__ABU_SECURITY_BOOTSTRAP_GUARD_V1__','localStorage.removeItem(LEGACY_TRUST_KEY)','sec.offlineUnlock=denyLegacyOffline','stopImmediatePropagation'])has(bootstrap,t,'security bootstrap guard');
 const deviceLoader=read('device-name-runtime.js');for(const t of ['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()'])has(deviceLoader,t,'security startup order');
 const native=readRoot('index.js');for(const t of [
