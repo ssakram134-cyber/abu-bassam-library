@@ -26,7 +26,7 @@ import { WebView } from 'react-native-webview';
 const APP_URL = 'file:///android_asset/library/index.html';
 const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
-const STARTUP_WATCHDOG_MS = 3500;
+const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
@@ -131,7 +131,9 @@ function App() {
 
   useEffect(() => {
     if (webReady) return undefined;
-    const timer = setTimeout(() => setWebReady(true), STARTUP_WATCHDOG_MS);
+    const timer = setTimeout(() => {
+      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
+    }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
   }, [webReady]);
 
@@ -178,9 +180,10 @@ function App() {
   const onBarcodeScanned = useCallback((result) => {
     if (barcodeLocked || !result?.data) return;
     setBarcodeLocked(true);
-    closeCamera();
+    setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-  }, [barcodeLocked, closeCamera, inject]);
+    setTimeout(() => setBarcodeLocked(false), 500);
+  }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
   const saveBase64 = useCallback(async ({ name, mime, data }) => {
@@ -391,10 +394,7 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onLoad={() => setWebReady(true)}
-        onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}
-        onLoadEnd={() => setWebReady(true)}
-        onError={() => { setWebReady(true); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (

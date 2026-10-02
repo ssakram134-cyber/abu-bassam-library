@@ -38,7 +38,6 @@ function ration(doc,win){selectByHash(doc,win,RATION_IDS);installRationExports(d
 function mawkib(doc,win){selectByHash(doc,win,MAWKIB_IDS)}
 function student(doc,win){selectByHash(doc,win,STUDENT_IDS)}
 function apply(frame){try{const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc?.head)return;const file=(win.location.pathname||'').split('/').pop().toLowerCase();if(file==='ration-card.html')ration(doc,win);if(file==='mawkib-cards.html')mawkib(doc,win);if(file==='student-thanks-cards.html')student(doc,win)}catch(e){}}
-function watch(){const frame=$('abuRecoveryFrame');if(!frame||frame.dataset.abuCanonicalModelWatch==='2')return;frame.dataset.abuCanonicalModelWatch='2';frame.addEventListener('load',()=>setTimeout(()=>apply(frame),100));setTimeout(()=>apply(frame),120)}
-function init(){watch();new MutationObserver(watch).observe(document.documentElement,{childList:true,subtree:true})}
+function init(){const frame=$('abuRecoveryFrame');if(frame)setTimeout(()=>apply(frame),80);document.addEventListener('abu-recovery-frame-load',e=>setTimeout(()=>apply(e.detail?.frame||$('abuRecoveryFrame')),20))}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

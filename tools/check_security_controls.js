@@ -1,38 +1,35 @@
-const fs=require('fs');
-const path=require('path');
-const root=path.resolve(__dirname,'..');
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.resolve(__dirname,'..'),failures=[];
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const failures=[];
-const need=(file,markers)=>{const source=read(file);for(const marker of markers)if(!source.includes(marker))failures.push(`${file}: missing ${marker}`)};
-const forbid=(file,markers)=>{const source=read(file);for(const marker of markers)if(source.includes(marker))failures.push(`${file}: forbidden ${marker}`)};
+const need=(file,markers)=>{const s=read(file);for(const m of markers)if(!s.includes(m))failures.push(`${file}: missing ${m}`)};
+const forbid=(file,markers)=>{const s=read(file);for(const m of markers)if(s.includes(m))failures.push(`${file}: forbidden ${m}`)};
 
-need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','LocalAuthentication.authenticateAsync','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync','ScreenCapture.allowScreenCaptureAsync',"action === 'privacyMode'",'BackHandler.exitApp','AbuBassamNativeBackPress','AbuBassamNativeAppState','STARTUP_WATCHDOG_MS',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest']);
-forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"']);
-need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','abu_bassam_manage_device','abu_bassam_remove_device','SECONDARY_DEFAULT','OWNER_PERMISSIONS','toggleBiometric','appearanceSync','اضغط مرة ثانية للخروج']);
-need('web/security-bootstrap-guard-runtime.js',['__ABU_SECURITY_BOOTSTRAP_GUARD_V1__',"LEGACY_TRUST_KEY='abuBassamSecurityTrustV1'",'localStorage.removeItem(LEGACY_TRUST_KEY)','__ABU_SECURITY_HARDENING_V2__','sec.offlineUnlock=denyLegacyOffline',"if(!navigator.onLine)return denyLegacyOffline()",'captureSensitiveClick','stopImmediatePropagation']);
-forbid('web/security-bootstrap-guard-runtime.js',['localStorage.setItem(LEGACY_TRUST_KEY']);
-need('web/security-hardening-runtime.js',['__ABU_SECURITY_HARDENING_V2__',"SECURE_TRUST_KEY='abu_bassam_offline_trust_v2'","SECRET_KEY='abu_bassam_device_secret_v1'",'OFFLINE_GRACE_MS=12*60*60*1000','CLOCK_SKEW_MS=5*60*1000',"name:'HMAC',hash:'SHA-256'","nativeRequest('secureGet',{key:SECRET_KEY})","nativeRequest('secureSet',{key:SECURE_TRUST_KEY","nativeRequest('biometricAuth'",'constantTime(expected,env.mac)','trust?.device_id!==currentId()','trust?.appVersion!==APP_VERSION','now+CLOCK_SKEW_MS<verified','sec.device=effectiveDevice','sec.maxDevices=limit','AbuBassamDeviceRegistry?.readLimit','localStorage.removeItem(LEGACY_TRUST_KEY)','تعذر الوصول إلى طبقة الأمان في Android','offlineSession','lockOffline(','revalidateOfflineSession','abu_bassam_touch_device','setInterval(enforceOfflineSession,60000)']);
-need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','abuBassamEmergencySnapshotV1','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'خصوصية عالية','تسجيل الخروج','NATIVE_SECURITY_REQUIRED','requireNativeSecurity','passwordWeakness',"AbuBassamCloud?.session?.()?.user",'v.length<12','\\p{L}','\\p{N}',"[^\\p{L}\\p{N}\\s]","c.auth.signOut({scope:'others'})",'تعذر تفعيل الخصوصية العالية']);
-forbid('web/security-extras-runtime.js',["const MAIN_EMAIL=",'__dev_secure_','next.length<10','١٠ محارف']);
-need('web/password-policy-runtime.js',['__ABU_PASSWORD_POLICY_V1__','v.length<12','\\p{L}','\\p{N}',"[^\\p{L}\\p{N}\\s]",'syncSignUp','enforceSignup','stopImmediatePropagation',"setAttribute('minlength','12')","c.auth.updateUser({password:next})","c.auth.signOut({scope:'others'})",'extras.changePassword=changePassword']);
-need('web/login-throttle-fix-runtime.js',['__ABU_LOGIN_THROTTLE_FIX_V2__','loginBusy','legacyInstalled','credentialFailure(message)','deviceOrPostAuthFailure(message)','recordCredentialFailure','attributeFilter','وصل الحساب إلى الحد الأقصى']);
-need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('lang','en')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
-need('web/permission-guard-runtime.js',['__ABU_PERMISSION_GUARD_V1__',"return'print'","return'export'","return'appearance'","return'sync'","return'edit'",'beforeinput','stopImmediatePropagation']);
-need('web/device-name-runtime.js',['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','app-security-runtime.js','security-hardening-runtime.js','loadSecurityHardening()','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-reconcile-runtime.js','fail-closed-runtime.js','loadFailClosedRuntime(loadBranchVault)','AbuBassamDeviceRegistry']);
-need('web/fail-closed-runtime.js',['__ABU_FAIL_CLOSED_RUNTIME_V1__','VAULT_GATEWAY_NOT_READY','SECURE_STORAGE_REQUIRED','secureBridgeReady','acctRecoveryGenerate','acctRecoverDo','__abuFailClosed','__abuOriginal']);
-need('web/device-reconcile-runtime.js',['__ABU_DEVICE_RECONCILE_V2__','abu_bassam_owner_devices','abu_bassam_owner_device_count','abu_bassam_set_device_limit','abu_bassam_manage_device','abu_bassam_remove_device','secureGet','SECURE_STORAGE_REQUIRED','refreshLimitUi','sec.renderDevices=render','sec.permissionsDevice=permissionsDevice']);
-forbid('web/device-name-runtime.js',["from('abu_bassam_devices')","cloud.list('device')"]);
-forbid('web/device-reconcile-runtime.js',["from('abu_bassam_devices')",'__dev_secure_']);
-need('supabase/migrations/202609240006_device_registry_privacy_boundary.sql',['revoke all on table public.abu_bassam_devices from PUBLIC, anon, authenticated','abu_bassam_owner_device_count','abu_bassam_owner_devices',"v_actor.role<>'owner'","v_actor.secret_hash<>v_hash"]);
-need('supabase/migrations/202609240007_device_secret_representation.sql',["alter column secret_hash type text",'abu_bassam_devices_secret_hash_valid',"secret_hash ~ '^[0-9a-f]{64}$'",'abu_bassam_remove_device',"v_actor.secret_hash<>v_hash"]);
-need('supabase/migrations/202609240008_private_tables_deny_all_and_device_index_cleanup.sql',['drop index if exists public.abu_bassam_devices_user_device_uidx','abu_bassam_devices_deny_select','abu_bassam_customers_deny_select','abu_bassam_customer_documents_deny_select','abu_bassam_device_activity_deny_select','using (false)','with check (false)']);
-need('supabase/migrations/202609240009_strict_device_registration_identity.sql',['abu_bassam_devices_one_owner_per_user','pg_advisory_xact_lock',"if v_row.active=false then raise exception 'DEVICE_DISABLED'",'if v_row.secret_hash<>v_hash then raise exception',"v_role:=case when v_count=0 then 'owner' else 'secondary' end"]);
-forbid('supabase/migrations/202609240009_strict_device_registration_identity.sql',['lower(trim(coalesce(device_name','active=true where user_id=v_uid and device_id=p_device_id']);
+need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync',"action === 'privacyMode'",'AbuBassamNativeSecurityResult',"message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"']);
+forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"','onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}']);
 
-for(const file of ['web/security-bootstrap-guard-runtime.js','web/device-name-runtime.js','web/fail-closed-runtime.js','web/device-reconcile-runtime.js','web/security-extras-runtime.js','web/password-policy-runtime.js','web/security-hardening-runtime.js']){try{new Function(read(file))}catch(e){failures.push(`${file}: JavaScript syntax error: ${e.message}`)}}
-const packageJson=JSON.parse(read('package.json'));
-for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!packageJson.dependencies?.[dep])failures.push(`package.json: missing ${dep}`);
-const production=['index.js','web/security-bootstrap-guard-runtime.js','web/app-security-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/password-policy-runtime.js','web/permission-guard-runtime.js','web/login-throttle-fix-runtime.js','web/device-name-runtime.js','web/fail-closed-runtime.js','web/device-reconcile-runtime.js'].map(read).join('\n');
-for(const marker of [['service','role'].join('_'),['sb','secret',''].join('_'),['BEGIN','PRIVATE','KEY'].join(' ')])if(production.toLowerCase().includes(marker.toLowerCase()))failures.push(`Sensitive server credential marker found in production security source: ${marker}`);
+need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY']);
+forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);
+
+need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity']);
+forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
+
+need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLegacySecretStorage','installLegacySecretStorageBlock','localStorage.removeItem(LEGACY_TRUST_KEY)','stopImmediatePropagation']);
+need('web/security-hardening-runtime.js',["SECURE_TRUST_KEY='abu_bassam_offline_trust_v2'","name:'HMAC',hash:'SHA-256'",'constantTime(expected,env.mac)','OFFLINE_GRACE_MS=12*60*60*1000','AbuBassamNativeSecurity']);
+forbid('web/security-hardening-runtime.js',['window.AbuBassamNativeSecurityResult']);
+need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
+forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
+need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
+need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
+need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()']);
+forbid('web/device-name-runtime.js',['login-throttle-fix-runtime.js','fail-closed-runtime.js',"cloud.list('device')"]);
+need('web/device-reconcile-runtime.js',['abu_bassam_owner_devices','abu_bassam_owner_device_count','abu_bassam_set_device_limit','AbuBassamNativeSecurity']);
+forbid('web/device-reconcile-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
+
+const web=path.join(root,'web'),nativeOwners=[];
+for(const name of fs.readdirSync(web).filter(n=>n.endsWith('.js'))){const s=fs.readFileSync(path.join(web,name),'utf8');if(s.includes('window.AbuBassamNativeSecurityResult'))nativeOwners.push(name)}
+if(nativeOwners.length!==1||nativeOwners[0]!=='secure-sync-runtime.js')failures.push('exactly secure-sync-runtime.js must own AbuBassamNativeSecurityResult; found '+nativeOwners.join(','));
+
+for(const file of ['web/secure-sync-runtime.js','web/app-security-runtime.js','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'])try{new vm.Script(read(file),{filename:file})}catch(e){failures.push(file+': syntax '+e.message)}
+for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!JSON.parse(read('package.json')).dependencies?.[dep])failures.push('package.json missing '+dep);
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Security/control checks passed: secure bootstrap blocks legacy offline trust before auth loads; native biometrics and SecureStore are required for sensitive PIN/device-secret actions, privacy mode fails closed, HMAC-sealed 12-hour offline trust uses background locking/server revalidation, strong current-account password policy is enforced, dynamic device limits and private-table deny policies remain in place, strict device identity prevents role inheritance/reactivation, owner RPCs and cross-section permissions are guarded, login throttling and LTR credentials are enforced, and WebView navigation stays local-only.\n');
+console.log('Security/control checks passed: one native security dispatcher, SecureStore-backed auth/device secrets, fail-closed device and vault authorization, deterministic startup, core login throttling, HMAC offline trust, and no legacy patch runtimes.');

@@ -5,14 +5,53 @@
   // This is a public client key. RLS and the authenticated user's JWT enforce access.
   const PUBLISHABLE_KEY = 'sb_publishable_Umb40YIAVf6YSYsncrBcjw_FhBGogw1';
   const TABLE = 'abu_bassam_sync_secure';
-  const BUCKET = 'abu-bassam-private';
   const OPS_KEY = 'abuBassamOpsV4';
-  const AUTH_KEY = 'abuBassamSecureAuthV1';
-  const DEFAULT_EMAIL = 'akrama1992@gmail.com';
+  const AUTH_KEY = 'abu_bassam_auth_session_v1';
   const listeners = new Set();
   let session = null;
   let readyPromise = null;
   let authBusy = false;
+  let vaultAdapter = null;
+  let authMemory = '';
+  const nativePending = new Map();
+  let nativeSeq = 0;
+
+  function nativeAvailable() { return !!(window.Android && typeof Android.security === 'function'); }
+  function nativeRequest(action, payload = {}) {
+    if (!nativeAvailable()) return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
+    return new Promise((resolve, reject) => {
+      const requestId = 'native-sec-' + Date.now() + '-' + (++nativeSeq);
+      const timer = setTimeout(() => { nativePending.delete(requestId); reject(new Error('انتهت مهلة العملية الأمنية')); }, 15000);
+      nativePending.set(requestId, { resolve, reject, timer });
+      Android.security(action, requestId, payload || {});
+    });
+  }
+  window.AbuBassamNativeSecurityResult = function (message) {
+    const data = typeof message === 'string' ? (() => { try { return JSON.parse(message); } catch (_) { return {}; } })() : (message || {});
+    const slot = nativePending.get(data.requestId);
+    if (!slot) return;
+    clearTimeout(slot.timer);
+    nativePending.delete(data.requestId);
+    if (data.ok === false) slot.reject(new Error(data.error || 'تعذر تنفيذ العملية الأمنية'));
+    else slot.resolve(data.value);
+  };
+  window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable };
+
+  async function authNative(action, value = '') {
+    if (!nativeAvailable()) {
+      if (action === 'secureGet') return authMemory;
+      if (action === 'secureSet') { authMemory = String(value || ''); return true; }
+      if (action === 'secureDelete') { authMemory = ''; return true; }
+      throw new Error('NATIVE_SECURITY_REQUIRED');
+    }
+    return nativeRequest(action, { key: AUTH_KEY, value: String(value || '') });
+  }
+
+  const authStorage = {
+    getItem: async () => String(await authNative('secureGet') || ''),
+    setItem: async (_key, value) => { await authNative('secureSet', value); },
+    removeItem: async () => { await authNative('secureDelete'); },
+  };
 
   const client = window.supabase?.createClient
     ? window.supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
@@ -22,6 +61,7 @@
           detectSessionInUrl: false,
           flowType: 'pkce',
           storageKey: AUTH_KEY,
+          storage: authStorage,
         },
       })
     : null;
@@ -57,10 +97,7 @@
       client.auth.onAuthStateChange((_event, nextSession) => {
         session = nextSession || null;
         notify();
-        if (session) {
-          $('syncLogin')?.classList.add('hide');
-          setTimeout(() => syncOperations(false), 50);
-        }
+        if (session) $('syncLogin')?.classList.add('hide');
       });
       notify();
       return session;
@@ -78,6 +115,11 @@
   }
 
   async function upsert(kind, clientId, data) {
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.upsert) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.upsert(clientId, data);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const row = {
@@ -93,6 +135,11 @@
   }
 
   async function list(kind, limit = 1000) {
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.list) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.list(limit);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE)
@@ -106,6 +153,11 @@
   }
 
   async function get(kind, clientId) {
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.get) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.get(clientId);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE)
@@ -119,58 +171,18 @@
   }
 
   async function removeKind(kind) {
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.removeKind) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.removeKind();
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE).delete().eq('user_id', account.id).eq('kind', String(kind));
     if (result.error) throw result.error;
   }
 
-  function objectId(value) {
-    return String(value || uuid()).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 180);
-  }
 
-  async function uploadVault(id, blob, mime) {
-    await ready();
-    const account = requireUser();
-    const path = `${account.id}/vault/${objectId(id)}`;
-    const result = await client.storage.from(BUCKET).upload(path, blob, {
-      upsert: true,
-      contentType: mime || blob?.type || 'application/octet-stream',
-      cacheControl: '3600',
-    });
-    if (result.error) throw result.error;
-    return result.data?.path || path;
-  }
-
-  async function downloadVault(path) {
-    await ready();
-    requireUser();
-    const result = await client.storage.from(BUCKET).download(String(path));
-    if (result.error) throw result.error;
-    return result.data;
-  }
-
-  async function removeVault(path) {
-    if (!path) return;
-    await ready();
-    requireUser();
-    const result = await client.storage.from(BUCKET).remove([String(path)]);
-    if (result.error) throw result.error;
-  }
-
-  function buildLogin() {
-    const modal = document.createElement('div');
-    modal.id = 'syncLogin';
-    modal.className = 'sync-login hide';
-    modal.innerHTML = `<div class="sync-card"><img src="abu_bassam_icon.webp" alt="شعار المكتبة"><h2>المزامنة الآمنة</h2><p>المصمم والمبرمج: أكرم حاتم الغزالي<br>تعمل الكاميرا والطباعة والحفظ المحلي دون حساب.</p><input id="syncEmail" type="email" inputmode="email" autocomplete="email" value="${DEFAULT_EMAIL}" placeholder="البريد الإلكتروني"><input id="syncPassword" type="password" autocomplete="current-password" placeholder="كلمة مرور الحساب"><div class="sync-actions"><button id="syncSignIn">تسجيل الدخول</button><button id="syncSignUp" class="create">إنشاء حساب</button><button id="syncLocal" class="local">متابعة محليًا</button></div><p>لا تُخزن كلمة المرور. الجلسة محصورة داخل مساحة التطبيق، والملفات في حاوية خاصة محمية بـ RLS.</p><div id="syncError" class="sync-error"></div></div>`;
-    document.body.appendChild(modal);
-    $('syncSignIn').onclick = () => authenticate(false);
-    $('syncSignUp').onclick = () => authenticate(true);
-    $('syncLocal').onclick = closeLogin;
-    $('syncPassword').addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') authenticate(false);
-    });
-  }
 
   function authMessage(error) {
     const message = String(error?.message || error || 'تعذر الاتصال');
@@ -182,47 +194,13 @@
     return message;
   }
 
-  async function authenticate(create) {
-    if (authBusy) return;
-    const email = String($('syncEmail')?.value || '').trim().toLowerCase();
-    const password = String($('syncPassword')?.value || '');
-    if (!/^\S+@\S+\.\S+$/.test(email)) return void ($('syncError').textContent = 'أدخل بريدًا صحيحًا.');
-    if (password.length < 8) return void ($('syncError').textContent = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.');
-    if (!client) return void ($('syncError').textContent = 'وحدة المزامنة غير موجودة.');
-    authBusy = true;
-    $('syncError').textContent = create ? 'جاري إنشاء الحساب...' : 'جاري تسجيل الدخول...';
-    try {
-      const result = create
-        ? await client.auth.signUp({ email, password })
-        : await client.auth.signInWithPassword({ email, password });
-      if (result.error) throw result.error;
-      $('syncPassword').value = '';
-      if (result.data?.session) {
-        session = result.data.session;
-        $('syncError').textContent = 'تم الربط بنجاح ✓';
-        notify();
-        setTimeout(closeLogin, 400);
-        setTimeout(() => syncOperations(true), 500);
-      } else {
-        $('syncError').textContent = 'تم إنشاء الحساب. أكّده من بريدك ثم سجّل الدخول.';
-      }
-    } catch (error) {
-      $('syncError').textContent = authMessage(error);
-    } finally {
-      authBusy = false;
-    }
-  }
 
   function openLogin() {
-    if (!$('syncLogin')) return;
-    $('syncError').textContent = connected() ? `متصل: ${user()?.email || ''}` : '';
-    $('syncLogin').classList.remove('hide');
+    if (window.AbuBassamAccount?.open) return window.AbuBassamAccount.open();
+    document.getElementById('abuSecurityGate')?.classList.remove('hide');
   }
 
-  function closeLogin() {
-    if ($('syncPassword')) $('syncPassword').value = '';
-    $('syncLogin')?.classList.add('hide');
-  }
+  function closeLogin() {}
 
   async function logout() {
     if (!connected()) return openLogin();
@@ -270,7 +248,7 @@
     operation.deviceName ||= typeof window.AbuBassamDeviceName === 'function' ? window.AbuBassamDeviceName() : 'أكرم';
     saveOperations([operation, ...loadOperations().filter((item) => item.id !== operation.id)]);
     renderOperations();
-    if (push && connected()) upsert('operation', operation.id, operation).catch(() => {});
+    void push;
   }
 
   const labels = { print: 'طباعة', upload: 'تصوير / رفع', gallery: 'حفظ في المعرض', pdf: 'حفظ PDF', save: 'حفظ', open: 'فتح', rename: 'إعادة تسمية', delete: 'حذف', share: 'مشاركة', backup: 'نسخة احتياطية', restore: 'استعادة', sync: 'مزامنة', settings: 'إعدادات', crop: 'قص', failure: 'فشل معالجة', card: 'كارت' };
@@ -353,38 +331,34 @@
 
   async function syncOperations(manual = true) {
     if (!connected()) {
-      updateStatus('اربط الحساب لتفعيل المزامنة الآمنة');
+      updateStatus('اربط الحساب لتفعيل مزامنة الإعدادات');
       if (manual) openLogin();
       return false;
     }
-    updateStatus('جاري مزامنة السجل والإعدادات...');
+    const device = window.AbuBassamSecurity?.device?.();
+    if (!device?.device_id || device.active === false) {
+      updateStatus('يلزم اعتماد هذا الجهاز قبل المزامنة');
+      return false;
+    }
+    updateStatus('جاري مزامنة الإعدادات...');
     try {
-      const local = loadOperations();
-      await Promise.all(local.map((operation) => upsert('operation', operation.id, operation)));
-      const [rows, settings] = await Promise.all([list('operation', 500), list('settings', 10)]);
-      const map = new Map(local.map((operation) => [operation.id, operation]));
-      rows.forEach((row) => { if (row.data?.id) map.set(row.data.id, cleanOperation(row.data)); });
-      saveOperations([...map.values()].sort((left, right) => Date.parse(right.printedAt || right.uploadedAt || 0) - Date.parse(left.printedAt || left.uploadedAt || 0)));
+      const settings = await list('settings', 10);
       const shared = settings.find((row) => row.client_id === 'shared');
       if (shared?.data) localStorage.setItem('abuBassamPrintSettingsV1', JSON.stringify(shared.data));
-      renderOperations();
-      updateStatus('تمت المزامنة الآمنة الآن ✓');
+      updateStatus('تمت مزامنة الإعدادات ✓');
       return true;
     } catch (error) {
-      updateStatus('تعذرت المزامنة الآن');
+      updateStatus('تعذرت مزامنة الإعدادات الآن');
       if (manual) alert(authMessage(error));
       return false;
     }
   }
 
   async function clearOperations() {
-    if (!confirm(connected() ? 'مسح السجل المحلي والسحابي؟' : 'مسح السجل المحلي؟')) return;
+    if (!confirm('مسح عرض السجل المحلي من هذا الهاتف؟ سجلات التدقيق السحابية الأمنية لا تُحذف من هنا.')) return;
     saveOperations([]);
     renderOperations();
-    if (connected()) {
-      try { await removeKind('operation'); updateStatus('تم مسح السجل المحلي والسحابي ✓'); }
-      catch (_) { updateStatus('مُسح المحلي فقط؛ تعذر الوصول للسحابة'); }
-    }
+    updateStatus('تم مسح السجل المحلي ✓');
   }
 
   function wrapActions() {
@@ -418,18 +392,23 @@
 
   function init() {
     addStyle();
-    buildLogin();
     buildOperations();
     wrapActions();
     localStorage.removeItem('abuBassamSessionV2');
     localStorage.removeItem('abuBassamLocalModeV1');
-    ready().then(() => { if (connected()) syncOperations(false); }).catch(() => updateStatus('تعذر التحقق من جلسة المزامنة'));
+    ready().catch(() => updateStatus('تعذر التحقق من جلسة المزامنة'));
     setInterval(() => {
       wrapActions();
-      if (connected() && document.visibilityState !== 'hidden') syncOperations(false);
     }, 120000);
-    window.addEventListener('online', () => { if (connected()) syncOperations(false); });
   }
+
+  function registerVaultAdapter(adapter) {
+    if (!adapter || typeof adapter!=='object') throw new Error('INVALID_VAULT_ADAPTER');
+    for (const name of ['list','get','upsert','upload','download','remove']) if (typeof adapter[name]!=='function') throw new Error('INVALID_VAULT_ADAPTER');
+    vaultAdapter=Object.freeze({...adapter});
+    return true;
+  }
+  function unregisterVaultAdapter(adapter) { if (!adapter || vaultAdapter===adapter) vaultAdapter=null; }
 
   window.AbuBassamCloud = {
     ready,
@@ -444,9 +423,11 @@
     list,
     get,
     removeKind,
-    uploadVault,
-    downloadVault,
-    removeVault,
+    registerVaultAdapter,
+    unregisterVaultAdapter,
+    uploadVault:(...args)=>vaultAdapter?.upload?vaultAdapter.upload(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
+    downloadVault:(...args)=>vaultAdapter?.download?vaultAdapter.download(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
+    removeVault:(...args)=>vaultAdapter?.remove?vaultAdapter.remove(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
   };
   window.AbuBassamOps = { add: addOperation, open: openOperations, close: closeOps, sync: () => syncOperations(true), list: loadOperations, login: openLogin, logout, isConnected: connected, pushSettings: pushPrintSettings };
   window.openOps = openOperations;

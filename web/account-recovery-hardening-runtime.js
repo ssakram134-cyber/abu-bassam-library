@@ -11,31 +11,10 @@ const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
 const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
 const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
 const APP='4.3.2';
-const pending=new Map();
-let seq=0,bridgeInstalled=false,googleBusy=false,recoveryBusy=false;
+let googleBusy=false,recoveryBusy=false;
 const $=id=>document.getElementById(id);
 function setMsg(text,bad=false){const e=$('acctMsg');if(e){e.textContent=String(text||'');e.style.color=bad?'#a52e3b':'#087f72'}}
-function installBridge(){
-  if(bridgeInstalled)return;
-  bridgeInstalled=true;
-  const previous=window.AbuBassamNativeSecurityResult;
-  window.AbuBassamNativeSecurityResult=function(message){
-    const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(_){return{}}})():message||{};
-    const slot=pending.get(data.requestId);
-    if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);data.ok===false?slot.reject(new Error(data.error||'تعذر الوصول إلى التخزين الآمن')):slot.resolve(data.value);return}
-    if(typeof previous==='function')return previous(message)
-  }
-}
-function native(action,payload={}){
-  installBridge();
-  if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));
-  return new Promise((resolve,reject)=>{
-    const requestId='acct-hard-'+Date.now()+'-'+(++seq);
-    const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة التخزين الآمن'))},12000);
-    pending.set(requestId,{resolve,reject,timer});
-    Android.security(action,requestId,payload)
-  })
-}
+function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return api.request(action,payload)}
 function cloud(){return window.AbuBassamCloud||null}
 function authClient(){return cloud()?.client||null}
 async function rpc(name,args={}){
@@ -167,25 +146,9 @@ async function cleanupStaleCallback(){
     if(!usable)await native('secureDelete',{key:CALLBACK_KEY})
   }catch(_){}
 }
-function enforceBranchVault(){
-  const c=cloud(),branch=window.AbuBassamBranchVault;
-  if(!c||!branch)return false;
-  if(typeof branch.upload==='function')c.uploadVault=branch.upload;
-  if(typeof branch.download==='function')c.downloadVault=branch.download;
-  if(typeof branch.remove==='function')c.removeVault=branch.remove;
-  if(!c.__abuBranchVaultPatched&&!c.__abuAccountVaultFallback){
-    c.__abuAccountVaultFallback=true;
-    const list=c.list?.bind(c),get=c.get?.bind(c),upsert=c.upsert?.bind(c);
-    if(list)c.list=(kind,limit)=>String(kind)==='vault'?branch.list(limit):list(kind,limit);
-    if(get)c.get=(kind,id)=>String(kind)==='vault'?branch.get(id):get(kind,id);
-    if(upsert)c.upsert=(kind,id,data)=>String(kind)==='vault'?branch.upsert(id,data):upsert(kind,id,data)
-  }
-  return true
-}
 function patchPublicApis(){
   if(window.AbuBassamAccount){window.AbuBassamAccount.google=safeGoogle;window.AbuBassamAccount.recoverPhone=guardedRecovery}
-  if(window.AbuBassamSettings)window.AbuBassamSettings.google=safeGoogle;
-  enforceBranchVault()
+  if(window.AbuBassamSettings)window.AbuBassamSettings.accountGoogle=safeGoogle
 }
 function onClick(event){
   const target=event.target?.closest?.('button');
@@ -204,11 +167,11 @@ function onClick(event){
   }
 }
 function boot(){
-  installBridge();
   document.addEventListener('click',onClick,true);
-  patchPublicApis();cleanupStaleCallback();
-  [100,300,800,1600,3500].forEach(ms=>setTimeout(()=>{patchPublicApis();cleanupStaleCallback()},ms));
-  setInterval(()=>{patchPublicApis();cleanupStaleCallback()},10000)
+  patchPublicApis();
+  cleanupStaleCallback();
+  document.addEventListener('abu-bassam-auth-changed',()=>{patchPublicApis();cleanupStaleCallback()});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cleanupStaleCallback()})
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

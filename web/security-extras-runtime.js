@@ -7,36 +7,17 @@ const $=id=>document.getElementById(id);
 const PIN_KEY='abu_bassam_danger_pin_hash_v1';
 const SNAPSHOT_KEY='abuBassamEmergencySnapshotV1';
 const PRIVACY_KEY='abuBassamPrivacyModeV1';
-const ATTEMPT_KEY='abuBassamLoginAttemptsV1';
-const LOGIN_LOCK_KEY='abuBassamLoginLockUntilV1';
-const BLOCK_COUNT_KEY='abuBassamLoginBlockCountV1';
-const pending=new Map();
-let seq=0;
 let bypassTarget=null;
 let snapshotTimer=null;
-let originalLogin=null;
-const previousNativeResult=window.AbuBassamNativeSecurityResult;
 
 function log(title,details=''){try{window.AbuBassamOps?.add?.({type:'settings',title,section:'الأمان',details})}catch(e){}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function isOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function canSecurity(){return window.AbuBassamSecurity?.can?.('security')||isOwner()}
-function nativeAvailable(){return !!(window.Android&&typeof Android.security==='function')}
+function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
 function requireNativeSecurity(){if(nativeAvailable())return true;alert('تعذر الوصول إلى التخزين الآمن في Android. أعد فتح التطبيق قبل تنفيذ هذه العملية الحساسة.');return false}
 
-function nativeRequest(action,payload={}){
-  if(!nativeAvailable())return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
-  return new Promise((resolve,reject)=>{
-    const requestId='secx-'+Date.now()+'-'+(++seq),timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة العملية'))},12000);
-    pending.set(requestId,{resolve,reject,timer});Android.security(action,requestId,payload)
-  })
-}
-window.AbuBassamNativeSecurityResult=function(message){
-  const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(e){return{}}})():message||{},slot=pending.get(data.requestId);
-  if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);return}
-  if(typeof previousNativeResult==='function')previousNativeResult(message)
-};
-
+function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 async function digest(value){
   const bytes=new TextEncoder().encode(String(value)),hash=await crypto.subtle.digest('SHA-256',bytes);
   return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('')
@@ -73,33 +54,6 @@ async function verifyDangerPin(reason='هذه عملية حساسة'){
     if(await digest(value)!==hash){alert('رمز العمليات الحساسة غير صحيح.');log('فشل تحقق رمز العمليات الحساسة',reason);return false}
     return true
   }catch(e){alert('تعذر التحقق من رمز العمليات الحساسة: '+String(e?.message||e));return false}
-}
-
-function loginLockUntil(){return Number(localStorage.getItem(LOGIN_LOCK_KEY)||0)}
-function loginRemaining(){return Math.max(0,loginLockUntil()-Date.now())}
-function setLoginMessage(message){const el=$('abuLoginError');if(el)el.textContent=message}
-function formatSeconds(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
-function clearLoginFailures(){localStorage.removeItem(ATTEMPT_KEY);localStorage.removeItem(LOGIN_LOCK_KEY);localStorage.removeItem(BLOCK_COUNT_KEY)}
-function recordLoginFailure(){
-  let attempts=Number(localStorage.getItem(ATTEMPT_KEY)||0)+1;
-  if(attempts<5){localStorage.setItem(ATTEMPT_KEY,String(attempts));setLoginMessage(`محاولة غير ناجحة. المتبقي قبل الانتظار: ${5-attempts}`);return}
-  const blocks=Number(localStorage.getItem(BLOCK_COUNT_KEY)||0)+1,duration=Math.min(300000,30000*Math.max(1,blocks));
-  localStorage.setItem(ATTEMPT_KEY,'0');localStorage.setItem(BLOCK_COUNT_KEY,String(blocks));localStorage.setItem(LOGIN_LOCK_KEY,String(Date.now()+duration));
-  setLoginMessage(`محاولات كثيرة. انتظر ${formatSeconds(duration)} ثم حاول مرة أخرى.`);log('حظر مؤقت لمحاولات الدخول',`${Math.round(duration/1000)} ثانية`)
-}
-async function guardedLogin(){
-  const remaining=loginRemaining();if(remaining>0){setLoginMessage(`الدخول متوقف مؤقتًا. حاول بعد ${formatSeconds(remaining)}.`);return}
-  if(!originalLogin)originalLogin=window.AbuBassamSecurity?.login;if(typeof originalLogin!=='function')return;
-  const gate=$('abuSecurityGate');await originalLogin();
-  if(gate?.classList.contains('hide'))clearLoginFailures();else{const msg=String($('abuLoginError')?.textContent||'');if(msg&&!/جاري|الإنترنت|خدمة الدخول غير جاهزة/i.test(msg))recordLoginFailure()}
-}
-function installLoginThrottle(){
-  if(!window.AbuBassamSecurity?.login||!$('abuLoginBtn'))return false;
-  if($('abuLoginBtn').dataset.throttled==='1')return true;
-  originalLogin=window.AbuBassamSecurity.login;$('abuLoginBtn').onclick=guardedLogin;$('abuLoginBtn').dataset.throttled='1';
-  const pass=$('abuLoginPass');if(pass)pass.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();event.stopImmediatePropagation();guardedLogin()},true);
-  const remaining=loginRemaining();if(remaining>0)setLoginMessage(`الدخول متوقف مؤقتًا. حاول بعد ${formatSeconds(remaining)}.`);
-  return true
 }
 
 function passwordWeakness(value){
@@ -185,7 +139,7 @@ function installTypographyApplyShim(){
 }
 function startSnapshots(){createSnapshot(false);clearInterval(snapshotTimer);snapshotTimer=setInterval(()=>{if(document.visibilityState!=='hidden')createSnapshot(false)},10*60*1000);window.addEventListener('pagehide',()=>createSnapshot(false));document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden')createSnapshot(false)})}
 
-async function boot(){privacyCover();inject();guardDanger();installTypographyApplyShim();startSnapshots();const loginTimer=setInterval(()=>{if(installLoginThrottle())clearInterval(loginTimer)},200);setTimeout(()=>clearInterval(loginTimer),15000);await applyPrivacy(privacyEnabled());render()}
-window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,passwordWeakness,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render,guardedLogin};
+async function boot(){privacyCover();inject();guardDanger();installTypographyApplyShim();startSnapshots();await applyPrivacy(privacyEnabled());render()}
+window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,passwordWeakness,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();

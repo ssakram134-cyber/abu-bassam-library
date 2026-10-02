@@ -620,35 +620,8 @@
         }
     </script>
     <script>
-        const QUESTION_DRAFT_KEY = 'abuBassamQuestionDraftArabicV1';
-        let draftTimer = 0;
-
         function hostMessage(payload) {
             try { window.parent.postMessage(payload, '*'); } catch (error) {}
-        }
-
-        function saveQuestionDraft(showMessage) {
-            try {
-                localStorage.setItem(QUESTION_DRAFT_KEY, document.getElementById('pages-container').innerHTML);
-                if (showMessage) alert('تم حفظ مسودة الأسئلة العربية على الجهاز ✓');
-            } catch (error) {
-                if (showMessage) alert('تعذر حفظ المسودة؛ قد تكون الصور المضافة كبيرة جدًا.');
-            }
-        }
-
-        function scheduleQuestionDraft() {
-            clearTimeout(draftTimer);
-            draftTimer = setTimeout(() => saveQuestionDraft(false), 500);
-        }
-
-        function restoreQuestionDraft() {
-            try {
-                const saved = localStorage.getItem(QUESTION_DRAFT_KEY);
-                if (!saved) return false;
-                document.getElementById('pages-container').innerHTML = saved;
-                rebindAllDraggables();
-                return true;
-            } catch (error) { return false; }
         }
 
         function printableQuestionHtml() {
@@ -663,28 +636,18 @@
         }
 
         function printQuestionExam() {
-            saveQuestionDraft(false);
+            window.saveQuestionDraft?.(false);
             hostMessage({ type: 'abuPrintQuestion', language: 'ar', html: printableQuestionHtml() });
         }
 
         function saveQuestionPdf() {
-            saveQuestionDraft(false);
+            window.saveQuestionDraft?.(false);
             hostMessage({ type: 'abuSaveQuestionPdf', language: 'ar', name: 'Abu_Bassam_Questions_AR_' + Date.now() + '.pdf', html: printableQuestionHtml() });
         }
 
-        function resetQuestionDraft() {
-            if (!confirm('بدء نموذج جديد؟ ستُحذف المسودة العربية الحالية فقط.')) return;
-            localStorage.removeItem(QUESTION_DRAFT_KEY);
-            location.reload();
-        }
-
-        document.addEventListener('input', scheduleQuestionDraft, true);
         window.addEventListener('load', () => {
-            const restored = restoreQuestionDraft();
             fitToScreen();
-            const container = document.getElementById('pages-container');
-            if (container) new MutationObserver(scheduleQuestionDraft).observe(container, { childList: true, subtree: true, characterData: true, attributes: true });
-            hostMessage({ type: 'abuQuestionReady', language: 'ar', message: restored ? 'تمت استعادة مسودة الأسئلة العربية ✓' : 'نموذج الأسئلة العربية جاهز' });
+            hostMessage({ type: 'abuQuestionReady', language: 'ar', message: 'نموذج الأسئلة العربية جاهز' });
         });
         window.addEventListener('message', event => { if (event.data && event.data.type === 'abuBassamTabVisible') setTimeout(fitToScreen, 30); });
     </script>

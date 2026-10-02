@@ -1,71 +1,52 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
-function need(src,token,label){if(!src.includes(token))throw new Error(`cards latest hardening failed: ${label}`)}
-function reject(src,token,label){if(src.includes(token))throw new Error(`cards latest hardening failed: ${label}`)}
-const fixes=read('web/cards-hardening-fixes-runtime.js');
-const upgrades=read('web/cards-section-upgrades-runtime.js');
-const finalAudit=read('web/cards-final-audit-runtime.js');
+function need(src,token,label){if(!src.includes(token))throw new Error(`cards canonical check failed: ${label}`)}
+function reject(src,token,label){if(src.includes(token))throw new Error(`cards canonical check failed: ${label}`)}
+for(const obsolete of ['web/cards-hardening-runtime.js','web/cards-hardening-fixes-runtime.js','web/cards-final-audit-runtime.js','web/cards-section-upgrades-runtime.js']){
+  if(fs.existsSync(obsolete))throw new Error('obsolete patch runtime still exists: '+obsolete)
+}
+const studio=read('web/cards-studio-runtime.js');
+const design=read('web/design-studio-runtime.js');
+const layouts=read('web/standalone-card-layouts-plus-runtime.js');
+const recovery=read('web/feature-recovery-runtime.js');
 const preload=read('web/envelope-preload-runtime.js');
-const studio=read('web/design-studio-runtime.js');
-const library=read('web/card-template-library.js');
-new Function(fixes);new Function(upgrades);new Function(finalAudit);new Function(preload);new Function(studio);new Function(library);
-need(upgrades,'cards-hardening-fixes-runtime.js','latest hardening runtime is not loaded');
-need(upgrades,'__ABU_CARDS_HARDENING_FIXES_V2__','loader must target V2 hardening guard');
-need(upgrades,'cards-final-audit-runtime.js','final card audit runtime must be loaded');
-need(upgrades,'__ABU_CARDS_FINAL_AUDIT_V1__','final card audit guard must be loaded');
-need(upgrades,'__abuCardsBootstrap','card permissions need a fail-closed bootstrap facade');
-need(upgrades,"can(){try{return window.AbuBassamSecurity?.role?.()==='owner'}",'bootstrap may only allow owner before full permissions load');
-need(upgrades,"cardsBarcode')!==true",'gallery barcode shortcut must enforce cardsBarcode');
-need(upgrades,"guardChild(win,'resetCard',['cardsCreate','cardsEdit']",'ration new/reset action must require create and edit permissions');
-need(upgrades,"guardChild(win,'resetForm',['cardsCreate','cardsEdit']",'standalone new/reset form action must require create and edit permissions');
-need(upgrades,"guardChild(win,'resetLetter',['cardsCreate','cardsEdit']",'thanks-letter new action must require create and edit permissions');
-need(upgrades,"guardChild(win,'saveImages',['cardsExportImage','imageExport','exportOutsideApp']",'standalone gallery image export must enforce export permissions');
-need(upgrades,'Android.savePagesToGallery','multi-image native gallery bridge must be guarded');
-need(upgrades,'__abuCardsGalleryGuard','multi-image gallery guard marker is missing');
-need(upgrades,"guardChild(win,'printNow',['cardsPrint','printCards','printGeneral']",'student thanks direct print action must be guarded');
-need(finalAudit,'07829667521','standalone front/back brand footer must include the library phone');
-need(finalAudit,"['ration-card.html','mawkib-cards.html']",'CR80 standalone branding targets must be explicit');
-need(finalAudit,'.abu-brand-footer','front-side standalone brand footer is missing');
-need(finalAudit,'تصميم: أكرم حاتم الغزالي','approved designer identity must be applied to designs');
-need(finalAudit,"@media print{.designer{display:block!important}}",'approved designer identity must remain visible in print/PDF');
-need(finalAudit,"guardChild(win,'saveImages',['cardsExportImage','imageExport','exportOutsideApp']",'final audit must guard direct multi-image export');
-need(finalAudit,'Android.savePagesToGallery','final audit must guard gallery bridge');
-need(fixes,'__ABU_CARDS_HARDENING_FIXES_V2__','V2 final card hardening guard');
-need(fixes,"window.AbuBassamPermissions.can(k)===true",'branch permission checks must fail closed');
-need(fixes,'reapplyOverrides','text/image overrides must survive rerender');
-need(fixes,"b.dataset.image='1'",'standalone image replacement button is missing');
-need(fixes,"['cardsEdit','cardsEditImage']",'image replacement must require edit and image permissions');
-need(fixes,"['cardsEdit','cardsEditText']",'text editing must require edit and text permissions');
-need(fixes,'cardsManageCustomTemplates','custom template management permission is not enforced');
-need(fixes,'cardsTemplatesEdit','template edit/select permission is not enforced');
-need(fixes,'refreshStandaloneTemplateState','standalone edits must be rebound when the template changes');
-need(fixes,'const idx=index++','standalone element indexing must match the base editor key order');
-need(fixes,"[file,template,frameSide(el),el.id||('e'+idx)]",'standalone layout key must include the active template');
-need(fixes,'scheduleCleanTemplateReload','static template changes must reload once from a clean DOM');
-need(fixes,'abuCardsTemplateReload:','template reload loop guard is missing');
-need(fixes,'doc.__abuTemplateSwitching=true','template switching must suppress stale override reapplication');
-need(fixes,'clearPreviousOverride','old template geometry must be removed before applying the new template');
-need(fixes,'printKeys','printing must use an action-specific permission set');
-need(fixes,'pdfKeys','PDF export must use an action-specific permission set');
-need(fixes,"mode==='cr80'",'direct CR80 printing permission guard is missing');
-need(fixes,'isCardCr80','standalone CR80 output must be detected');
-need(fixes,'isCardA4','A4 output must be detected');
-need(fixes,'patchReactNativeBridge','ReactNativeWebView direct output bypass must be guarded');
-need(fixes,'__abuCardsFinalBridgeGuard','bridge wrappers must be function-level and re-wrappable');
-need(fixes,'#csForm [data-field]','main card data fields must become read-only when editing is denied');
-need(fixes,'csBarcodeImageInput','barcode file input must be disabled when barcode permission is denied');
-need(fixes,'#dsCanvas [contenteditable]','design studio direct text editing must be guarded');
-need(fixes,'#dsCanvas .ds-el','design studio pointer editing must be guarded');
-need(fixes,"cardsA4Layout','printA4",'A4 print must require both card layout and print A4 permissions');
-need(fixes,"cardsExportPdf','pdfCreate','pdfSave",'PDF export must require PDF permissions');
-need(fixes,"cardsPrint','printCards','printGeneral",'card printing must require card and global print permissions');
-reject(fixes,"const can=k=>window.AbuBassamPermissions?.can?.(k)!==false",'fail-open permission helper returned');
-need(studio,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'system envelope templates must stay exactly 9');
-need(preload,"item.id==='env-10'",'legacy env-10 must be removed from saved custom templates');
-need(preload,"state.templateId==='env-10'",'legacy active env-10 state must migrate to an approved template');
-reject(preload,'function env10(','obsolete env-10 generator returned');
-reject(preload,"id:'env-10'",'obsolete env-10 injection returned');
-const envelope=((library.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'');
-const ids=[...envelope.matchAll(/id:'env-(\d+)'/g)].map(x=>Number(x[1]));
-if(ids.length!==9||ids.some((n,i)=>n!==i+1))throw new Error(`cards latest hardening failed: envelope library must be env-1..env-9, found ${ids.join(',')}`);
-console.log('latest cards hardening checks passed: permissions fail closed, output bridges are guarded, standalone editing stays template-bound, and the approved envelope set is exactly env-1..env-9 with legacy env-10 migrated out.');
+const ration=read('web/ration-card.html');
+const mawkib=read('web/mawkib-cards.html');
+const thanks=read('web/thanks-letter.html');
+const student=read('web/student-thanks-cards.html');
+for(const [name,src] of Object.entries({studio,design,layouts,recovery,preload,ration,mawkib,thanks,student})){
+  if(name!=='preload'&&name!=='ration'&&name!=='mawkib'&&name!=='thanks'&&name!=='student')new Function(src)
+}
+need(studio,"function requireOutputPermission()",'output-specific permissions must be canonical');
+need(studio,"cardsA4Layout','printA4",'A4 output requires layout and A4 print permissions');
+need(studio,"printCardDirect",'CR80 output permission is missing');
+need(studio,"cardsExportPdf','pdfCreate','pdfSave",'PDF permission set is missing');
+need(studio,"cardsExportImage','imageExport','exportOutsideApp",'image export permission set is missing');
+need(studio,"cardsEditText",'text editing permission is missing');
+need(studio,"cardsImportImage",'image import permission is missing');
+need(studio,"scanBarcodeGallery",'gallery barcode action must be canonical');
+need(studio,"student-thanks-cards.html",'student thanks tool must be canonical');
+reject(studio,"رقم خط النقل",'obsolete child transport-line field returned');
+need(layouts,"abuBassamStandaloneCardLayoutV2",'standalone free-layout persistence is missing');
+need(layouts,"safeTextTarget",'standalone safe text editing is missing');
+need(layouts,"cardsEditImage",'standalone image edit permission is missing');
+need(layouts,"abu-recovery-frame-load",'standalone layouts must use explicit iframe lifecycle events');
+reject(layouts,"new MutationObserver(watch)",'standalone layout global observer returned');
+need(design,"Array.from({length:10},(_,i)=>envelopeTemplate(i))",'system envelope set must include env-10');
+need(design,"cardsManageCustomTemplates",'custom template permission is missing');
+need(design,"cardsTemplatesDelete",'template delete permission is missing');
+need(design,"cardsEditText",'Design Studio text permission is missing');
+need(design,"cardsExportPdf",'Design Studio PDF permission is missing');
+need(design,"cardsExportImage",'Design Studio image export permission is missing');
+need(preload,"item.id==='env-10'",'legacy custom env-10 records must still be removed before system templates load');
+reject(preload,"state.templateId==='env-10')state.templateId='env-1'",'canonical env-10 must not be downgraded');
+for(const [name,src] of [['ration',ration],['mawkib',mawkib],['thanks',thanks],['student',student]]){
+  need(src,"function canCard(key)",name+' must enforce permissions in its own source');
+  need(src,"cardsPrint','printCards','printGeneral",name+' print guard missing');
+  need(src,"cardsExportPdf','pdfCreate','pdfSave",name+' PDF guard missing')
+}
+need(ration,"cardsExportImage','imageExport','exportOutsideApp",'ration image export guard missing');
+for(const id of ['t7','t8','t9','t10'])need(thanks,`value="${id}"`,`thanks template ${id} missing from source`);
+need(recovery,"abu-recovery-frame-load",'recovery host must emit explicit iframe lifecycle event');
+need(recovery,"cardsExportImage','imageExport','exportOutsideApp",'recovery host image export guard missing');
+console.log('canonical cards checks passed: no patch runtimes, fail-closed permissions live in source, env-10 and thanks templates are canonical, and standalone editing uses explicit iframe lifecycle events.');

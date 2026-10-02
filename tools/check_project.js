@@ -9,13 +9,14 @@ const read=p=>fs.readFileSync(path.join(web,p),'utf8');
 const has=(src,token,label)=>{if(!src.includes(token))errors.push(`${label}: missing ${token}`)};
 const forbid=(src,token,label)=>{if(src.includes(token))errors.push(`${label}: forbidden ${token}`)};
 const required=[
-  'index.html','security-bootstrap-guard-runtime.js','app-security-runtime.js','security-hardening-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-throttle-fix-runtime.js','login-input-direction-runtime.js','device-name-runtime.js','device-reconcile-runtime.js',
-  'cards-studio-runtime.js','card-template-library.js','card-models-runtime.js','card-free-layout-runtime.js','cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','envelopes.html','certificates.html','student-thanks-cards.html','thanks-letter.html',
-  'questions-ar.html','questions-en.html','questions-paper-runtime.js','questions-en-fixes-runtime.js','questions-templates-runtime.js','questions-final-fixes-runtime.js','questions-custom-library-runtime.js','question-type-runtime.js','image-compressor.html',
+  'index.html','security-bootstrap-guard-runtime.js','app-security-runtime.js','security-hardening-runtime.js','security-extras-runtime.js','password-policy-runtime.js','permission-guard-runtime.js','login-input-direction-runtime.js','device-name-runtime.js','device-reconcile-runtime.js',
+  'cards-studio-runtime.js','card-template-library.js','card-models-runtime.js','card-free-layout-runtime.js','standalone-card-layouts-plus-runtime.js','card-templates-v2.html','ration-card.html','mawkib-cards.html','envelopes.html','certificates.html','student-thanks-cards.html','thanks-letter.html',
+  'questions-ar.html','questions-en.html','questions-paper-runtime.js','questions-en-fixes-runtime.js','questions-templates-runtime.js','questions-completion-runtime.js','questions-custom-library-runtime.js','question-type-runtime.js','image-compressor.html',
   'document-vault-runtime.js','document-vault-advanced-runtime.js','customer-documents-runtime.js','notification-center-runtime.js','notification-excel-runtime.js','operation-log-privacy-runtime.js','productivity-tools-runtime.js','photo-print-advanced-runtime.js','poster-project-runtime.js',
   'supabase-2.58.0.js','qrcode.js','jszip.min.js','fonts/Cairo-Regular.ttf','fonts/Cairo-Bold.ttf','fonts/Tajawal-Regular.ttf','fonts/Tajawal-Bold.ttf'
 ];
 for(const f of required){const p=path.join(web,f);if(!fs.existsSync(p))errors.push(`Missing web asset: ${f}`);else if(fs.statSync(p).size===0)errors.push(`Empty required asset: ${f}`)}
+for(const f of ['cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','cards-final-audit-runtime.js','cards-section-upgrades-runtime.js','questions-final-fixes-runtime.js','login-throttle-fix-runtime.js','touch-stability-runtime.js'])if(fs.existsSync(path.join(web,f)))errors.push(`Obsolete patch runtime returned: ${f}`);
 for(const filename of fs.readdirSync(web).filter(n=>n.endsWith('.js'))){try{new vm.Script(read(filename),{filename})}catch(e){errors.push(`${filename}: JavaScript syntax error: ${e.message}`)}}
 for(const filename of ['index.html','questions-ar.html','questions-en.html','image-compressor.html','envelopes.html','certificates.html','student-thanks-cards.html','card-templates-v2.html','ration-card.html','mawkib-cards.html','thanks-letter.html']){
   if(!fs.existsSync(path.join(web,filename)))continue;
@@ -31,7 +32,7 @@ if(String(android.versionCode)!=='432')errors.push(`app.json: expected versionCo
 const librarySource=read('card-template-library.js');const sandbox={window:{}};vm.runInNewContext(librarySource,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
 if(!Array.isArray(groups))errors.push('card-template-library.js: library did not load');
 else{
-  const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:9,certificate:10,thanks:6};
+  const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
   for(const [id,count] of Object.entries(expected)){const g=groups.find(x=>x.id===id);if(!g)errors.push(`card catalog: missing ${id}`);else if(g.models?.length!==count)errors.push(`card catalog: ${id} expected ${count}, got ${g.models?.length}`);else{const ids=g.models.map(x=>x.id);if(new Set(ids).size!==ids.length)errors.push(`card catalog: duplicate model id in ${id}`)}}
 }
 const qAr=read('questions-paper-runtime.js');for(const t of ['A4P','A4L','A5P','A5L',"value=\"custom\"",'80,500','window.fitToScreen','window.checkAutoFlow'])has(qAr,t,'Arabic question paper');

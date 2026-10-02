@@ -1,82 +1,45 @@
-const fs=require('fs');
-const path=require('path');
-const vm=require('vm');
-const root=path.resolve(__dirname,'..');
-const web=path.join(root,'web');
-const errors=[];
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.resolve(__dirname,'..'),web=path.join(root,'web'),errors=[];
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
-const forbid=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
+const need=(src,m,l)=>{if(!src.includes(m))errors.push(`${l}: missing ${m}`)};
+const forbid=(src,m,l)=>{if(src.includes(m))errors.push(`${l}: forbidden ${m}`)};
 
-const obsolete=path.join(web,'residence-card.html');
-if(fs.existsSync(obsolete))errors.push('obsolete standalone residence-card.html must stay removed; residence fields belong to the national-ID flow');
-const obsoleteA4=path.join(web,'a4-card-sheet-editor-runtime.js');
-if(fs.existsSync(obsoleteA4))errors.push('obsolete A4 card editor V1 must stay removed; only the V2 editor is authoritative');
-
-const productionFiles=[];
-for(const name of fs.readdirSync(web)){
-  if(!/\.(?:js|html)$/i.test(name))continue;
-  const full=path.join(web,name);
-  if(!fs.statSync(full).isFile())continue;
-  productionFiles.push([name,fs.readFileSync(full,'utf8')]);
+for(const rel of ['web/residence-card.html','web/a4-card-sheet-editor-runtime.js','web/cards-section-upgrades-runtime.js','web/cards-hardening-runtime.js','web/cards-hardening-fixes-runtime.js','web/cards-final-audit-runtime.js','web/touch-stability-runtime.js']){
+  if(fs.existsSync(path.join(root,rel)))errors.push('obsolete file must stay removed: '+rel)
 }
-for(const [name,src] of productionFiles){
-  if(src.includes('residence-card.html'))errors.push(`${name}: obsolete residence-card.html route/reference returned`);
-  if(src.includes('a4-card-sheet-editor-runtime.js'))errors.push(`${name}: obsolete A4 editor V1 route/reference returned`);
-  if(src.includes('__ABU_A4_CARD_SHEET_EDITOR_V1__'))errors.push(`${name}: obsolete A4 editor V1 guard returned`);
-}
+const productionFiles=[];for(const name of fs.readdirSync(web)){if(!/\.(?:js|html)$/i.test(name))continue;const full=path.join(web,name);if(fs.statSync(full).isFile())productionFiles.push([name,fs.readFileSync(full,'utf8')])}
+for(const [name,src] of productionFiles){for(const marker of ['a4-card-sheet-editor-runtime.js','cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','cards-final-audit-runtime.js','cards-section-upgrades-runtime.js'])if(src.includes(marker))errors.push(`${name}: obsolete reference returned: ${marker}`)}
 
-const backup=read('web/backup-center-runtime.js');
-try{new vm.Script(backup,{filename:'backup-center-runtime.js'})}catch(e){errors.push(`backup-center-runtime.js syntax: ${e.message}`)}
+const backup=read('web/backup-center-runtime.js');try{new vm.Script(backup,{filename:'backup-center-runtime.js'})}catch(e){errors.push('backup syntax: '+e.message)}
 need(backup,"sec?.role?.()==='owner'",'backup owner permission');
-need(backup,"typeof sec?.can==='function'&&sec.can(k)===true",'backup secondary permission must be explicit true');
-forbid(backup,"can?.(k)!==false",'backup permission must not fail open');
-forbid(backup,"AbuBassamSecurity?.can?.(k)!==false",'backup permission must not fail open');
-need(backup,"if(!can('backupCreate'))",'backup create guard');
-need(backup,"if(!can('backupRestore'))",'backup restore guard');
-need(backup,"if(!can('backupDelete'))",'backup delete guard');
-need(backup,"if(sha!==String(d.backup.sha256||''))",'backup restore SHA-256 verification');
-need(backup,"if(d.backup.branch_device_id!==cur)",'backup restore branch binding');
-need(backup,"SECURE_STORAGE_REQUIRED",'backup SecureStore fail-closed requirement');
+need(backup,"typeof sec?.can==='function'&&sec.can(k)===true",'backup secondary permission');
+forbid(backup,"can?.(k)!==false",'backup permission must fail closed');
+need(backup,"const required=kind==='pre_restore'?'backupRestore':'backupCreate'",'pre-restore permission split');
+need(backup,"if(!can('backupRestore'))",'restore guard');
+need(backup,"if(!can('backupDelete'))",'delete guard');
+need(backup,"if(sha!==String(d.backup.sha256||''))",'download SHA-256 verification');
+need(backup,"if(d.backup.branch_device_id!==cur)",'backup branch binding');
+need(backup,'AbuBassamNativeSecurity','central SecureStore dispatcher');
 
-const cardsLoader=read('web/cards-section-upgrades-runtime.js');
-const adminPermissions=read('web/admin-permissions-runtime.js');
-try{new vm.Script(cardsLoader,{filename:'cards-section-upgrades-runtime.js'})}catch(e){errors.push(`cards-section-upgrades-runtime.js syntax: ${e.message}`)}
-try{new vm.Script(adminPermissions,{filename:'admin-permissions-runtime.js'})}catch(e){errors.push(`admin-permissions-runtime.js syntax: ${e.message}`)}
-need(cardsLoader,'function ensurePermissionFacade()','cards permission bootstrap facade');
-need(cardsLoader,"can(){try{return window.AbuBassamSecurity?.role?.()==='owner'}catch(e){return false}}",'cards bootstrap must default to owner-only');
-const facadeAt=cardsLoader.indexOf('ensurePermissionFacade();');
-const baseHardeningAt=cardsLoader.indexOf("loadOne('abuCardsHardeningRuntime'");
-if(facadeAt<0||baseHardeningAt<0||facadeAt>baseHardeningAt)errors.push('cards permission bootstrap must run before base cards hardening loads');
-need(adminPermissions,"function can(key){if(role()==='owner')return true",'advanced permissions owner path');
-need(adminPermissions,"return false}\nfunction requirePermission",'advanced permissions must deny unknown keys explicitly');
-forbid(cardsLoader,'can(){return true}','cards bootstrap must never fail open');
-need(cardsLoader,"'a4-card-sheet-editor-v2-runtime.js'",'cards must load A4 editor V2');
-need(cardsLoader,'__ABU_A4_CARD_SHEET_EDITOR_V2__','cards must gate A4 preparation on V2');
-forbid(cardsLoader,"'a4-card-sheet-editor-runtime.js'",'cards must not reload obsolete A4 editor V1');
+const studio=read('web/cards-studio-runtime.js'),design=read('web/design-studio-runtime.js'),standalone=read('web/standalone-card-layouts-plus-runtime.js'),productivity=read('web/productivity-tools-runtime.js'),admin=read('web/admin-permissions-runtime.js');
+for(const [name,src] of [['studio',studio],['design',design],['standalone',standalone],['productivity',productivity],['admin',admin]])try{new vm.Script(src,{filename:name})}catch(e){errors.push(name+' syntax: '+e.message)}
+need(admin,"return typeof raw[key]==='boolean'?raw[key]:false",'advanced permissions must fail closed');
+need(studio,"cardsA4Layout','printA4",'A4 permission set');
+need(studio,'printCardDirect','CR80 permission');
+need(studio,"cardsExportPdf','pdfCreate','pdfSave",'PDF permission');
+need(design,"Array.from({length:10},(_,i)=>envelopeTemplate(i))",'env-10 must be a system template');
+need(design,'cardsManageCustomTemplates','Design Studio custom-template permission');
+need(standalone,'safeTextTarget','standalone safe text editing');
+need(standalone,'abu-recovery-frame-load','standalone event lifecycle');
+need(productivity,'async function loadAdvancedRuntime()','sequential productivity loader');
+forbid(productivity,'cards-section-upgrades-runtime.js','deleted card patch loader');
 
-const envelopePreload=read('web/envelope-preload-runtime.js');
-const designStudio=read('web/design-studio-runtime.js');
-const templateLibrary=read('web/card-template-library.js');
-try{new vm.Script(envelopePreload,{filename:'envelope-preload-runtime.js'})}catch(e){errors.push(`envelope-preload-runtime.js syntax: ${e.message}`)}
-need(designStudio,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'envelope system template count must stay exactly 9');
-need(envelopePreload,"item.id==='env-10'",'envelope migration must remove obsolete env-10 from saved custom templates');
-need(envelopePreload,"if(state.templateId==='env-10')state.templateId='env-1'",'envelope migration must move obsolete active env-10 to env-1');
-forbid(envelopePreload,'function env10(','obsolete env-10 generator must stay removed');
-forbid(envelopePreload,"id:'env-10'",'obsolete env-10 template must not be injected');
-const envelopeSection=(templateLibrary.split("{id:'envelope'")[1]||'').split("{id:'certificate'")[0]||'';
-const envelopeIds=[...envelopeSection.matchAll(/id:'env-(\d+)'/g)].map(m=>Number(m[1]));
-if(envelopeIds.length!==9||envelopeIds.some((n,i)=>n!==i+1))errors.push(`card template library must contain exactly env-1..env-9; found ${envelopeIds.join(',')}`);
-if(envelopeSection.includes("env-10"))errors.push('card template library must not expose obsolete env-10');
+const preload=read('web/envelope-preload-runtime.js');
+need(preload,"item.id==='env-10'",'legacy custom env-10 cleanup');
+forbid(preload,"state.templateId==='env-10')state.templateId='env-1'",'canonical env-10 must not be downgraded');
 
-const deviceLimitMigration=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
-need(deviceLimitMigration,"coalesce(trim(p_actor_device_id),'') = ''",'device-limit change must reject an empty actor device id');
-need(deviceLimitMigration,"coalesce(p_actor_secret,'') = ''",'device-limit change must reject an empty owner secret');
-need(deviceLimitMigration,"coalesce(v_actor.secret_hash,'') = ''",'device-limit change must reject owner rows without a stored secret hash');
-need(deviceLimitMigration,"v_actor.secret_hash <> v_hash",'device-limit change must require the owner secret hash to match');
-need(deviceLimitMigration,"p_device_limit > 50",'device-limit server maximum must stay 50');
-need(deviceLimitMigration,"DEVICE_LIMIT_BELOW_CURRENT_COUNT",'device-limit change must not go below registered device count');
-need(deviceLimitMigration,"revoke all on function public.abu_bassam_set_device_limit(text,text,integer) from public, anon",'device-limit RPC must not be executable by public/anon');
+const deviceLimit=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
+for(const m of ["coalesce(trim(p_actor_device_id),'') = ''","coalesce(p_actor_secret,'') = ''","coalesce(v_actor.secret_hash,'') = ''","v_actor.secret_hash <> v_hash","p_device_limit > 50",'DEVICE_LIMIT_BELOW_CURRENT_COUNT','revoke all on function public.abu_bassam_set_device_limit(text,text,integer) from public, anon'])need(deviceLimit,m,'device limit security');
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: obsolete residence and A4 V1 routes removed; backup permissions fail closed; restore remains SecureStore-protected, branch-bound and SHA-256 verified; cards bootstrap owner-only permissions before legacy hardening; only A4 V2 may load; envelope system templates stay exactly env-1..env-9; device-limit changes require a non-empty matching owner secret and remain bounded to 1..50.\n');
+process.stdout.write('Final hardening checks passed: no patch runtimes, backup/restore fail closed, canonical cards enforce CR80/A4/export permissions, env-10 is system-owned, and device-limit changes require a verified owner secret.\n');

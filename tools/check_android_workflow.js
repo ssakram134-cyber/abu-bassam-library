@@ -2,142 +2,88 @@ const fs=require('fs');
 const path=require('path');
 const root=path.resolve(__dirname,'..');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
-const source=read(path.join(root,'.github','workflows','android.yml'));
-const pkg=read(path.join(root,'package.json'));
-const packageJson=JSON.parse(pkg);
+function need(src,token,label){if(!src.includes(token))throw new Error(label)}
+function reject(src,token,label){if(src.includes(token))throw new Error(label)}
+const workflow=read(path.join(root,'.github','workflows','android.yml'));
+const pkgText=read(path.join(root,'package.json'));
+const pkg=JSON.parse(pkgText);
 const native=read(path.join(root,'index.js'));
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
 const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
-const touch=read(path.join(root,'web','touch-stability-runtime.js'));
-try{new Function(read(path.join(root,'tools','check_import_workflow.js')))}catch(e){throw new Error(`import workflow checker syntax error: ${e.message}`)}
-try{new Function(touch)}catch(e){throw new Error(`touch stability runtime syntax error: ${e.message}`)}
-const required=[
-  'permissions:\n  contents: read',
-  'workflow_dispatch:',
-  'production:',
+
+for(const marker of [
+  'permissions:\n  contents: read','workflow_dispatch:','production:',
   'Require production signing only when explicitly requested',
   "github.event_name == 'workflow_dispatch' && inputs.production",
   'Production signing was requested, but one or more Android release signing secrets are missing.',
-  "secrets.ANDROID_KEYSTORE_PASSWORD != ''",
-  "secrets.ANDROID_KEY_ALIAS != ''",
-  "secrets.ANDROID_KEY_PASSWORD != ''",
-  'npm ci --no-audit --no-fund',
-  'Build standalone APK with embedded JS bundle',
-  './gradlew assembleRelease --no-daemon',
-  'Verify standalone APK contains React Native bundle',
-  'assets/index.android.bundle',
-  'test -n "$BUILD_TOOLS"',
-  'apksigner" verify --verbose',
-  'apksigner" verify --print-certs',
-  'SIGNING_CERTIFICATE.txt',
-  'signed-production-release-with-embedded-js',
-  'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES',
-  'Enforce requested production signature',
-  "grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt",
-  'Prepare distributable APK',
-  'dist/Abu_Bassam_Library_4.3.2.apk',
-  'sha256sum dist/Abu_Bassam_Library_4.3.2.apk',
-  'Upload APK artifacts',
-  'retention-days: 14'
-];
-const missing=required.filter(marker=>!source.includes(marker));
-if(missing.length){process.stderr.write('Android workflow missing safeguards:\n'+missing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-const forbidden=[
-  './gradlew assembleDebug --no-daemon',
-  'android/app/build/outputs/apk/debug/',
-  'standalone-release-debug-key-with-embedded-js',
-  'pull-request-test-release-debug-key-with-embedded-js',
-  'Require production signing for distributable builds',
-  "github.event_name != 'pull_request'",
-  'installable-debug',
-  'contents: write',
-  'git push',
-  'Synchronize package lock',
-  'npm install --no-audit --no-fund'
-];
-const bad=forbidden.filter(marker=>source.includes(marker));
-if(bad.length){process.stderr.write('Android workflow contains unsafe/non-reproducible behavior:\n'+bad.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-const checkWeb=String(packageJson.scripts?.['check:web']||'');
-const normalScripts=['start','android','android:prebuild'];
-if(!checkWeb.startsWith('node tools/check_project.js')){process.stderr.write('check:web must start with read-only project checks, not a mutating patch.\n');process.exit(1)}
-if(/scripts\/patch-|repair:source/.test(checkWeb)){process.stderr.write('check:web must not mutate or repair canonical source.\n');process.exit(1)}
-for(const name of normalScripts){if(/scripts\/patch-/.test(String(packageJson.scripts?.[name]||''))){process.stderr.write(`${name} must not patch canonical source automatically.\n`);process.exit(1)}}
-const repair=String(packageJson.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker)){process.stderr.write(`repair:source missing explicit compatibility repair ${marker}.\n`);process.exit(1)}
-const assetRequired=[
+  'uses: actions/checkout@v7','uses: actions/setup-node@v7','node-version: 24','uses: actions/setup-java@v6','verify-signature: true','uses: actions/upload-artifact@v7',
+  'npm ci --no-audit --no-fund','./gradlew assembleRelease --no-daemon',
+  'assets/index.android.bundle','apksigner" verify --verbose','apksigner" verify --print-certs',
+  'SIGNING_CERTIFICATE.txt','dist/Abu_Bassam_Library_4.3.2.apk',
+  'sha256sum dist/Abu_Bassam_Library_4.3.2.apk','Upload APK artifacts','retention-days: 14'
+])need(workflow,marker,'Android workflow missing safeguard: '+marker);
+for(const marker of ['./gradlew assembleDebug --no-daemon','contents: write','git push','npm install --no-audit --no-fund','actions/checkout@v4','actions/setup-node@v4','actions/setup-java@v4','actions/upload-artifact@v4','node-version: 20'])
+  reject(workflow,marker,'Android workflow contains unsafe behavior: '+marker);
+
+const checkWeb=String(pkg.scripts?.['check:web']||'');
+if(!checkWeb.startsWith('node tools/check_project.js'))throw new Error('check:web must begin with read-only project checks');
+if(/scripts\/patch-|repair:source/.test(checkWeb))throw new Error('check:web must not patch source');
+if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))throw new Error('obsolete repair:source command must not return');
+for(const file of ['scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js'])
+  if(fs.existsSync(path.join(root,file)))throw new Error('obsolete patch/touch file still exists: '+file);
+
+for(const marker of [
   "const vendorRoot = resolve(destination, 'vendor', 'tesseract');",
   'const DOWNLOAD_TIMEOUT_MS = 45000;',
-  "const TOUCH_RUNTIME = 'touch-stability-runtime.js';",
-  "const PASSWORD_RECOVERY_RUNTIME = 'password-recovery-runtime.js';",
-  'async function injectRequiredRuntimes()',
-  'const runtimes=[TOUCH_RUNTIME,PASSWORD_RECOVERY_RUNTIME];',
-  'await injectRequiredRuntimes();',
-  'Required runtime was not injected into Android web entry point',
   'await rm(destination, { recursive: true, force: true });',
   'await cp(source, destination, { recursive: true, force: true });',
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
   'await download(urls,resolve(vendorRoot,relative),minBytes);',
   'async function fetchWithTimeout(url)',
   'https://cdn.jsdelivr.net/npm/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
-  'https://unpkg.com/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
-  'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'Required offline OCR asset is missing or incomplete',
   'canonical web source remains unchanged'
-];
-for(const marker of assetRequired)if(!assets.includes(marker)){process.stderr.write(`Android asset preparation missing canonical-source safeguard: ${marker}\n`);process.exit(1)}
-const touchRequired=[
-  '__ABU_TOUCH_STABILITY_V1__',
-  'html,body,.app{touch-action:auto!important}',
-  '.sheet:not(.show)',
-  '.nat-modal:not(.show)',
-  '.cs-modal:not(.show)',
-  '.v-modal:not(.show)',
-  '.v-busy:not(.show)',
-  '.abu-settings-modal:not(.show)',
-  '#abuRecoveryModal',
-  'pointer-events:none!important',
-  'new MutationObserver(scheduleRepair)',
-  "document.addEventListener('pointerup'",
-  "document.addEventListener('touchend'",
-  "JSON.stringify({type:'webBootReady'})"
-];
-const touchMissing=touchRequired.filter(marker=>!touch.includes(marker));
-if(touchMissing.length){process.stderr.write('Touch stability runtime missing required safeguards:\n'+touchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-const nativeTouchRequired=[
-  "message.type === 'webBootReady'",
-  'const STARTUP_WATCHDOG_MS = 3500;',
-  'onLoad={() => setWebReady(true)}',
-  'onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}',
-  'onLoadEnd={() => setWebReady(true)}'
-];
-const nativeTouchMissing=nativeTouchRequired.filter(marker=>!native.includes(marker));
-if(nativeTouchMissing.length){process.stderr.write('Native WebView touch/startup bridge missing required safeguards:\n'+nativeTouchMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-for(const forbiddenAsset of ["resolve(source, 'vendor', 'tesseract')",'tessdata.projectnaptha.com'])if(assets.includes(forbiddenAsset)){process.stderr.write(`Android asset preparation contains deprecated/unsafe OCR source behavior: ${forbiddenAsset}\n`);process.exit(1)}
+])need(assets,marker,'Android asset preparation missing safeguard: '+marker);
+for(const marker of ['TOUCH_RUNTIME','injectTouchStabilityRuntime','patchAccountEmail','LEGACY_ACCOUNT_EMAIL','ACCOUNT_EMAIL ='])
+  reject(assets,marker,'Android asset preparation must not rewrite canonical source: '+marker);
 const copyAt=assets.indexOf('await cp(source, destination');
-const injectRequiredAt=assets.indexOf('await injectRequiredRuntimes();');
 const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||injectRequiredAt<0||downloadAt<0||copyAt>injectRequiredAt||injectRequiredAt>downloadAt){process.stderr.write('Android assets must copy canonical web source, inject required touch/recovery runtimes, then generate OCR assets.\n');process.exit(1)}
-const fallbackRequired=[
-  ['"build:apk:local": "node scripts/build-android-local.mjs"',pkg,'package local test build command'],
-  ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"',pkg,'package strict release build command'],
-  ["process.argv.includes('--require-release-key')",local,'strict local release switch'],
-  ["['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD']",local,'complete signing variable set'],
-  ['Production release signing is required.',local,'missing production key rejection'],
-  ["['run', 'check:web']",local,'local build web checks'],
-  ["['run', 'android:prebuild']",local,'local Android prebuild'],
-  ["['assembleRelease', '--no-daemon']",local,'local release build'],
-  ['assets/index.android.bundle',local,'embedded JS verification'],
-  ["['verify', '--verbose', apk]",local,'APK signature verification'],
-  ["['verify', '--print-certs', apk]",local,'APK signing certificate verification'],
-  ['ANDROID_HOME || process.env.ANDROID_SDK_ROOT',local,'Android SDK discovery'],
-  ["path.join(root, 'android', 'local.properties')",local,'local.properties SDK fallback'],
-  ['Abu_Bassam_Library_4.3.2.apk',local,'distribution APK name'],
-  ['SHA256.txt',local,'SHA-256 output'],
-  ['SIGNING_CERTIFICATE.txt',local,'signing certificate output'],
-  ['signed-production-release-with-embedded-js',local,'production build marker'],
-  ['local-test-release-default-key-with-embedded-js',local,'test build marker']
-];
-const fallbackMissing=fallbackRequired.filter(([marker,src])=>!src.includes(marker)).map(([, ,label])=>label);
-if(fallbackMissing.length){process.stderr.write('Android local fallback missing safeguards:\n'+fallbackMissing.map(x=>'- '+x).join('\n')+'\n');process.exit(1)}
-process.stdout.write('Android build check passed: push/PR builds may produce a clearly marked test APK without release secrets; explicit production requests fail closed; touch stability runtime, hidden section modal guards, and both sides of the WebView ready bridge are locked by tests; OCR uses pinned supported npm data with jsDelivr+unpkg fallback and timeouts; canonical source stays read-only; JS bundle/signature/certificate are verified; SHA-256 is emitted; CI remains read-only.\n');
+if(copyAt<0||downloadAt<0||copyAt>downloadAt)throw new Error('Android assets must copy canonical web source before generating OCR assets');
+
+need(native,"message.type === 'webBootReady'",'native shell must wait for explicit webBootReady');
+need(native,'const STARTUP_WATCHDOG_MS = 12000;','startup watchdog must be 12 seconds and fail closed');
+need(native,'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة','startup timeout must report failure instead of unlocking');
+for(const marker of [
+  'onLoad={() => setWebReady(true)}',
+  'onLoadEnd={() => setWebReady(true)}',
+  'onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}',
+  'setTimeout(() => setWebReady(true), STARTUP_WATCHDOG_MS)'
+])reject(native,marker,'WebView must not become ready before canonical runtime boot: '+marker);
+for(const marker of [
+  "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"',
+  'onShouldStartLoadWithRequest',"if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url))",
+  "const [cameraFrameKind, setCameraFrameKind] = useState('paper');",
+  "openCamera(message.mode, message.frameKind)",
+  'cameraFrameKind === \'card\' ? styles.cardDocumentFrame'
+])need(native,marker,'native Android shell missing source-level safeguard: '+marker);
+
+for(const [marker,label] of [
+  ['"build:apk:local": "node scripts/build-android-local.mjs"','local test build command'],
+  ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"','strict release build command']
+])need(pkgText,marker,'package missing '+label);
+for(const [marker,label] of [
+  ["process.argv.includes('--require-release-key')",'strict local release switch'],
+  ["['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD']",'complete signing variable set'],
+  ['Production release signing is required.','missing production key rejection'],
+  ["['run', 'check:web']",'local build web checks'],
+  ["['run', 'android:prebuild']",'local Android prebuild'],
+  ["['assembleRelease', '--no-daemon']",'local release build'],
+  ['assets/index.android.bundle','embedded JS verification'],
+  ["['verify', '--verbose', apk]",'APK signature verification'],
+  ["['verify', '--print-certs', apk]",'APK signing certificate verification'],
+  ['Abu_Bassam_Library_4.3.2.apk','distribution APK name'],
+  ['SHA256.txt','SHA-256 output'],
+  ['SIGNING_CERTIFICATE.txt','signing certificate output']
+])need(local,marker,'Android local build missing '+label);
+console.log('Android workflow check passed: builds copy canonical web source without patching it, runtime readiness is explicit/fail-closed, OCR assets are generated separately, and APK signing/bundle verification remain enforced.');

@@ -43,14 +43,22 @@ function decorate(){
   if(!secondary())return;
   document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
 }
+let decorateQueued=false;
+function scheduleDecorate(){
+  if(decorateQueued)return;
+  decorateQueued=true;
+  requestAnimationFrame(()=>{decorateQueued=false;decorate()})
+}
 function boot(){
   document.addEventListener('click',clickGuard,true);
   document.addEventListener('beforeinput',fieldGuard,true);
   document.addEventListener('paste',fieldGuard,true);
   document.addEventListener('drop',fieldGuard,true);
   document.addEventListener('keydown',keyGuard,true);
-  new MutationObserver(()=>decorate()).observe(document.body,{childList:true,subtree:true});
-  setInterval(decorate,2500);decorate()
+  document.addEventListener('abu-runtime-loaded',scheduleDecorate);
+  document.addEventListener('abu-bassam-auth-changed',scheduleDecorate);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleDecorate()});
+  decorate()
 }
 window.AbuBassamPermissionGuard={allowed,permissionFor,decorate};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();

@@ -7,7 +7,7 @@ const pin=read('web/mediapipe-pin-runtime.js');
 const loader=read('web/device-name-runtime.js');
 const index=read('web/index.html');
 for(const t of ["VERSION='0.1.1675465747'",'@mediapipe/selfie_segmentation@${VERSION}/','window.getSelfie=async function','locateFile:file=>BASE+file'])need(pin,t,'MediaPipe pin runtime');
-for(const t of ['mediapipe-pin-runtime.js','loadMediaPipePin','loadPasswordPolicy();loadMediaPipePin();'])need(loader,t,'startup dependency loader');
+for(const t of ['mediapipe-pin-runtime.js','loadMediaPipePin','loadPasswordPolicy','await loadMediaPipePin();','await loadPasswordPolicy();','await loadSecurity();'])need(loader,t,'startup dependency loader');
 need(index,'abuBassamBgConsent','background-removal consent');
 need(index,'تُعالج الصورة محليًا ولا تُرسل إلى خادم التطبيق','local-processing disclosure');
 forbid(pin,'@mediapipe/selfie_segmentation/selfie_segmentation.js','unpinned MediaPipe URL in active pin runtime');

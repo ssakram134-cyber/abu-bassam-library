@@ -8,7 +8,6 @@
     "android": "expo run:android",
     "android:prebuild": "expo prebuild --platform android --clean && npm run assets:android",
     "assets:android": "node scripts/prepare-android-assets.mjs",
-    "repair:source": "node scripts/patch-startup-stability.mjs && node scripts/patch-customer-camera.mjs",
     "build:apk:local": "node scripts/build-android-local.mjs",
     "build:apk:release": "node scripts/build-android-local.mjs --require-release-key",
     "publish:update": "node scripts/publish-app-update.mjs",

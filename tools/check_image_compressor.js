@@ -17,9 +17,7 @@ for(const m of [
   'blob.size>=file.size','imageSmoothingQuality','overflow-y:auto','currentBytes()+incomingBytes',
   'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
 ])need(html,m,'image compressor');
-const patch=read(path.join(root,'scripts','patch-startup-stability.mjs'));
-for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(patch,m,'Android compressor patch');
 const index=read(path.join(root,'index.js'));
-for(const m of ['encodedNameMatch','itemMime','requestedName || fallbackName'])need(index,m,'patched Android index');
+for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(index,m,'canonical Android image saving');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Image compressor checks passed: cumulative batch limits, drag/drop, reorder/delete, before/after preview, cancellation, failure isolation, memory-safe dimensions, PNG/WebP preservation, print-quality guidance, original-derived names, browser fidelity and Android named mixed-format saving.\n');
