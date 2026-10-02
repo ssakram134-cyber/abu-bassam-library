@@ -9,10 +9,9 @@
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
   function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
   function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true')}
-  function installSplashWatchdog(){dismissSplash();signalBootReady();const run=()=>{dismissSplash();signalBootReady()};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();setTimeout(run,120);setTimeout(run,600);setTimeout(run,1500);setTimeout(dismissSplash,1800)}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
   function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
-  async function heartbeat(){const identity=ensureIdentity(),cloud=window.AbuBassamCloud;if(!navigator.onLine||!cloud?.isConnected())return identity;const now=new Date().toISOString(),data={id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt||now,last_seen:now,app_version:APP_VERSION};try{await cloud.upsert('device',identity.id,data)}catch(_){}return identity}
+  async function heartbeat(){return ensureIdentity()}
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
@@ -53,6 +52,7 @@
   const loadAppUpdate=()=>loadScript('abuAppUpdateRuntime','app-update-runtime.js','__ABU_APP_UPDATE_V1__');
   const loadAccountRecoveryHardening=()=>loadScript('abuAccountRecoveryHardeningRuntime','account-recovery-hardening-runtime.js','__ABU_ACCOUNT_RECOVERY_HARDENING_V1__');
   const loadAccountCenter=async()=>{await loadScript('abuAccountCenterRuntime','account-center-runtime.js','__ABU_ACCOUNT_CENTER_V1__');await loadAccountRecoveryHardening()};
+  const loadPasswordRecovery=()=>loadScript('abuPasswordRecoveryRuntime','password-recovery-runtime.js','__ABU_PASSWORD_RECOVERY_V1__');
   const loadDocumentVaultPermissionGuard=()=>loadScript('abuDocumentVaultPermissionGuardRuntime','document-vault-permission-guard-runtime.js','__ABU_DOCUMENT_VAULT_PERMISSION_GUARD_V1__');
   const loadOperationLogStorageMigration=()=>loadScript('abuOperationLogStorageMigrationRuntime','operation-log-storage-migration-runtime.js','__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__');
   const loadOperationLogCorrections=async()=>{await loadScript('abuOperationLogCorrectionsRuntime','operation-log-corrections-runtime.js','__ABU_OPERATION_LOG_CORRECTIONS_V2__');await loadOperationLogStorageMigration()};
@@ -89,6 +89,7 @@
     await loadDocumentVaultHardening();
     await loadBackupCenter();
     await loadAccountCenter();
+    await loadPasswordRecovery();
     await loadAppUpdate();
     await loadDocumentVaultPermissionGuard();
     await loadSettingsCorrections();
