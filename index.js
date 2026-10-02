@@ -27,6 +27,11 @@ const APP_URL = 'file:///android_asset/library/index.html';
 const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
 const STARTUP_WATCHDOG_MS = 12000;
+const MAX_BRIDGE_MESSAGE_CHARS = 96 * 1024 * 1024;
+const MAX_DATA_URL_CHARS = 32 * 1024 * 1024;
+const MAX_HTML_CHARS = 32 * 1024 * 1024;
+const MAX_SECURE_VALUE_CHARS = 1024 * 1024;
+const MAX_PRINT_PAGES = 100;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
@@ -63,13 +68,28 @@ true;
 `;
 
 function safeName(value) {
-  return String(value || 'Abu_Bassam_File').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'Abu_Bassam_File';
+  const fallback = 'Abu_Bassam_File';
+  const cleaned = String(value || fallback).replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || fallback;
+  if (cleaned.length <= 120) return cleaned;
+  const dot = cleaned.lastIndexOf('.');
+  if (dot > 0 && cleaned.length - dot <= 12) {
+    const ext = cleaned.slice(dot);
+    return cleaned.slice(0, Math.max(1, 120 - ext.length)) + ext;
+  }
+  return cleaned.slice(0, 120);
 }
 function splitDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  if (!raw.startsWith('data:')) throw new Error('صيغة الملف غير مدعومة');
+  if (raw.length > MAX_DATA_URL_CHARS) throw new Error('حجم الملف أكبر من الحد الآمن للعملية');
   const marker = ';base64,';
-  const at = String(dataUrl || '').indexOf(marker);
+  const at = raw.indexOf(marker);
   if (at < 0) throw new Error('صيغة الملف غير مدعومة');
-  return { mime: String(dataUrl).slice(5, at).split(';')[0] || 'application/octet-stream', base64: String(dataUrl).slice(at + marker.length) };
+  const mime = raw.slice(5, at).split(';')[0] || 'application/octet-stream';
+  if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i.test(mime)) throw new Error('نوع الملف غير صالح');
+  const base64 = raw.slice(at + marker.length);
+  if (!base64) throw new Error('بيانات الملف فارغة');
+  return { mime, base64 };
 }
 function printDimensions(paper) {
   if (paper === 'A5') return { width: 148, height: 210 };
@@ -79,7 +99,8 @@ function printDimensions(paper) {
     const parts = String(paper).split(':');
     const width = Number(parts[1]);
     const height = Number(parts[2]);
-    if (width > 0 && height > 0) return { width, height };
+    if (width >= 20 && width <= 1000 && height >= 20 && height <= 1500) return { width, height };
+    throw new Error('مقاس الورق المخصص خارج الحدود المدعومة');
   }
   return { width: 210, height: 297 };
 }
@@ -116,6 +137,8 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [webInstanceKey, setWebInstanceKey] = useState(0);
+  const renderCrashRef = useRef({ at: 0, count: 0 });
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -252,22 +275,35 @@ function App() {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
+      if (imagePages.length > MAX_PRINT_PAGES) throw new Error('عدد صفحات الطباعة أكبر من الحد المسموح');
       const size = printDimensions(paper);
-      const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
+      const body = imagePages.map((src) => {
+        const raw = String(src || '');
+        const parsed = splitDataUrl(raw);
+        if (!parsed.mime.startsWith('image/')) throw new Error('صفحة الطباعة ليست صورة مدعومة');
+        return `<section><img alt="صفحة للطباعة" src="${raw.replace(/"/g, '&quot;')}"></section>`;
+      }).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
     } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
   }, []);
 
   const printHtml = useCallback(async ({ html }) => {
-    try { if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة'); await Print.printAsync({ html: String(html) }); }
+    try {
+      const value = String(html || '');
+      if (!value.trim()) throw new Error('لا توجد كروت للطباعة');
+      if (value.length > MAX_HTML_CHARS) throw new Error('محتوى الطباعة أكبر من الحد الآمن');
+      await Print.printAsync({ html: value });
+    }
     catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
     try {
-      if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
-      const result = await Print.printToFileAsync({ html: String(html), base64: true });
+      const value = String(html || '');
+      if (!value.trim()) throw new Error('لا توجد كروت لحفظها');
+      if (value.length > MAX_HTML_CHARS) throw new Error('محتوى PDF أكبر من الحد الآمن');
+      const result = await Print.printToFileAsync({ html: value, base64: true });
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
@@ -336,7 +372,12 @@ function App() {
     const safeKey = () => { const key = String(payload.key || ''); if (!SECURE_KEY.test(key)) throw new Error('مفتاح التخزين الآمن غير مسموح'); return key; };
     try {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
-      if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
+      if (action === 'secureSet') {
+        const value = String(payload.value || '');
+        if (value.length > MAX_SECURE_VALUE_CHARS) throw new Error('قيمة التخزين الآمن أكبر من الحد المسموح');
+        await SecureStore.setItemAsync(safeKey(), value);
+        return replySecurity(requestId, true, true);
+      }
       if (action === 'secureDelete') { await SecureStore.deleteItemAsync(safeKey()); return replySecurity(requestId, true, true); }
       if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission));
       if (action === 'biometricStatus') {
@@ -360,7 +401,12 @@ function App() {
   }, [cameraPermission, replySecurity]);
 
   const onWebMessage = useCallback(async (event) => {
-    let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
+    const raw = String(event?.nativeEvent?.data || '');
+    if (!raw || raw.length > MAX_BRIDGE_MESSAGE_CHARS) {
+      if (raw.length > MAX_BRIDGE_MESSAGE_CHARS) Alert.alert('تعذر تنفيذ العملية', 'حجم البيانات المرسلة من الواجهة أكبر من الحد الآمن.');
+      return;
+    }
+    let message; try { message = JSON.parse(raw); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
@@ -384,7 +430,7 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
-        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
+        key={webInstanceKey} ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
         allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
         onShouldStartLoadWithRequest={(request) => {
@@ -394,7 +440,24 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onLoadStart={(event) => {
+          const url = String(event?.nativeEvent?.url || '');
+          if (url === APP_URL || url.startsWith('file:///android_asset/library/index.html')) setWebReady(false);
+        }}
+        onError={() => { setWebReady(false); Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onRenderProcessGone={() => {
+          setWebReady(false);
+          const now = Date.now();
+          const previous = renderCrashRef.current;
+          const count = now - previous.at <= 30000 ? previous.count + 1 : 1;
+          renderCrashRef.current = { at: now, count };
+          if (count <= 2) {
+            setWebInstanceKey((value) => value + 1);
+            Alert.alert('إعادة تشغيل الواجهة', 'توقف محرك العرض وتمت إعادة تشغيل واجهة التطبيق تلقائيًا.');
+          } else {
+            Alert.alert('تعذر استعادة الواجهة', 'تكرر توقف محرك العرض. أغلق التطبيق وافتحه مرة أخرى.');
+          }
+        }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (
