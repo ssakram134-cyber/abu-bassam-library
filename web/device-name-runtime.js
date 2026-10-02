@@ -43,7 +43,6 @@
   const loadSecurityHardening=()=>loadScript('abuSecurityHardeningRuntime','security-hardening-runtime.js','__ABU_SECURITY_HARDENING_V2__');
   const loadNotificationCorrections=()=>loadScript('abuNotificationCenterCorrectionsRuntime','notification-center-corrections-runtime.js','__ABU_NOTIFICATION_CENTER_CORRECTIONS_V2__');
   const loadNotificationExcel=()=>loadScript('abuNotificationExcelRuntime','notification-excel-runtime.js','__ABU_NOTIFICATION_EXCEL_V1__');
-  const loadFailClosedRuntime=()=>loadScript('abuFailClosedRuntime','fail-closed-runtime.js','__ABU_FAIL_CLOSED_RUNTIME_V1__');
   const loadBranchVault=()=>loadScript('abuBranchVaultRuntime','branch-vault-runtime.js','__ABU_BRANCH_VAULT_V1__');
   const loadDocumentVaultHardening=()=>loadScript('abuDocumentVaultHardeningRuntime','document-vault-hardening-runtime.js','__ABU_DOCUMENT_VAULT_HARDENING_V1__');
   const loadBackupCenter=()=>loadScript('abuBackupCenterRuntime','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__');
@@ -80,7 +79,6 @@
     await loadNotificationCorrections();
     await loadNotificationExcel();
     await loadSecurity();
-    await loadFailClosedRuntime();
     await loadBranchVault();
     await loadDocumentVaultHardening();
     await loadBackupCenter();
