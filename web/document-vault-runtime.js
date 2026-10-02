@@ -26,9 +26,9 @@ function formatBytes(size){let n=Number(size)||0;if(n<1024)return n+' B';if(n<10
 function formatTime(value){try{return new Date(value).toLocaleString('ar-IQ')}catch(e){return value||''}}
 function sessionOk(){return !!(window.AbuBassamCloud&&AbuBassamCloud.isConnected())}
 function autoSync(){return syncGet(AUTO_SYNC_KEY)!=='0'}
-function syncPolicy(){try{return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(syncGet(SYNC_POLICY_KEY)||'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
-function knownNonWifi(){let connection=navigator.connection||navigator.mozConnection||navigator.webkitConnection,type=String(connection&&connection.type||'').toLowerCase();return !!type&&!['wifi','ethernet','unknown'].includes(type)}
-function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&knownNonWifi())return false;let elapsed=Date.now()-Number(syncGet(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return hasPending()||elapsed>=900000}
+function syncPolicy(){try{const current=localStorage.getItem(SYNC_POLICY_KEY);return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(current??syncGet(SYNC_POLICY_KEY)??'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
+function wifiVerified(){let connection=navigator.connection||navigator.mozConnection||navigator.webkitConnection,type=String(connection&&connection.type||'').toLowerCase();return type==='wifi'}
+function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&!wifiVerified())return false;let elapsed=Date.now()-Number(syncGet(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return hasPending()||elapsed>=900000}
 
 function vaultOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function vaultScopeOk(show=true){const branch=window.AbuBassamBranchVault;if(!branch?.localScopeOk){if(show)alert('بوابة حماية الأرشيف غير جاهزة. أعد فتح التطبيق.');return false}return branch.localScopeOk(show)!==false}
@@ -259,7 +259,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(state.syncing)return false;
   if(!manual&&!automaticDue())return false;
   const policy=syncPolicy();
-  if(policy.wifiOnly&&knownNonWifi()){
+  if(policy.wifiOnly&&!wifiVerified()){
     setSyncStatus('بانتظار شبكة Wi‑Fi حسب الإعداد');
     if(manual)alert('المزامنة مضبوطة على Wi‑Fi فقط. اتصل بشبكة Wi‑Fi أو غيّر الإعداد.');
     return false
