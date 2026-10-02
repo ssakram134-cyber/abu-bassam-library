@@ -22,8 +22,10 @@ function run(cmd, args, cwd = root, env = process.env) {
 function capture(cmd, args, cwd = root, env = process.env) {
   const r = spawnSync(cmd, args, { cwd, env, encoding: 'utf8', shell: win });
   if (r.error) throw r.error;
-  if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed with exit code ${r.status}: ${(r.stderr || r.stdout || '').trim()}`);
-  return String(r.stdout || '');
+  const stdout = String(r.stdout || '');
+  const stderr = String(r.stderr || '');
+  if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed with exit code ${r.status}: ${(stderr || stdout).trim()}`);
+  return [stdout, stderr].filter(Boolean).join('\n');
 }
 
 function signingConfigured() {
@@ -114,9 +116,10 @@ function findApksigner() {
 function verifySignature(apk) {
   const apksigner = findApksigner();
   if (!apksigner) throw new Error('Android SDK apksigner was not found; cannot verify APK signature');
-  run(apksigner, ['verify', '--verbose', apk]);
-  const cert = capture(apksigner, ['verify', '--print-certs', apk]);
-  if (!/Signer #1 certificate/i.test(cert)) throw new Error('APK signer certificate details were not produced');
+  const cert = capture(apksigner, ['verify', '--verbose', '--print-certs', apk]);
+  if (!/certificate SHA-256 digest:/i.test(cert) && !/Signer #1 certificate/i.test(cert)) {
+    throw new Error('APK signer certificate details were not produced');
+  }
   return cert;
 }
 
