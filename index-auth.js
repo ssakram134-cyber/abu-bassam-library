@@ -3,9 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 
 const AUTH_CALLBACK_KEY = 'abu_bassam_auth_callback_v1';
 const AUTH_CALLBACK_PREFIX = 'abu-bassam-library://auth/callback';
+const MAX_AUTH_CALLBACK_LENGTH = 8192;
 let lastCallback = '';
 
 function validAuthCallback(value) {
+  if (typeof value !== 'string' || value.length > MAX_AUTH_CALLBACK_LENGTH) return false;
   try {
     const url = new URL(value);
     const base = `${url.protocol}//${url.host}${url.pathname}`;
