@@ -11,7 +11,7 @@
 - لا يوضع `تم ✅` لمجرد وجود الكود؛ يجب التحقق الفعلي بما يناسب البند.
 
 ## ترتيب المراحل المعتمد
-1. `.github/workflows` وما يستدعيه مباشرة من validators/build scripts — لا يغلق قبل نجاح CI والبناء.
+1. `.github/workflows` وما يستدعيه مباشرة من validators/build scripts.
 2. الجذر ونقطة التشغيل والتهيئة.
 3. أدوات الفحص والاختبارات داخل `tools/`.
 4. WebView والبدء والتنقل واللمس ودورة الحياة.
@@ -32,40 +32,58 @@
 
 ## المرحلة 1 — .github/workflows
 
-### الملفات الأساسية
-- `.github/workflows/android.yml`: فُحص كاملًا من أول سطر إلى آخر سطر — يحتاج تحقق 🔍 حتى ينجح CI بعد الإصلاح.
-- `.github/workflows/import-source-zip.yml`: فُحص كاملًا من أول سطر إلى آخر سطر — يحتاج تحقق 🔍.
-- `tools/check_android_workflow.js`: تابع مباشر للمرحلة — عُدّل ليمنع رجوع مشاكل workflow — يحتاج تحقق 🔍.
-- `tools/check_import_workflow.js`: تابع مباشر للمرحلة — عُدّل ليختبر الـvalidator على المصدر الحالي — يحتاج تحقق 🔍.
-- `tools/validate_imported_source.js`: حد أمان مباشر لمستورد ZIP — صُحح — يحتاج تحقق 🔍.
-- `scripts/build-android-local.mjs`: مسار بناء/توقيع مباشر للـworkflow — صُحح — يحتاج تحقق 🔍.
-- `scripts/prepare-android-assets.mjs`: قُرئ للتحقق من مسار الأصول المستدعى — يحتاج تحقق 🔍.
-- `scripts/android-release-signing.gradle`: قُرئ للتحقق من مسار توقيع Gradle — يحتاج تحقق 🔍.
-- `config/release-signing-certificate.sha256`: موجود وبصيغة 64 hex — يحتاج تحقق 🔍 بمطابقته مع APK إنتاجي فعلي.
+### الملفات التي دخلت الفحص
+- `.github/workflows/android.yml` — فحص كامل وتعديل.
+- `.github/workflows/android-production.yml` — أُنشئ لفصل التوقيع الحقيقي عن PR/Push.
+- `.github/workflows/import-source-zip.yml` — فحص كامل وتعديل.
+- `tools/check_android_workflow.js` — حارس رجوع مشاكل Android workflows.
+- `tools/check_import_workflow.js` — حارس مستورد ZIP والـvalidator.
+- `tools/validate_imported_source.js` — validator موثوق لمصدر ZIP قبل تشغيله.
+- `tools/check_project.js` — عُدّل فقط بالقدر اللازم لمطابقة معمارية workflows الجديدة.
+- `scripts/build-android-local.mjs` — أصبح المصدر المركزي للبناء والتحقق والتوقيع.
+- `scripts/prepare-android-assets.mjs` — قُرئ لأنه مستدعى مباشرة من البناء.
+- `scripts/android-release-signing.gradle` — قُرئ لأنه جزء من التوقيع.
+- `config/release-signing-certificate.sha256` — بصمة الإصدار المعتمدة.
 
-### المشاكل المكتشفة والإصلاحات
-- توقيع الإنتاج كان يُفعّل تلقائيًا في PR/Push عند وجود الأسرار بدل أن يكون طلبًا صريحًا فقط — صُحح، وبات الإنتاج manual + main فقط — يحتاج تحقق 🔍 عبر CI/تشغيل إنتاجي.
-- PR عادي كان يمكنه الوصول لمسار مفتاح الإنتاج أثناء البناء — صُحح بفصل build الاختباري عن build الإنتاجي — يحتاج تحقق 🔍.
-- بصمة شهادة الإصدار كانت موجودة في `config/` لكنها غير مُطبقة فعليًا — صُحح بإجبار workflow والبناء المحلي على مطابقة SHA-256 — يحتاج تحقق 🔍.
-- Actions كانت مربوطة بتاغات متحركة مثل `@v7` و`@v6` — صُححت إلى full immutable commit SHA.
-- `import-source-zip.yml` كان يستخدم `actions/checkout@v4` بينما بقية مسار البناء أحدث — صُحح إلى checkout v7.0.1 مثبت بالـSHA.
-- مستورد ZIP كان يقبل مسار إدخال أوسع من المطلوب — صُحح ليكون relative `.zip` داخل workspace فقط، مع منع symlink/escape/encrypted entries.
-- imported source كان يستطيع استبدال `tools/validate_imported_source.js` الموثوق — صُحح بحماية الملف والتحقق من hash و`cmp`.
-- الـvalidator الموثوق كان يطلب `repair:source` وpatch files قديمة بينما المشروع الحالي يمنعها — صُحح بإزالة التناقض ومنع عودة هذه الملفات القديمة.
-- إصدار التطبيق داخل validator كان hard-coded إلى 4.3.2/build 432 — صُحح إلى مطابقة داخلية ومنع downgrade مع baseline موثوق، للسماح بترقيات مستقبلية صحيحة.
-- اسم APK داخل workflow والبناء المحلي كان hard-coded إلى 4.3.2 — صُحح ليُشتق من `package.json`.
-- workflow Android لم يكن يثبت runner — صُحح إلى `ubuntu-24.04`.
-- PRs المتتالية كانت تستطيع إطلاق builds متعددة غير لازمة — أُضيف concurrency يلغي build الأقدم لنفس PR.
-- source-import PR لم يعد يُنفذ Android build تلقائيًا قبل المراجعة، لمنع تشغيل مصدر مستورد غير موثوق آليًا.
+### المشاكل المكتشفة وما تم إصلاحه
+- ❌ كان وجود أسرار التوقيع كافيًا لجعل PR/Push يدخل مسار توقيع الإنتاج. تم فصل الإنتاج إلى workflow يدوي مستقل على `main`.
+- ❌ كان Workflow الاختبارات يحتوي مراجع مباشرة لأسرار الإنتاج. أصبح `android.yml` بلا أي `secrets.*` أو متغيرات مفتاح إنتاج.
+- ⚠️ كان منطق `check:web/prebuild/Gradle/apksigner` مكررًا بين YAML وسكربت البناء. تم توحيده في `scripts/build-android-local.mjs`.
+- ❌ بصمة شهادة الإصدار كانت ملفًا موجودًا دون فرض مطابقة فعلية. البناء الإنتاجي المحلي/CI يرفض الآن أي شهادة لا تطابق SHA-256 المعتمدة.
+- ⚠️ Actions كانت تستخدم tags متحركة. أصبحت `checkout/setup-node/setup-java/upload-artifact` مثبتة إلى full immutable commit SHA.
+- ⚠️ runner غير مثبت. أصبح `ubuntu-24.04`.
+- ⚠️ Builds المتكررة لنفس PR كانت تتزاحم. أضيف concurrency وإلغاء النسخة الأقدم من build الاختباري.
+- ❌ اسم APK كان hard-coded إلى الإصدار 4.3.2. أصبح مشتقًا من `package.json`.
+- ⚠️ اختيار APK في سكربت البناء كان يأخذ أول ملف يجده. أصبح البناء يرفض إذا لم يجد **APK واحدًا بالضبط**.
+- ⚠️ ملفات `dist` القديمة كان يمكن أن تبقى محليًا. أصبح سكربت البناء ينظف مخرجات APK/Hash/Certificate/Build-Type القديمة قبل إنتاج الجديدة.
+- ❌ مستورد ZIP كان يستطيع استبدال validator الموثوق. أصبح validator مستثنى من rsync وتُفحص بصمته ومطابقته byte-for-byte.
+- ❌ validator القديم كان يطلب `repair:source` وpatch runtimes يمنعها المشروع الحالي. أزيل التعارض ومنعت عودة هذه الملفات.
+- ❌ validator القديم كان يطلب `web/fail-closed-runtime.js` رغم أن الاختبارات الحالية تعتبره patch قديمًا ممنوعًا. تم تحديث validator إلى معمارية fail-closed الحالية.
+- ❌ validator كان يستخدم `node --check` على `index.js` الذي يحتوي React Native JSX، فينتج فشلًا وهميًا. استُثني مدخل JSX من Node الخام ويُتحقق منه فعليًا بواسطة Metro/Gradle أثناء Android build.
+- ❌ فحص اسم المصمم السابق كان يطابق نص الاختبار نفسه داخل `tools/check_project.js`. أصبح فحص الهوية موجّهًا للملفات غير الاختبارية مع بقاء اختبار المنع نفسه فعالًا.
+- ❌ إصدار التطبيق/build داخل validator كان hard-coded. أصبح يعتمد baseline موثوقًا، يمنع downgrade في semantic version وAndroid versionCode، ويجبر زيادة versionCode عند تغيير الإصدار.
+- ❌ لم يكن validator يتحقق من هوية root package داخل `package-lock.json`. أضيف التحقق.
+- ⚠️ مسار ZIP كان أوسع من اللازم. أصبح relative `.zip` داخل workspace فقط مع منع symlink وescape.
+- ⚠️ ZIP لم يمنع entries مشفرة أو control characters أو duplicate normalized paths. أضيف المنع.
+- ⚠️ ZIP يسمح بأحجام قد تتحول إلى archive bomb. أضيف حد 5000 entry، 100MB للملف الواحد، و500MB إجمالي غير مضغوط.
+- ⚠️ مصدر ZIP كان قد يحتوي ملفات توقيع/أسرار. preflight والvalidator يرفضان أسماء/امتدادات الأسرار والتوقيع المعروفة.
+- ⚠️ تشغيل `npm ci` على المصدر المستورد قد ينفذ lifecycle scripts. أصبح `npm ci --ignore-scripts` فقط للتحقق من lockfile.
+- ✅ مستورد ZIP لا يكتب إلى `main`: ينشئ `source-import-...` ويفتح PR للمراجعة.
+- ✅ PR الخاص بمصدر ZIP لا يشغّل المصدر المستورد تلقائيًا. بعد مراجعة الفرق، تطلب رسالة PR تشغيل Android test workflow يدويًا على فرع الاستيراد قبل الدمج.
 
-### حالة الإغلاق
-- فحص ساكن للكود: جاري/يحتاج تحقق 🔍.
-- `npm run check:web`: يحتاج نتيجة CI 🔍.
-- Android prebuild: يحتاج نتيجة CI 🔍.
-- `assembleRelease`: يحتاج نتيجة CI 🔍.
-- APK bundle/signature verification: يحتاج نتيجة CI 🔍.
-- إنتاج موقّع بالمفتاح الحقيقي ومطابقة شهادة الإصدار: يحتاج تشغيل production صريح على `main` 🔍؛ لا يتم تعريض مفتاح الإنتاج في PR.
-- **لا انتقال للمرحلة 2 قبل إغلاق البنود أعلاه التي يمكن التحقق منها على PR.**
+### تحقق CI حتى الآن
+- ✅ جولة سابقة بعد إصلاح validator اجتازت `npm run check:web`.
+- ✅ الجولة نفسها اجتازت `android:prebuild`.
+- 🔍 نتيجة CI النهائية المطلوبة هي **آخر commit في PR #20 فقط**؛ أي نتيجة لcommit أقدم لا تُغلق المرحلة.
+- 🔍 تشغيل الإنتاج بالمفتاح الحقيقي لا يتم داخل PR عمدًا. `android-production.yml` لا يعمل إلا يدويًا وعلى `main`، ومطابقة الشهادة مفروضة داخل سكربت البناء.
+
+### شرط إغلاق المرحلة 1
+تتحول المرحلة إلى `تم ✅` فقط عندما ينجح آخر head في PR #20 في:
+1. `npm ci --no-audit --no-fund`.
+2. `npm run build:apk:local`، والذي يتضمن `check:web` + `android:prebuild` + `assembleRelease` + فحص bundle + `apksigner`.
+3. إثبات أن الناتج Test release وليس Production.
+4. رفع APK + SHA256 + شهادة التوقيع كـArtifacts.
+5. بقاء Workflow الإنتاج منفصلًا/manual/main-only مع بصمة شهادة إلزامية.
 
 ## قراءة تمهيدية قبل اعتماد الترتيب الجديد
 هذه الملفات قُرئت قبل أن يحدد المستخدم أن البداية الرسمية يجب أن تكون workflows. لا تُعد مرحلة مغلقة ولا تمنحها حالة `تم ✅`:
