@@ -63,6 +63,7 @@ for(const [marker,label] of [
   ['Android versionCode downgrade is not allowed','versionCode downgrade rejection'],
   ['app version downgrade is not allowed','semantic app-version downgrade rejection'],
   ['package-lock root package identity/version does not match package.json','lockfile root identity validation'],
+  ["pkg.engines?.node!=='>=20.19 <25'",'Expo-compatible Node engine validation'],
   ["Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source')",'obsolete repair script rejection'],
   ["'scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js'",'obsolete patch file rejection'],
   ['forbiddenExt','signing/secret file rejection'],
