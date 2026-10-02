@@ -12,42 +12,38 @@
   let readyPromise = null;
   let authBusy = false;
   let authMemory = '';
-  const authNativePending = new Map();
-  let authNativeSeq = 0;
-  let authBridgeInstalled = false;
+  const nativePending = new Map();
+  let nativeSeq = 0;
 
-  function installAuthBridge() {
-    if (authBridgeInstalled) return;
-    authBridgeInstalled = true;
-    const previous = window.AbuBassamNativeSecurityResult;
-    window.AbuBassamNativeSecurityResult = function (message) {
-      const data = typeof message === 'string' ? (() => { try { return JSON.parse(message); } catch (_) { return {}; } })() : (message || {});
-      const slot = authNativePending.get(data.requestId);
-      if (slot) {
-        clearTimeout(slot.timer);
-        authNativePending.delete(data.requestId);
-        if (data.ok === false) slot.reject(new Error(data.error || 'تعذر الوصول إلى SecureStore'));
-        else slot.resolve(data.value);
-        return;
-      }
-      if (typeof previous === 'function') return previous(message);
-    };
-  }
-
-  function authNative(action, value = '') {
-    if (!(window.Android && typeof Android.security === 'function')) {
-      if (action === 'secureGet') return Promise.resolve(authMemory);
-      if (action === 'secureSet') { authMemory = String(value || ''); return Promise.resolve(true); }
-      if (action === 'secureDelete') { authMemory = ''; return Promise.resolve(true); }
-      return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
-    }
-    installAuthBridge();
+  function nativeAvailable() { return !!(window.Android && typeof Android.security === 'function'); }
+  function nativeRequest(action, payload = {}) {
+    if (!nativeAvailable()) return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
     return new Promise((resolve, reject) => {
-      const requestId = 'auth-store-' + Date.now() + '-' + (++authNativeSeq);
-      const timer = setTimeout(() => { authNativePending.delete(requestId); reject(new Error('انتهت مهلة SecureStore')); }, 12000);
-      authNativePending.set(requestId, { resolve, reject, timer });
-      Android.security(action, requestId, { key: AUTH_KEY, value: String(value || '') });
+      const requestId = 'native-sec-' + Date.now() + '-' + (++nativeSeq);
+      const timer = setTimeout(() => { nativePending.delete(requestId); reject(new Error('انتهت مهلة العملية الأمنية')); }, 15000);
+      nativePending.set(requestId, { resolve, reject, timer });
+      Android.security(action, requestId, payload || {});
     });
+  }
+  window.AbuBassamNativeSecurityResult = function (message) {
+    const data = typeof message === 'string' ? (() => { try { return JSON.parse(message); } catch (_) { return {}; } })() : (message || {});
+    const slot = nativePending.get(data.requestId);
+    if (!slot) return;
+    clearTimeout(slot.timer);
+    nativePending.delete(data.requestId);
+    if (data.ok === false) slot.reject(new Error(data.error || 'تعذر تنفيذ العملية الأمنية'));
+    else slot.resolve(data.value);
+  };
+  window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable };
+
+  async function authNative(action, value = '') {
+    if (!nativeAvailable()) {
+      if (action === 'secureGet') return authMemory;
+      if (action === 'secureSet') { authMemory = String(value || ''); return true; }
+      if (action === 'secureDelete') { authMemory = ''; return true; }
+      throw new Error('NATIVE_SECURITY_REQUIRED');
+    }
+    return nativeRequest(action, { key: AUTH_KEY, value: String(value || '') });
   }
 
   const authStorage = {
