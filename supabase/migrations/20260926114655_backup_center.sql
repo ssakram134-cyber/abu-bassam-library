@@ -1,4 +1,3 @@
--- Automatic branch-scoped backup snapshots with private Storage metadata.
 create table if not exists public.abu_bassam_backups(
   user_id uuid not null references auth.users(id) on delete cascade,
   backup_id uuid not null,
@@ -19,33 +18,10 @@ create table if not exists public.abu_bassam_backups(
   constraint abu_bassam_backups_kind_check check (backup_kind in ('manual','automatic','pre_restore')),
   constraint abu_bassam_backups_parts_check check (jsonb_typeof(parts)='array')
 );
-
 alter table public.abu_bassam_backups enable row level security;
 revoke all on table public.abu_bassam_backups from public,anon,authenticated;
 create index if not exists abu_bassam_backups_branch_created_idx on public.abu_bassam_backups(user_id,branch_device_id,created_at desc);
-
--- Keep backup objects gateway-only just like vault/branch-vault. These existing policies are RESTRICTIVE.
-alter policy abu_bassam_storage_no_direct_vault_select on storage.objects
-  using (
-    bucket_id <> 'abu-bassam-private'
-    or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])
-  );
-alter policy abu_bassam_storage_no_direct_vault_insert on storage.objects
-  with check (
-    bucket_id <> 'abu-bassam-private'
-    or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])
-  );
-alter policy abu_bassam_storage_no_direct_vault_update on storage.objects
-  using (
-    bucket_id <> 'abu-bassam-private'
-    or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])
-  )
-  with check (
-    bucket_id <> 'abu-bassam-private'
-    or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])
-  );
-alter policy abu_bassam_storage_no_direct_vault_delete on storage.objects
-  using (
-    bucket_id <> 'abu-bassam-private'
-    or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])
-  );
+alter policy abu_bassam_storage_no_direct_vault_select on storage.objects using (bucket_id <> 'abu-bassam-private' or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault']));
+alter policy abu_bassam_storage_no_direct_vault_insert on storage.objects with check (bucket_id <> 'abu-bassam-private' or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault']));
+alter policy abu_bassam_storage_no_direct_vault_update on storage.objects using (bucket_id <> 'abu-bassam-private' or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault'])) with check (bucket_id <> 'abu-bassam-private' or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault']));
+alter policy abu_bassam_storage_no_direct_vault_delete on storage.objects using (bucket_id <> 'abu-bassam-private' or coalesce((storage.foldername(name))[2],'') <> all(array['vault','branch-vault','backup-vault']));

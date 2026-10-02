@@ -1,4 +1,4 @@
--- Enforce customer/identity-document permissions at the database boundary and fix permission-map counting.
+-- Fix advanced permission save capacity without relying on non-existent jsonb_object_length().
 create or replace function public.abu_bassam_manage_device(
   p_actor_device_id text,
   p_actor_secret text,
@@ -394,6 +394,7 @@ begin
   return v_paths;
 end $$;
 
+-- Keep the RPC surface authenticated-only.
 revoke all on function public.abu_bassam_customer_create(text,text,text,text,text) from public,anon;
 revoke all on function public.abu_bassam_customer_list(text,text,text,integer) from public,anon;
 revoke all on function public.abu_bassam_customer_list_v2(text,text,text,integer) from public,anon;

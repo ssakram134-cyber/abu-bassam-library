@@ -1,0 +1,1 @@
+drop policy if exists abu_bassam_backups_direct_deny on public.abu_bassam_backups; create policy abu_bassam_backups_direct_deny on public.abu_bassam_backups as restrictive for all to anon,authenticated using (false) with check (false);

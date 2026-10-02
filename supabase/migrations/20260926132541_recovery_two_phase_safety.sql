@@ -1,6 +1,3 @@
--- Make device recovery failure-safe: keep the current recovery code valid until the client
--- confirms its new device secret is stored locally, then the client rotates the code using
--- abu_bassam_generate_recovery_code with the newly recovered owner credentials.
 create or replace function public.abu_bassam_recover_device(
   p_recovery_code text,p_new_secret text,p_temporary_device_id text default '',p_model text default '',p_platform text default 'Android',p_app_version text default ''
 ) returns jsonb
@@ -34,14 +31,10 @@ begin
          model=left(coalesce(p_model,''),180),platform=left(coalesce(p_platform,'Android'),60),app_version=left(coalesce(p_app_version,''),40),last_seen=now()
    where user_id=v_uid and device_id=v_target.device_id
    returning * into v_target;
-  -- Do not rotate recovery_hash here. The caller still needs to persist p_new_secret safely.
-  -- Keeping the current code valid makes an interrupted recovery retryable instead of locking
-  -- the owner out. After the local secret is verified, the client calls generate_recovery_code.
   update public.abu_bassam_recovery_codes
      set failed_attempts=0,locked_until=null,last_used_at=now(),updated_at=now()
    where user_id=v_uid;
   return jsonb_build_object('ok',true,'device_id',v_target.device_id,'device_name',v_target.device_name,'first_seen',v_target.first_seen,'recovery_rotation_required',true);
 end $$;
-
 revoke all on function public.abu_bassam_recover_device(text,text,text,text,text,text) from public,anon;
 grant execute on function public.abu_bassam_recover_device(text,text,text,text,text,text) to authenticated;

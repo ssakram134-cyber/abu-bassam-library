@@ -1,4 +1,4 @@
--- Normalize legacy bytea device secret hashes to the text/hex format used by current RPCs.
+-- Normalize legacy bytea device secret hashes to the text/hex format used by the current source.
 do $$
 declare v_type text;
 begin

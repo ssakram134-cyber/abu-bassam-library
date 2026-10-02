@@ -123,8 +123,3 @@ revoke all on function public.abu_bassam_customer_document_upload_plan(text,text
 revoke all on function public.abu_bassam_customer_document_commit_v3(text,text,uuid,uuid,text,text,text,text,text,text,text,text,text,bigint,integer,text,bigint,jsonb) from PUBLIC,anon;
 grant execute on function public.abu_bassam_customer_document_upload_plan(text,text,uuid,uuid) to authenticated;
 grant execute on function public.abu_bassam_customer_document_commit_v3(text,text,uuid,uuid,text,text,text,text,text,text,text,text,text,bigint,integer,text,bigint,jsonb) to authenticated;
-
-update storage.buckets
-set file_size_limit=26214400,
-    allowed_mime_types=array['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif','application/pdf']::text[]
-where id='abu-bassam-customers-private';

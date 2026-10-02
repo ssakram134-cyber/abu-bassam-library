@@ -42,14 +42,14 @@ begin
     return v_row;
   end if;
 
-  select * into v_match from public.abu_bassam_devices
+  select * into v_match
+    from public.abu_bassam_devices
    where user_id=v_uid
      and lower(trim(coalesce(device_name,'')))=lower(trim(coalesce(p_device_name,'')))
      and lower(trim(coalesce(model,'')))=lower(trim(coalesce(p_model,'')))
      and lower(trim(coalesce(platform,'')))=lower(trim(coalesce(p_platform,'')))
    order by (case when role='owner' then 0 else 1 end),last_seen desc nulls last
    limit 1;
-
   if found then
     v_role:=v_match.role;
     v_permissions:=coalesce(v_match.permissions,'{}'::jsonb);

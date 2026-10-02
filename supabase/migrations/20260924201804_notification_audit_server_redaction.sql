@@ -33,16 +33,16 @@ begin
   v_context:=v_section||' '||v_title;
   if v_context ~* '(مستمسك|مستمسكات|هوية|الوطنية|بطاقة السكن|تموين|التموينية|زبون|الزبون|زوجة|اطفال|أطفال|customer|document|national[[:space:]]*id|residence)' then
     if btrim(v_details)<>'' then v_details:='[تفاصيل زبون محجوبة]'; end if;
-    v_title:=coalesce(nullif(btrim(regexp_replace(v_title,'[:\-–—].*$','','g')),''),'عملية مستمسكات');
+    v_title:=coalesce(nullif(btrim(regexp_replace(v_title,'[:\\-–—].*$','','g')),''),'عملية مستمسكات');
   else
     v_details:=regexp_replace(v_details,'(password|token|secret|authorization)[[:space:]]*[:=]?[[:space:]]*[^[:space:]]+','[محجوب]','gi');
-    v_details:=regexp_replace(v_details,'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}','[بريد محجوب]','gi');
-    v_details:=regexp_replace(v_details,'(\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
+    v_details:=regexp_replace(v_details,'[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}','[بريد محجوب]','gi');
+    v_details:=regexp_replace(v_details,'(\\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
     v_details:=regexp_replace(v_details,'[0-9]{8,}','[رقم محجوب]','g');
   end if;
-  v_title:=regexp_replace(v_title,'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}','[بريد محجوب]','gi');
-  v_title:=regexp_replace(v_title,'(\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
-  v_section:=regexp_replace(v_section,'(\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
+  v_title:=regexp_replace(v_title,'[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}','[بريد محجوب]','gi');
+  v_title:=regexp_replace(v_title,'(\\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
+  v_section:=regexp_replace(v_section,'(\\+?964|0)?7[0-9]{9}','[هاتف محجوب]','g');
 
   v_event_id:=left(coalesce(nullif(trim(p_event_id),''),encode(gen_random_bytes(16),'hex')),180);
   insert into public.abu_bassam_device_activity(user_id,event_id,device_id,device_name,device_role,event_type,category,severity,title,details,section,created_at,received_at)

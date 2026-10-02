@@ -21,9 +21,8 @@ create index if not exists abu_bassam_sync_secure_user_kind_updated_idx
 
 alter table public.abu_bassam_sync_secure enable row level security;
 
-revoke all on table public.abu_bassam_sync_secure from anon, authenticated;
+revoke all on table public.abu_bassam_sync_secure from anon;
 grant select, insert, update, delete on table public.abu_bassam_sync_secure to authenticated;
-revoke all on sequence public.abu_bassam_sync_secure_id_seq from anon, authenticated;
 grant usage, select on sequence public.abu_bassam_sync_secure_id_seq to authenticated;
 
 drop policy if exists "abu_bassam_secure_select_own" on public.abu_bassam_sync_secure;

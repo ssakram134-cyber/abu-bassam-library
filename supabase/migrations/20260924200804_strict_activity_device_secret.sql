@@ -22,7 +22,6 @@ begin
   v_hash := encode(digest(p_actor_secret,'sha256'),'hex');
   select * into v_actor from public.abu_bassam_devices where user_id=v_uid and device_id=p_actor_device_id limit 1;
   if not found or v_actor.role<>'owner' or v_actor.active=false or coalesce(v_actor.secret_hash,'')='' or v_actor.secret_hash<>v_hash then raise exception 'OWNER_REQUIRED'; end if;
-
   return query
   select a.event_id,a.device_id,a.device_name,a.device_role,a.event_type,a.category,a.severity,a.title,a.details,a.section,a.created_at
   from public.abu_bassam_device_activity a
@@ -64,26 +63,9 @@ begin
   v_hash := encode(digest(p_device_secret,'sha256'),'hex');
   select * into v_device from public.abu_bassam_devices where user_id=v_uid and device_id=p_device_id limit 1;
   if not found or v_device.active=false or coalesce(v_device.secret_hash,'')='' or v_device.secret_hash<>v_hash then raise exception 'DEVICE_NOT_AUTHORIZED'; end if;
-
   v_event_id := left(coalesce(nullif(trim(p_event_id),''),encode(gen_random_bytes(16),'hex')),180);
-  insert into public.abu_bassam_device_activity(
-    user_id,event_id,device_id,device_name,device_role,event_type,category,severity,title,details,section,created_at,received_at
-  )
-  values(
-    v_uid,
-    v_event_id,
-    p_device_id,
-    left(coalesce(v_device.device_name,'جهاز المكتبة'),120),
-    coalesce(v_device.role,'secondary'),
-    left(coalesce(p_event_type,'info'),40),
-    left(coalesce(p_category,'system'),40),
-    case when lower(coalesce(p_severity,'')) in ('info','success','warning','error','critical') then lower(p_severity) else 'info' end,
-    left(coalesce(p_title,''),240),
-    left(coalesce(p_details,''),500),
-    left(coalesce(p_section,''),120),
-    coalesce(p_created_at,now()),
-    now()
-  )
+  insert into public.abu_bassam_device_activity(user_id,event_id,device_id,device_name,device_role,event_type,category,severity,title,details,section,created_at,received_at)
+  values(v_uid,v_event_id,p_device_id,left(coalesce(v_device.device_name,'جهاز المكتبة'),120),coalesce(v_device.role,'secondary'),left(coalesce(p_event_type,'info'),40),left(coalesce(p_category,'system'),40),case when lower(coalesce(p_severity,'')) in ('info','success','warning','error','critical') then lower(p_severity) else 'info' end,left(coalesce(p_title,''),240),left(coalesce(p_details,''),500),left(coalesce(p_section,''),120),coalesce(p_created_at,now()),now())
   on conflict(user_id,event_id) do nothing;
   return true;
 end

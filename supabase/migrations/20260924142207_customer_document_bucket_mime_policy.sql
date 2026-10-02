@@ -1,0 +1,4 @@
+update storage.buckets
+set file_size_limit=26214400,
+    allowed_mime_types=array['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif','application/pdf']::text[]
+where id='abu-bassam-customers-private';

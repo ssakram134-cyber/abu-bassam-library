@@ -1,6 +1,5 @@
--- Device registry privacy boundary.
--- Secondary devices share the same authenticated user, so auth.uid() alone is
--- not sufficient authorization for direct access to the registry.
+-- Lock device registry behind verified RPCs. Secondary devices share the same auth user,
+-- so auth.uid() alone is not sufficient authorization for direct table access.
 
 revoke all on table public.abu_bassam_devices from PUBLIC, anon, authenticated;
 
@@ -37,7 +36,9 @@ begin
      or coalesce(v_actor.secret_hash,'')='' or v_actor.secret_hash<>v_hash then
     raise exception 'OWNER_REQUIRED';
   end if;
-  select count(*) into v_count from public.abu_bassam_devices where user_id=v_uid;
+  select count(*) into v_count
+    from public.abu_bassam_devices
+   where user_id=v_uid;
   return v_count;
 end $$;
 

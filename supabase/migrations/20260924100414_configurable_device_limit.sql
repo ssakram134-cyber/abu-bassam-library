@@ -1,6 +1,3 @@
--- Configurable trusted-device limit for Abu Bassam Library.
--- Default remains 5. Only the authenticated owner device can change it.
-
 create table if not exists public.abu_bassam_account_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   device_limit integer not null default 5 check (device_limit between 1 and 50),
@@ -49,31 +46,20 @@ begin
   if p_device_limit is null or p_device_limit < 1 or p_device_limit > 50 then
     raise exception 'DEVICE_LIMIT_INVALID';
   end if;
-
   v_hash:=encode(digest(coalesce(p_actor_secret,''),'sha256'),'hex');
-  select * into v_actor
-  from public.abu_bassam_devices
-  where user_id=v_uid and device_id=p_actor_device_id
-  limit 1;
-
+  select * into v_actor from public.abu_bassam_devices where user_id=v_uid and device_id=p_actor_device_id limit 1;
   if not found or v_actor.role<>'owner' or v_actor.active=false
      or (coalesce(v_actor.secret_hash,'')<>'' and v_actor.secret_hash<>v_hash) then
     raise exception 'OWNER_REQUIRED';
   end if;
-
   select count(*) into v_count from public.abu_bassam_devices where user_id=v_uid;
-  if p_device_limit < v_count then
-    raise exception 'DEVICE_LIMIT_BELOW_CURRENT_COUNT';
-  end if;
-
+  if p_device_limit < v_count then raise exception 'DEVICE_LIMIT_BELOW_CURRENT_COUNT'; end if;
   insert into public.abu_bassam_account_settings(user_id,device_limit,updated_at)
   values(v_uid,p_device_limit,now())
-  on conflict(user_id) do update
-    set device_limit=excluded.device_limit,updated_at=now();
+  on conflict(user_id) do update set device_limit=excluded.device_limit,updated_at=now();
   return p_device_limit;
 end $$;
 
--- Replace registration so the server, not only the UI, enforces the configurable limit.
 create or replace function public.abu_bassam_register_device(
   p_device_id text,p_secret text,p_device_name text,p_model text,p_platform text,p_app_version text
 ) returns public.abu_bassam_devices
@@ -99,7 +85,6 @@ begin
     select * into v_row from public.abu_bassam_devices where user_id=v_uid and device_id=p_device_id;
     return v_row;
   end if;
-
   select * into v_match from public.abu_bassam_devices
     where user_id=v_uid
       and lower(trim(coalesce(device_name,'')))=lower(trim(coalesce(p_device_name,'')))

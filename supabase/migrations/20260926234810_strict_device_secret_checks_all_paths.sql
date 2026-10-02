@@ -1,5 +1,3 @@
--- Require a non-empty, matching stored device secret on every existing-device path.
--- New-device registration is unaffected because it has no existing row to authenticate.
 create or replace function public.abu_bassam_register_device(p_device_id text,p_secret text,p_device_name text,p_model text,p_platform text,p_app_version text)
 returns public.abu_bassam_devices
 language plpgsql security definer set search_path=public,extensions
