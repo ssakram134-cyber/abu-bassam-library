@@ -88,6 +88,7 @@ wipeLegacyTrust();
 wipeLegacySecretStorage();
 document.addEventListener('click',captureSensitiveClick,true);
 installRuntimeGuard();
-timer=setInterval(installRuntimeGuard,20);
+let attempts=0;
+timer=setInterval(()=>{installRuntimeGuard();if(++attempts>=200){clearInterval(timer);timer=0}},25);
 setTimeout(()=>{if(window.__ABU_SECURITY_HARDENING_V2__)cleanup()},2000);
 })();
