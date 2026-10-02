@@ -14,6 +14,7 @@ forbid(envelope,'new MutationObserver','envelope optional fields');
 
 const productivity=read('productivity-tools-runtime.js');
 for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-src="image-compressor.html"','ensureQuestionFrame','ensureCompressorFrame'])need(productivity,marker,'startup lazy loading');
+for(const marker of ["loaded without readiness flag",'__ABU_ADVANCED_RUNTIME_FAILURES__','failures.push','return false'])need(productivity,marker,'advanced runtime readiness validation');
 for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"'])forbid(productivity,marker,'questions-only section');
 
 const recovery=read('feature-recovery-runtime.js');
