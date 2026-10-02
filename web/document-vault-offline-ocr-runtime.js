@@ -15,7 +15,8 @@ function fileToData(file){return new Promise((resolve,reject)=>{const r=new File
 async function inputChanged(ev){const file=ev?.target?.files?.[0];if(!file)return;try{await recognize(await fileToData(file))}finally{if(ev?.target)ev.target.value=''}}
 function bind(){const input=$('vOcrInput');if(input&&input.dataset.abuOfflineOcr!=='1'){input.dataset.abuOfflineOcr='1';input.onchange=inputChanged}if(window.DocumentVault&&!DocumentVault.__abuOfflineOcrPatched){DocumentVault.__abuOfflineOcrPatched=true;const oldRe=DocumentVault.reOcr;DocumentVault.reOcr=()=>{const src=lastImage||$('vOcrImage')?.src;if(src)return recognize(src);if(typeof oldRe==='function')return oldRe()}}
 const prev=window.AbuBassamNativeCameraResult;if(prev&&!prev.__abuOfflineOcrWrapped){const wrap=function(result){if(result&&result.mode==='ocr'&&result.dataUrl){recognize(result.dataUrl);return}return prev(result)};wrap.__abuOfflineOcrWrapped=true;window.AbuBassamNativeCameraResult=wrap}}
-function boot(){bind();new MutationObserver(bind).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')scheduleIdle(15000)})}
+let bindQueued=false;function scheduleBind(){if(bindQueued)return;bindQueued=true;requestAnimationFrame(()=>{bindQueued=false;bind()})}
+function boot(){bind();new MutationObserver(scheduleBind).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')scheduleIdle(15000)})}
 window.AbuDocumentVaultOfflineOcr={recognize,ready:()=>!!window.Tesseract,terminate};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
