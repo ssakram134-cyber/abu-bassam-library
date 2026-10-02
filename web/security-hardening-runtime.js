@@ -19,7 +19,7 @@ function online(){return !!(navigator.onLine&&window.AbuBassamCloud?.isConnected
 function enc(v){return new TextEncoder().encode(String(v||''))}
 function hex(bytes){return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('')}
 function constantTime(a,b){a=String(a||'');b=String(b||'');if(a.length!==b.length)return false;let out=0;for(let i=0;i<a.length;i++)out|=a.charCodeAt(i)^b.charCodeAt(i);return out===0}
-function cleanLegacy(){localStorage.removeItem(LEGACY_TRUST_KEY);if(nativeAvailable()){for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i)||'';if(k.startsWith('__dev_secure_'))localStorage.removeItem(k)}}}
+function cleanLegacy(){localStorage.removeItem(LEGACY_TRUST_KEY)}
 function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 async function hmac(body,secret){if(!crypto?.subtle)throw new Error('CRYPTO_UNAVAILABLE');const key=await crypto.subtle.importKey('raw',enc(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return hex(await crypto.subtle.sign('HMAC',key,enc(body)))}
 function serverTime(device){const candidates=[device?.last_seen,device?.updated_at,device?.verified_at,device?.first_seen];for(const value of candidates){const n=Date.parse(value||'');if(Number.isFinite(n)&&n>0)return n}return Date.now()}
