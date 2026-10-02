@@ -11,31 +11,10 @@ const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
 const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
 const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
 const APP='4.3.2';
-const pending=new Map();
-let seq=0,bridgeInstalled=false,googleBusy=false,recoveryBusy=false;
+let googleBusy=false,recoveryBusy=false;
 const $=id=>document.getElementById(id);
 function setMsg(text,bad=false){const e=$('acctMsg');if(e){e.textContent=String(text||'');e.style.color=bad?'#a52e3b':'#087f72'}}
-function installBridge(){
-  if(bridgeInstalled)return;
-  bridgeInstalled=true;
-  const previous=window.AbuBassamNativeSecurityResult;
-  window.AbuBassamNativeSecurityResult=function(message){
-    const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(_){return{}}})():message||{};
-    const slot=pending.get(data.requestId);
-    if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);data.ok===false?slot.reject(new Error(data.error||'تعذر الوصول إلى التخزين الآمن')):slot.resolve(data.value);return}
-    if(typeof previous==='function')return previous(message)
-  }
-}
-function native(action,payload={}){
-  installBridge();
-  if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));
-  return new Promise((resolve,reject)=>{
-    const requestId='acct-hard-'+Date.now()+'-'+(++seq);
-    const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة التخزين الآمن'))},12000);
-    pending.set(requestId,{resolve,reject,timer});
-    Android.security(action,requestId,payload)
-  })
-}
+function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return api.request(action,payload)}
 function cloud(){return window.AbuBassamCloud||null}
 function authClient(){return cloud()?.client||null}
 async function rpc(name,args={}){
@@ -188,7 +167,6 @@ function onClick(event){
   }
 }
 function boot(){
-  installBridge();
   document.addEventListener('click',onClick,true);
   patchPublicApis();
   cleanupStaleCallback();
