@@ -35,7 +35,6 @@
   const loadAdminPermissions=()=>loadScript('abuAdminPermissionsRuntime','admin-permissions-runtime.js','__ABU_ADMIN_PERMISSIONS_V1__');
   const loadPermissionSectionGuards=()=>loadScript('abuPermissionSectionGuardsRuntime','permission-section-guards-runtime.js','__ABU_PERMISSION_SECTION_GUARDS_V1__');
   const loadCustomerPermissionsHardening=()=>loadScript('abuCustomerPermissionsHardeningRuntime','customer-permissions-hardening-runtime.js','__ABU_CUSTOMER_PERMISSIONS_HARDENING_V1__');
-  const loadLoginThrottleFix=()=>loadScript('abuLoginThrottleFixRuntime','login-throttle-fix-runtime.js','__ABU_LOGIN_THROTTLE_FIX_V2__');
   const loadLoginInputDirection=()=>loadScript('abuLoginInputDirectionRuntime','login-input-direction-runtime.js','__ABU_LOGIN_INPUT_DIRECTION_V1__');
   const loadPasswordPolicy=()=>loadScript('abuPasswordPolicyRuntime','password-policy-runtime.js','__ABU_PASSWORD_POLICY_V1__');
   const loadMediaPipePin=()=>loadScript('abuMediaPipePinRuntime','mediapipe-pin-runtime.js','__ABU_MEDIAPIPE_PIN_V1__');
@@ -65,7 +64,6 @@
     await loadDeviceReconcile();
     await loadAdminPermissions();
     await loadPermissionGuard();
-    await loadLoginThrottleFix();
     await loadLoginInputDirection();
     await loadPasswordPolicy();
     await loadPermissionSectionGuards();
