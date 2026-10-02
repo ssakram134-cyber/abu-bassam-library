@@ -7,32 +7,17 @@ const $=id=>document.getElementById(id);
 const PIN_KEY='abu_bassam_danger_pin_hash_v1';
 const SNAPSHOT_KEY='abuBassamEmergencySnapshotV1';
 const PRIVACY_KEY='abuBassamPrivacyModeV1';
-const pending=new Map();
-let seq=0;
 let bypassTarget=null;
 let snapshotTimer=null;
-const previousNativeResult=window.AbuBassamNativeSecurityResult;
 
 function log(title,details=''){try{window.AbuBassamOps?.add?.({type:'settings',title,section:'الأمان',details})}catch(e){}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function isOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function canSecurity(){return window.AbuBassamSecurity?.can?.('security')||isOwner()}
-function nativeAvailable(){return !!(window.Android&&typeof Android.security==='function')}
+function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
 function requireNativeSecurity(){if(nativeAvailable())return true;alert('تعذر الوصول إلى التخزين الآمن في Android. أعد فتح التطبيق قبل تنفيذ هذه العملية الحساسة.');return false}
 
-function nativeRequest(action,payload={}){
-  if(!nativeAvailable())return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
-  return new Promise((resolve,reject)=>{
-    const requestId='secx-'+Date.now()+'-'+(++seq),timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة العملية'))},12000);
-    pending.set(requestId,{resolve,reject,timer});Android.security(action,requestId,payload)
-  })
-}
-window.AbuBassamNativeSecurityResult=function(message){
-  const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(e){return{}}})():message||{},slot=pending.get(data.requestId);
-  if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);return}
-  if(typeof previousNativeResult==='function')previousNativeResult(message)
-};
-
+function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 async function digest(value){
   const bytes=new TextEncoder().encode(String(value)),hash=await crypto.subtle.digest('SHA-256',bytes);
   return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('')
