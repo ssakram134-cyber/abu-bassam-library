@@ -3,6 +3,7 @@
 if(window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__)return;
 window.__ABU_ACCOUNT_RECOVERY_HARDENING_V1__=true;
 const CALLBACK='abu-bassam-library://auth/callback';
+const AUTH_HOST='dlbxcqkbmvnrcrbhuttv.supabase.co';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const SECRET_KEY='abu_bassam_device_secret_v1';
 const PENDING_SECRET_KEY='abu_bassam_recovery_pending_secret_v1';
@@ -128,7 +129,7 @@ async function safeGoogle(){
     if(error)throw error;
     const url=String(data?.url||'');
     const parsed=new URL(url);
-    if(parsed.protocol!=='https:')throw new Error('رابط Google غير آمن');
+    if(parsed.protocol!=='https:'||parsed.hostname!==AUTH_HOST||parsed.pathname!=='/auth/v1/authorize')throw new Error('رابط Google غير آمن أو خارج بوابة الحساب المعتمدة');
     if(window.Android&&typeof Android.openExternal==='function')Android.openExternal(url);
     else window.location.assign(url)
   }catch(error){
