@@ -6,7 +6,7 @@ const recovery=fs.readFileSync(path.join(root,'web/password-recovery-runtime.js'
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-android-assets.mjs'),'utf8');
 const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
 const requiredRecovery=[
-  "const ACCOUNT_EMAIL='akramag1992@gmail.com'",
+  "const ACCOUNT_EMAIL='akrama1992@gmail.com'",
   "resetPasswordForEmail(ACCOUNT_EMAIL",
   "exchangeCodeForSession(code)",
   "updateUser({password})",
@@ -16,12 +16,14 @@ const requiredRecovery=[
 ];
 for(const needle of requiredRecovery){if(!recovery.includes(needle))throw new Error(`password recovery missing: ${needle}`)}
 const requiredPrepare=[
-  "const LEGACY_ACCOUNT_EMAIL = 'akrama1992@gmail.com'",
-  "const ACCOUNT_EMAIL = 'akramag1992@gmail.com'",
-  "PASSWORD_RECOVERY_RUNTIME = 'password-recovery-runtime.js'",
-  'await patchAccountEmail();',
-  'await injectRequiredRuntimes();'
+  "const source = resolve(projectRoot, 'web')",
+  "await rm(destination, { recursive: true, force: true });",
+  "await cp(source, destination, { recursive: true, force: true });",
+  "Canonical source is read-only during normal builds"
 ];
 for(const needle of requiredPrepare){if(!prepare.includes(needle))throw new Error(`android asset preparation missing: ${needle}`)}
+for(const forbidden of ['patchAccountEmail','LEGACY_ACCOUNT_EMAIL',"ACCOUNT_EMAIL = 'akramag1992@gmail.com'"]){
+  if(prepare.includes(forbidden))throw new Error(`android asset preparation must not rewrite account identity: ${forbidden}`)
+}
 if(app?.expo?.scheme!=='abu-bassam-library')throw new Error('Expo deep-link scheme is not abu-bassam-library');
 console.log('Password recovery checks passed.');
