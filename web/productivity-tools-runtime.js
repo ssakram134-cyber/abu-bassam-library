@@ -21,15 +21,15 @@ function loadOne(id,src,flag){
   if(window[flag])return Promise.resolve(true);
   const existing=document.getElementById(id);
   if(existing){
-    if(existing.dataset.abuLoaded==='1')return Promise.resolve(true);
+    if(existing.dataset.abuLoaded==='1'){if(window[flag])return Promise.resolve(true);return Promise.reject(new Error(src+' loaded without readiness flag '+flag))}
     return new Promise((resolve,reject)=>{
-      existing.addEventListener('load',()=>resolve(true),{once:true});
+      existing.addEventListener('load',()=>{if(window[flag])resolve(true);else reject(new Error(src+' loaded without readiness flag '+flag))},{once:true});
       existing.addEventListener('error',()=>reject(new Error(src+' failed to load')),{once:true})
     })
   }
   return new Promise((resolve,reject)=>{
     const script=document.createElement('script');script.id=id;script.src=src;script.async=false;
-    script.onload=()=>{script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
+    script.onload=()=>{if(!window[flag]){reject(new Error(src+' loaded without readiness flag '+flag));return}script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
     script.onerror=()=>reject(new Error(src+' failed to load'));
     document.body.appendChild(script)
   })
@@ -55,7 +55,7 @@ async function loadAdvancedRuntime(){
     ['abuCustomerWorkflowRuntime','customer-documents-workflow-runtime.js','__ABU_CUSTOMER_WORKFLOW_V2__'],
     ['abuCustomerImageQualityRuntime','customer-image-quality-runtime.js','__ABU_CUSTOMER_IMAGE_QUALITY_V1__']
   ];
-  for(const spec of scripts){try{await loadOne(...spec)}catch(error){console.error(error)}}
+  const failures=[];for(const spec of scripts){try{await loadOne(...spec)}catch(error){failures.push(String(error?.message||error));console.error(error)}}if(failures.length){window.__ABU_ADVANCED_RUNTIME_FAILURES__=failures.slice();const message='تعذر تحميل بعض المكونات المتقدمة: '+failures.join(' • ');setStatus('questionsHostStatus',message,false);setStatus('compressorHostStatus',message,false);return false}window.__ABU_ADVANCED_RUNTIME_FAILURES__=[];return true
 }
 function injectArabicRuntimes(){const frame=$('questionsFrame');if(!frame||language!=='ar'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc)return;[['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js'],['abuQuestionTypesExternal','question-type-runtime.js']].forEach(([id,src])=>{if(doc.getElementById(id))return;const script=doc.createElement('script');script.id=id;script.src=src;script.async=false;script.onerror=()=>console.warn(src+' failed to load');doc.head.appendChild(script)})}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات الأسئلة',false)}}
 function injectEnglishRuntime(){const frame=$('questionsFrame');if(!frame||language!=='en'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc||doc.getElementById('abuQuestionEnFixesExternal'))return;const script=doc.createElement('script');script.id='abuQuestionEnFixesExternal';script.src='questions-en-fixes-runtime.js';script.async=false;script.onerror=()=>console.warn('questions-en-fixes-runtime.js failed to load');doc.head.appendChild(script)}catch(e){setStatus('questionsHostStatus','Unable to load English question tools',false)}}
