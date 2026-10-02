@@ -29,6 +29,11 @@ need(runtime,"out.edit=LEGACY_EDIT_KEYS.some(key=>out[key]===true)",'legacy edit
 need(runtime,"hasDetailed=ALL_ITEMS.some(item=>typeof raw[item.key]==='boolean')",'detailed permission payload detection');
 need(runtime,"if(hasDetailed)return normalize(raw)[key]===true",'detailed permissions must override stale legacy flags');
 forbid(runtime,"out.edit=ALL_ITEMS.some(i=>/^(vault|privateVault|customer|cards|questions|compress)/.test(i.key)&&out[i.key])",'view-only permissions must not imply edit');
+need(guards,'abuSectionDisabled','top-button permission state ownership');
+need(guards,"if(b.dataset.abuSectionDisabled==='1')b.disabled=false",'top buttons must re-enable only when this guard disabled them');
+need(runtime,'abuSettingsDisabled','settings permission state ownership');
+need(runtime,"if(el.dataset.abuSettingsDisabled==='1')el.disabled=false",'settings controls must re-enable after grant');
+
 
 for(const marker of ['PERMISSION_KEY_NOT_ALLOWED','PERMISSION_VALUE_INVALID','ADMIN_ONLY_PERMISSION','OWNER_PERMISSIONS_IMMUTABLE','_abu_bassam_permission_key_allowed','_abu_bassam_permission_admin_only'])need(migration,marker,'server validation '+marker);
 need(capacity,'jsonb_object_length(p_permissions)>260','full 222-key payload capacity');
