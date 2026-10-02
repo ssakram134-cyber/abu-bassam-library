@@ -7,8 +7,8 @@ const forbid=(file,markers)=>{const s=read(file);for(const m of markers)if(s.inc
 need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync',"action === 'privacyMode'",'AbuBassamNativeSecurityResult',"message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"']);
 forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"','onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}']);
 
-need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY']);
-forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);
+need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY',"document.addEventListener('abu-runtime-loaded', wrapActions)"]);
+forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'","setInterval(() => {\n      wrapActions();"]);
 
 need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity',"if(document.visibilityState==='hidden')return",'if(unlocked){touchDevice();']);
 forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
