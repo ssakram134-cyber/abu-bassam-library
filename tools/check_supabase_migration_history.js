@@ -36,4 +36,11 @@ while(stack.length){
  }
 }
 if(legacy.length)fail('legacy abu_bassam_sync runtime reference: '+legacy.join(', '));
+const need=(src,token,label)=>{if(!src.includes(token))fail(label+' missing '+token)};
+const secure=fs.readFileSync(path.join(DIR,'20260920064926_secure_sync_v4_2.sql'),'utf8');
+for(const token of ['create table if not exists public.abu_bassam_sync_secure','enable row level security','auth.uid()','abu-bassam-private'])need(secure,token,'secure sync base');
+const least=fs.readFileSync(path.join(DIR,'20260920065005_secure_sync_least_privilege.sql'),'utf8');
+for(const token of ['revoke all on table public.abu_bassam_sync_secure from anon, authenticated','grant select, insert, update, delete on table public.abu_bassam_sync_secure to authenticated','revoke all on sequence public.abu_bassam_sync_secure_id_seq from anon, authenticated'])need(least,token,'secure sync least privilege');
+const legacyLock=fs.readFileSync(path.join(DIR,'20260920065840_lock_legacy_sync.sql'),'utf8');
+for(const token of ['drop policy if exists','revoke all on public.abu_bassam_sync from anon, authenticated'])need(legacyLock,token,'legacy sync lock');
 console.log(`supabase migration history checks passed: ${files.length} canonical live migrations, exact SHA-256 manifest match, 14-digit unique versions/names, and no legacy abu_bassam_sync runtime access`);
