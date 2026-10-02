@@ -24,6 +24,12 @@ for(const marker of [
   'ADMIN_ONLY','saveDevicePermissions','abu_bassam_manage_device','AbuBassamPermissions','guardCustomerApi','guardQuestionDocument','guardCompressorDocument','guardMessage','SECURE_STORAGE_REQUIRED',"native('secureGet',{key:SECRET_KEY})"
 ])need(runtime,marker,marker);
 forbid(runtime,'__dev_secure_','admin device secret must never fall back to localStorage');
+need(runtime,'const LEGACY_EDIT_KEYS=[','legacy edit mutation allowlist');
+need(runtime,"out.edit=LEGACY_EDIT_KEYS.some(key=>out[key]===true)",'legacy edit must derive only from mutating permissions');
+need(runtime,"hasDetailed=ALL_ITEMS.some(item=>typeof raw[item.key]==='boolean')",'detailed permission payload detection');
+need(runtime,"if(hasDetailed)return normalize(raw)[key]===true",'detailed permissions must override stale legacy flags');
+forbid(runtime,"out.edit=ALL_ITEMS.some(i=>/^(vault|privateVault|customer|cards|questions|compress)/.test(i.key)&&out[i.key])",'view-only permissions must not imply edit');
+
 for(const marker of ['PERMISSION_KEY_NOT_ALLOWED','PERMISSION_VALUE_INVALID','ADMIN_ONLY_PERMISSION','OWNER_PERMISSIONS_IMMUTABLE','_abu_bassam_permission_key_allowed','_abu_bassam_permission_admin_only'])need(migration,marker,'server validation '+marker);
 need(capacity,'jsonb_object_length(p_permissions)>260','full 222-key payload capacity');
 for(const marker of ['_abu_bassam_device_permission','secret_hash','p_permission'])need(helper,marker,'server permission helper '+marker);
