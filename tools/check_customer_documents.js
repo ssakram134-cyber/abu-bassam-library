@@ -101,6 +101,8 @@ need(edge,"abu_bassam_customer_delete",'customer delete RPC edge call');
 need(edge,"customerDocumentsDelete",'document delete edge permission');
 need(edge,"customerOriginalDocumentView",'original image view permission');
 need(edge,"abu_bassam_customer_document_commit_v3",'atomic edge commit');
+need(ui,"abu_bassam_owner_devices",'base customer transfer must use safe owner branch RPC');
+forbid(ui,".from('abu_bassam_devices')",'direct device table read in customer UI');
 need(hard,"abu_bassam_owner_devices",'safe owner branch list');
 need(hard,"abu_bassam_customer_transfer",'safe branch transfer');
 need(hard,"delete-customer",'customer delete UI action');
