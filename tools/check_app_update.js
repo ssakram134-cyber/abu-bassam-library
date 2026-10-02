@@ -15,6 +15,8 @@ const pkg=JSON.parse(read('package.json'));
 new vm.Script(runtime,{filename:'app-update-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
 if(!/^[0-9a-f]{64}$/.test(pinnedCertificate))throw new Error('app update check failed: pinned production signing fingerprint is invalid');
 for(const m of ['__ABU_APP_UPDATE_V1__','current_code','Authorization','download_ready','validDownloadUrl','dlbxcqkbmvnrcrbhuttv.supabase.co','Android.openExternal','لا يحتوي التطبيق على GitHub Token'])need(runtime,m,m);
+need(runtime,"document.addEventListener('abu-settings-ready',buildCard)",'settings-ready event injection');
+forbid(runtime,'setInterval(()=>{n++;if(buildCard()','settings polling loop');
 for(const m of ['loadAppUpdate','app-update-runtime.js','__ABU_APP_UPDATE_V1__','await loadAppUpdate();'])need(loader,m,'loader '+m);
 for(const m of ['npm:@supabase/supabase-js@2.58.0','auth.getUser()','abu_bassam_app_releases',".eq('channel','stable')",".eq('active',true)",'available&&release.storage_path&&release.sha256&&release.signing_cert_sha256','createSignedUrl','Cache-Control','no-store'])need(edge,m,'edge '+m);
 for(const m of ['enable row level security','as restrictive','using (false)','with check (false)','revoke all on table public.abu_bassam_app_releases from public, anon, authenticated','grant select on table public.abu_bassam_app_releases to service_role','abu_bassam_app_releases_one_active_channel'])need(migration,m,'migration '+m);
