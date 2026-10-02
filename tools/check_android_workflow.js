@@ -24,7 +24,7 @@ for(const marker of [
   'permissions:\n  contents: read',
   'group: android-test-${{ github.event.pull_request.number || github.ref }}',
   "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
-  "github.event_name != 'pull_request' || !startsWith(github.head_ref, 'source-import-')",
+  "github.event_name != 'pull_request' || github.event.pull_request.user.login != 'github-actions[bot]' || !startsWith(github.head_ref, 'source-import-')",
   'runs-on: ubuntu-24.04',
   'uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1',
   'persist-credentials: false',
