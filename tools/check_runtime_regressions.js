@@ -17,10 +17,16 @@ for(const marker of ['src="about:blank"','data-src="questions-ar.html"','data-sr
 for(const marker of ['envelopeFrame','abuModeEnvelope','abuPaneEnvelope','src="envelopes.html"'])forbid(productivity,marker,'questions-only section');
 
 const recovery=read('feature-recovery-runtime.js');
-for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
+for(const marker of ["addCardTool(types,'envelope'",'function init()','installCards()','removeOldPlacements()',"document.addEventListener('DOMContentLoaded',init)",'top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
+forbid(recovery,'scheduleRecovery','obsolete recovery retry loop');
+forbid(recovery,'new MutationObserver','obsolete recovery observer');
 
 const device=read('device-name-runtime.js');
-for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
+forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
+const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
+for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
@@ -30,4 +36,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 }
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, lazy startup frames, Cards envelope placement, splash watchdog, and login guards.\n');
+process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, native startup watchdog, and canonical login guards.\n');
