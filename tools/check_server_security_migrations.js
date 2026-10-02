@@ -1,8 +1,8 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`server security migration check failed: ${label}`)}
-const limit=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
-const all=read('supabase/migrations/202609270005_strict_device_secret_checks_all_paths.sql');
+const limit=read('supabase/migrations/20260926234535_strict_device_limit_owner_secret.sql');
+const all=read('supabase/migrations/20260926234810_strict_device_secret_checks_all_paths.sql');
 need(limit,"coalesce(trim(p_actor_device_id),'') = ''",'device-limit actor id must be required');
 need(limit,"coalesce(p_actor_secret,'') = ''",'device-limit owner secret must be required');
 need(limit,"coalesce(v_actor.secret_hash,'') = ''",'device-limit stored owner secret must be non-empty');
