@@ -67,12 +67,19 @@ for(const marker of [
   'java-version: 17',
   'verify-signature: true',
   'npm ci --no-audit --no-fund',
+  'Build and verify APK before exposing production secrets',
+  'npm run build:apk:local',
+  'Verify pre-signing artifact is non-production',
+  "grep -qx 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES' dist/BUILD_TYPE.txt",
   'ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}',
-  'ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/abu-bassam-release-key.p12',
   'ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}',
   'ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}',
   'ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}',
-  'npm run build:apk:release',
+  'Sign and verify production APK',
+  '--ks-pass env:ANDROID_KEYSTORE_PASSWORD',
+  '--key-pass env:ANDROID_KEY_PASSWORD',
+  'Production signing certificate mismatch.',
+  'sha256sum -c dist/SHA256.txt',
   "grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt",
   "if: ${{ always() }}",
   'rm -f "$RUNNER_TEMP/abu-bassam-release-key.p12"',
@@ -81,7 +88,7 @@ for(const marker of [
 ]) need(productionWorkflow,marker,'Android production workflow missing safeguard: '+marker);
 
 for(const marker of [
-  'pull_request:','push:','contents: write','git push','npm run build:apk:local','./gradlew',
+  'pull_request:','push:','contents: write','git push','npm run build:apk:release','./gradlew',
   'npm run android:prebuild','npm run check:web','actions/checkout@v','actions/setup-node@v',
   'actions/setup-java@v','actions/upload-artifact@v','npm install --no-audit --no-fund'
 ]) reject(productionWorkflow,marker,'Android production workflow contains duplicate/unsafe behavior: '+marker);
@@ -90,6 +97,17 @@ const prodStepsAt=productionWorkflow.indexOf('\n    steps:');
 if(prodStepsAt<0)throw new Error('Android production workflow steps block missing');
 if(/secrets\.ANDROID_KEY/i.test(productionWorkflow.slice(0,prodStepsAt)))
   throw new Error('Android production secrets must not be exposed at job scope');
+const prodBuildAt=productionWorkflow.indexOf('- name: Build and verify APK before exposing production secrets');
+const prodSecretAt=productionWorkflow.indexOf('- name: Decode production signing key');
+const prodSignAt=productionWorkflow.indexOf('- name: Sign and verify production APK');
+if(prodBuildAt<0||prodSecretAt<0||prodSignAt<0||!(prodBuildAt<prodSecretAt&&prodSecretAt<prodSignAt))
+  throw new Error('production APK must be fully built before any signing secret is exposed');
+const preSecret=productionWorkflow.slice(0,prodSecretAt);
+if(/secrets\.ANDROID_KEY/i.test(preSecret))
+  throw new Error('production signing secrets must not appear before the APK build and pre-signing verification finish');
+const signBlock=productionWorkflow.slice(prodSignAt,productionWorkflow.indexOf('- name: Enforce production artifact'));
+for(const forbidden of ['npm ','npm\n','node ','npx ','gradle','expo '])
+  if(signBlock.includes(forbidden))throw new Error('production signing step must not execute project/package tooling after secrets are exposed: '+forbidden);
 
 if(!/^[0-9a-fA-F]{64}$/.test(certDigest))throw new Error('release signing certificate digest must be exactly 64 hex characters');
 
