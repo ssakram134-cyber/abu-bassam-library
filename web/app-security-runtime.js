@@ -45,13 +45,10 @@ function nativeAvailable(){return !!(window.Android&&typeof Android.security==='
 
 function nativeRequest(action,payload={}){
   if(!nativeAvailable()){
-    if(action==='secureGet')return Promise.resolve(localStorage.getItem('__dev_secure_'+payload.key)||'');
-    if(action==='secureSet'){localStorage.setItem('__dev_secure_'+payload.key,String(payload.value||''));return Promise.resolve(true)}
-    if(action==='secureDelete'){localStorage.removeItem('__dev_secure_'+payload.key);return Promise.resolve(true)}
     if(action==='deviceInfo')return Promise.resolve({name:'متصفح الاختبار',model:'Browser',os:'web',androidVersion:'',appVersion:APP_VERSION});
     if(action==='biometricStatus')return Promise.resolve({available:false,enrolled:false,types:[]});
     if(action==='biometricAuth')return Promise.resolve({success:false,error:'native_unavailable'});
-    return Promise.resolve(null);
+    return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
   }
   return new Promise((resolve,reject)=>{
     const requestId='sec-'+Date.now()+'-'+(++requestSeq);
@@ -116,8 +113,8 @@ async function touchDevice(){if(!cloud()?.isConnected?.()||!navigator.onLine)ret
 
 function authError(error){const m=String(error?.message||error||'تعذر تسجيل الدخول');if(/invalid login credentials/i.test(m))return 'اسم المستخدم أو كلمة المرور غير صحيحة.';if(/DEVICE_LIMIT_REACHED/i.test(m))return 'وصل الحساب إلى الحد الأقصى: ٥ أجهزة. احذف جهازًا فرعيًا من الجهاز الرئيسي أولاً.';if(/DEVICE_DISABLED/i.test(m))return 'هذا الجهاز موقوف من الجهاز الرئيسي.';if(/network|fetch/i.test(m))return 'تعذر الاتصال بالإنترنت.';return m.replace(/^.*?error:\s*/i,'')}
 async function login(){
-  if(busy)return;const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME)return setError('اسم المستخدم غير صحيح.');if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;setError('جاري التحقق...');
-  try{const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});if(result.error)throw result.error;if($('abuLoginPass'))$('abuLoginPass').value='';await fetchDeviceInfo();await registerDevice();hideGate();await pullAppearanceIfNeeded();log('تسجيل دخول ناجح',`${MAIN_USERNAME} • ${roleLabel()}`)}catch(e){setError(authError(e));log('فشل تسجيل الدخول',authError(e))}finally{busy=false}
+  if(busy)return;const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME)return setError('اسم المستخدم غير صحيح.');if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;setError('جاري التحقق...');let authenticated=false;
+  try{const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});if(result.error)throw result.error;authenticated=!!result.data?.session;if($('abuLoginPass'))$('abuLoginPass').value='';await fetchDeviceInfo();await registerDevice();hideGate();await pullAppearanceIfNeeded();log('تسجيل دخول ناجح',MAIN_USERNAME+' • '+roleLabel())}catch(e){if(authenticated){try{await client().auth.signOut({scope:'local'})}catch(_){}}currentDevice=null;unlocked=false;setError(authError(e));log('فشل تسجيل الدخول',authError(e))}finally{busy=false}
 }
 async function unlockWithBiometric(){
   if(busy)return;busy=true;setError('جاري التحقق من البصمة...');
