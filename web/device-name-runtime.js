@@ -30,6 +30,7 @@
   const loadStandaloneCardModels=()=>loadScript('abuStandaloneCardModelsRuntime','standalone-card-models-runtime.js','__ABU_STANDALONE_CARD_MODELS_V2__');
   const loadStrictWorkflow=()=>loadScript('abuStrictWorkflowRuntime','strict-workflow-runtime.js','__ABU_STRICT_WORKFLOW_V1__');
   const loadStandaloneFold=()=>loadScript('abuStandaloneFoldRuntime','standalone-fold-runtime.js','__ABU_STANDALONE_FOLD_V1__');
+  const loadA4CardEditor=()=>loadScript('abuA4CardSheetEditorV2Runtime','a4-card-sheet-editor-v2-runtime.js','__ABU_A4_CARD_SHEET_EDITOR_V2__');
   const loadDeviceReconcile=()=>loadScript('abuDeviceReconcileRuntime','device-reconcile-runtime.js','__ABU_DEVICE_RECONCILE_V2__');
   const loadPermissionGuard=()=>loadScript('abuPermissionGuardRuntime','permission-guard-runtime.js','__ABU_PERMISSION_GUARD_V1__');
   const loadAdminPermissions=()=>loadScript('abuAdminPermissionsRuntime','admin-permissions-runtime.js','__ABU_ADMIN_PERMISSIONS_V1__');
@@ -76,6 +77,7 @@
     await loadStandaloneCardModels();
     await loadStrictWorkflow();
     await loadStandaloneFold();
+    await loadA4CardEditor();
     await loadNotificationCorrections();
     await loadNotificationExcel();
     await loadSecurity();
