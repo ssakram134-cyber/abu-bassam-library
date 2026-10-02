@@ -1,6 +1,7 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+function forbid(src,token,label){if(src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
 const advanced=read('web/document-vault-advanced-runtime.js');
 const offline=read('web/document-vault-offline-ocr-runtime.js');
 const encrypted=read('web/document-vault-encrypted-runtime.js');
@@ -31,6 +32,8 @@ need(offline,"corePath:'vendor/tesseract/core'",'local OCR core');
 need(offline,'async function terminate()','OCR worker termination');
 need(offline,'scheduleIdle(15000)','OCR release after app background');
 need(offline,'scheduleIdle()','OCR release after recognition');
+need(offline,'new MutationObserver(bind)','offline OCR DOM rebinding');
+forbid(offline,'setInterval(()=>{n++;bind()','redundant OCR startup polling');
 need(assets,'tesseract.js@5.1.1/dist/tesseract.min.js','pinned Tesseract browser bundle');
 need(assets,'tesseract.js-core@5.1.1','pinned Tesseract core');
 need(assets,'ara.traineddata.gz','Arabic trained data');
