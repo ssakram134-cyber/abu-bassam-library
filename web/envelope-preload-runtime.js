@@ -8,7 +8,6 @@ try{
     const state=JSON.parse(raw);
     if(state&&typeof state.html==='string'){
       state.html=clean(state.html);
-      if(state.templateId==='env-10')state.templateId='env-1';
       localStorage.setItem(KEY,JSON.stringify(state));
     }
   }
