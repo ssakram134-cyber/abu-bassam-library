@@ -56,7 +56,7 @@ function nativeRequest(action,payload={}){
 window.AbuBassamNativeAppState=function(payload){
   const state=payload?.state||payload;
   if(state==='background'||state==='inactive'){lastBackgroundAt=Number(payload?.at)||Date.now();return}
-  if(state==='active'&&lastBackgroundAt){const elapsed=Date.now()-lastBackgroundAt;lastBackgroundAt=0;const mins=Number(localStorage.getItem(LOCK_MINUTES_KEY)||5);if(unlocked&&mins>=0&&elapsed>=mins*60000)lock('انتهت مهلة القفل التلقائي')}
+  if(state==='active'&&lastBackgroundAt){const elapsed=Date.now()-lastBackgroundAt;lastBackgroundAt=0;const mins=Number(localStorage.getItem(LOCK_MINUTES_KEY)||5);if(unlocked&&mins>=0&&elapsed>=mins*60000)lock('انتهت مهلة القفل التلقائي');if(unlocked){touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')pushAppearance();else pullAppearanceIfNeeded()}}}
 };
 
 function randomSecret(){
@@ -169,7 +169,7 @@ async function boot(){
   const trust=localTrust();if(offlineAllowed())$('abuOfflineBtn').style.display='block';
   try{await cloud()?.ready?.()}catch(e){}
   const bio=await getBiometricEnabled().catch(()=>false);if(bio&&((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed())){setTimeout(unlockWithBiometric,180)}else showGate('أدخل بيانات الدخول لفتح التطبيق.');
-  setInterval(()=>{if(unlocked)touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')pushAppearance();else pullAppearanceIfNeeded()}},60000)
+  setInterval(()=>{if(document.visibilityState==='hidden')return;if(unlocked)touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')pushAppearance();else pullAppearanceIfNeeded()}},60000)
 }
 
 window.AbuBassamSecurity={
