@@ -20,6 +20,7 @@ for(const [marker,label] of [
   ['Require trusted main ref','main-ref guard'],
   ['test "$GITHUB_REF" = "refs/heads/main"','main-ref enforcement'],
   ['uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1','immutable checkout action'],
+  ['persist-credentials: false','checkout does not persist write credentials'],
   ['Capture trusted validator and baseline before extraction','trusted validator capture'],
   ['ABU_TRUSTED_APP_VERSION','trusted app version capture'],
   ['ABU_TRUSTED_VERSION_CODE','trusted versionCode capture'],
@@ -38,6 +39,9 @@ for(const [marker,label] of [
   ['sha256sum -c "$RUNNER_TEMP/abu-trusted/validator.sha256"','trusted validator hash verification'],
   ['cmp -s tools/validate_imported_source.js "$RUNNER_TEMP/abu-trusted/validate_imported_source.js"','trusted validator byte comparison'],
   ['source-import-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}','isolated import branch'],
+  ['AUTH_ORIGIN="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"','write token exposed only for validated branch push'],
+  ['git remote set-url origin "$CLEAN_ORIGIN"','authenticated remote removed immediately after push'],
+  ['unset GH_TOKEN AUTH_ORIGIN','push credentials cleared after use'],
   ['gh pr create','review PR creation'],
   ['--base main','PR targets main'],
   ['manually run the Android checks and test build workflow','manual post-review build instruction']
