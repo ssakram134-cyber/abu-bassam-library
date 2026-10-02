@@ -30,6 +30,8 @@ need(enh,'abu_bassam_owner_device_count','device count RPC');
 need(enh,'AbuBassamDeviceRegistry?.count','device registry count');
 no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const loader=read(path.join(web,'device-name-runtime.js'));
-for(const marker of ['settings-corrections-runtime.js','wifi-sync-guard-runtime.js','loadSettingsCorrections()','loadWifiSyncGuard()'])need(loader,marker,'settings loader');
+for(const marker of ['settings-corrections-runtime.js','loadSettingsCorrections()','await loadSettingsCorrections();'])need(loader,marker,'settings loader');
+no(loader,'wifi-sync-guard-runtime.js','obsolete Wi-Fi guard loader');
+no(loader,'loadWifiSyncGuard','obsolete Wi-Fi guard loader function');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Settings checks passed: authenticated device count, exact current-device labeling, no fake devices, privacy capture control, broader storage estimate, honest Google sharing, safe reset scope, fail-closed Wi-Fi-only sync, and printer profile offsets/borderless behavior.\n');
