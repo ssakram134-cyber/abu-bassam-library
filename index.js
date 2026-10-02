@@ -294,6 +294,7 @@ function App() {
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
         await Print.printAsync({ html }); return;
       }
+      if (finalMime !== 'application/pdf') throw new Error('الطباعة المباشرة من الملف تدعم PDF أو الصور فقط. احفظ الملف أو افتحه بالتطبيق المناسب.');
       const file = await writeTemporaryFile(name, finalMime, data);
       try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
     } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
