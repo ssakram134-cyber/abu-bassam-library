@@ -57,11 +57,12 @@ function nativeRequest(action,payload={}){
     Android.security(action,requestId,payload);
   })
 }
+const previousNativeSecurityResult=window.AbuBassamNativeSecurityResult;
 window.AbuBassamNativeSecurityResult=function(message){
   const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(e){return{}}})():message||{};
-  const slot=pending.get(data.requestId);if(!slot)return;
-  clearTimeout(slot.timer);pending.delete(data.requestId);
-  if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);
+  const slot=pending.get(data.requestId);
+  if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);if(data.ok===false)slot.reject(new Error(data.error||'تعذر تنفيذ العملية'));else slot.resolve(data.value);return}
+  if(typeof previousNativeSecurityResult==='function')return previousNativeSecurityResult(message);
 };
 window.AbuBassamNativeAppState=function(payload){
   const state=payload?.state||payload;
