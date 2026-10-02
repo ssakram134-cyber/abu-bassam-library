@@ -44,7 +44,7 @@ if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Androi
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
 const lockRoot=lock.packages?.[''];
 if(!lockRoot||lockRoot.name!==pkg.name||lockRoot.version!==pkg.version)fail('package-lock root package identity/version does not match package.json');
-if(pkg.engines?.node!=='>=20 <25')fail('Node engine must remain >=20 <25');
+if(pkg.engines?.node!=='>=20.19 <25')fail('Node engine must remain >=20.19 <25');
 if(pkg.scripts?.['build:apk:local']!=='node scripts/build-android-local.mjs')fail('local APK test build command is missing or changed');
 if(pkg.scripts?.['build:apk:release']!=='node scripts/build-android-local.mjs --require-release-key')fail('strict production APK build command is missing or changed');
 const checkWeb=String(pkg.scripts?.['check:web']||'');
