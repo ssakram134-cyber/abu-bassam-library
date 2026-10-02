@@ -8,12 +8,9 @@ function accountEmail(){return String(window.AbuBassamSecurity?.email||window.Ab
 const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const FLOW='password-recovery';
-const pending=new Map();
-let seq=0;
 let resetBusy=false;
 let callbackBusy=false;
 let passwordBusy=false;
-let bridgeInstalled=false;
 let authListenerInstalled=false;
 const $=id=>document.getElementById(id);
 
@@ -26,32 +23,7 @@ function setLoginMessage(message,bad=false){
 function cloud(){return window.AbuBassamCloud||null}
 function client(){return cloud()?.client||null}
 
-function installNativeBridge(){
-  if(bridgeInstalled)return;
-  bridgeInstalled=true;
-  const previous=window.AbuBassamNativeSecurityResult;
-  window.AbuBassamNativeSecurityResult=function(message){
-    const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(_){return{}}})():message||{};
-    const slot=pending.get(data.requestId);
-    if(slot){
-      clearTimeout(slot.timer);pending.delete(data.requestId);
-      data.ok===false?slot.reject(new Error(data.error||'تعذر الوصول إلى التخزين الآمن')):slot.resolve(data.value);
-      return;
-    }
-    if(typeof previous==='function')return previous(message);
-  };
-}
-function native(action,payload={}){
-  installNativeBridge();
-  if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));
-  return new Promise((resolve,reject)=>{
-    const requestId='pw-recovery-'+Date.now()+'-'+(++seq);
-    const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('انتهت مهلة التخزين الآمن'))},12000);
-    pending.set(requestId,{resolve,reject,timer});
-    Android.security(action,requestId,payload);
-  });
-}
-
+function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 function addUi(){
   if($('abuForgotPassword'))return;
   const style=document.createElement('style');
@@ -185,7 +157,7 @@ function installAppStateHook(){
   window.AbuBassamNativeAppState=wrapped;
 }
 async function boot(){
-  installNativeBridge();addUi();installAppStateHook();
+  addUi();installAppStateHook();
   try{await cloud()?.ready?.()}catch(_){}
   installAuthListener();
   await consumeRecoveryCallback();
