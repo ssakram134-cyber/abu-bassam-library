@@ -158,6 +158,11 @@ for(const [marker,label] of [
   ['expectedReleaseCertificateDigest','local expected release certificate validation'],
   ['certificateDigest(certificate)','local actual release certificate validation'],
   ['Production signing certificate mismatch.','local certificate mismatch rejection'],
+  ['function buildEnvironment()','local sanitized build environment'],
+  ["for (const name of [...signingVars, 'ANDROID_KEYSTORE_TYPE', 'ANDROID_KEYSTORE_BASE64']) delete env[name];",'signing secrets removed from project subprocess environment'],
+  ["run(win ? 'npm.cmd' : 'npm', ['run', 'check:web'], root, cleanBuildEnv)",'check:web runs without signing secrets'],
+  ["run(gradle, ['assembleRelease', '--no-daemon'], androidDir, cleanBuildEnv)",'Gradle build runs without signing secrets'],
+  ["'--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD'",'local apksigner password uses environment'],
   ['Expected exactly one release APK','deterministic APK selection'],
   ["const apkFileName = `Abu_Bassam_Library_${appVersion}.apk`",'dynamic distribution APK name'],
   ['test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES','explicit non-production marker'],
@@ -166,5 +171,8 @@ for(const [marker,label] of [
   ['SIGNING_CERTIFICATE.txt','signing certificate output']
 ]) need(local,marker,'Android central build missing '+label);
 reject(local,'Abu_Bassam_Library_4.3.2.apk','central build must derive the APK name from package.json version');
+if(fs.existsSync(path.join(root,'scripts','android-release-signing.gradle')))throw new Error('obsolete Gradle release signing hook must not return');
+reject(local,'ensureReleaseSigningHook','local release signing must not inject a Gradle signing hook');
+reject(local,'apply from: file("../../scripts/android-release-signing.gradle")','local release signing must not use Gradle secret injection');
 
 console.log('Android workflow check passed: PR/push builds contain no production secrets, production APK construction and signing run on separate runners, the signing runner never checks out or executes project code, immutable Actions transfer only the verified APK artifact, and certificate pinning remains enforced.');
