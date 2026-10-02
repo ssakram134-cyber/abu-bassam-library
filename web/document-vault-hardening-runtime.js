@@ -17,7 +17,8 @@ async function blobHash(blob){const bytes=await blob.arrayBuffer(),hash=await cr
 function restoreSettings(snap,mode){if(!snap?.settings)return;if(mode==='snapshot'){const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k))remove.push(k)}remove.forEach(k=>localStorage.removeItem(k))}Object.entries(snap.settings).forEach(([k,v])=>{if(safeSettingKey(k))localStorage.setItem(k,String(v))})}
 
 function safeSettingKey(k){return /^(theme$|abuBassam(?:PrintSettings|Typography|CustomFonts|PrinterProfiles|DefaultPrinter|ActivePrinter|ProfessionalPrintPresets|QuestionLanguage|CardFreeLayout|Poster|VaultSort|VaultView|SyncPolicy|VaultAutoSync))/i.test(String(k||''))&&!/(auth|secret|password|token|device|security|operation|notification|customer|credential|session)/i.test(String(k||''))}
-function settings(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!safeSettingKey(k))continue;const v=localStorage.getItem(k);if(v!==null&&v.length<500000)out[k]=v}return out}
+function settingValueLimit(key){return String(key||'').toLowerCase()==='abubassamcustomfontsv5'?8*1024*1024:500000}
+function settings(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!safeSettingKey(k))continue;const v=localStorage.getItem(k);if(v!==null&&v.length<settingValueLimit(k))out[k]=v}return out}
 function bytesToB64(bytes){let out='';const step=0x8000;for(let i=0;i<bytes.length;i+=step)out+=String.fromCharCode(...bytes.subarray(i,i+step));return btoa(out)}
 function b64ToBytes(s){const raw=atob(s),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
 function blobDataUrl(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(blob)})}
