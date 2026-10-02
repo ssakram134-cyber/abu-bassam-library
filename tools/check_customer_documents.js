@@ -109,6 +109,7 @@ forbid(hard,"typeof Android.security==='function'",'direct native security bridg
 forbid(hard,'setInterval(','customer permission hardening must be event-driven, not polling');
 need(hard,"if(api.__permissionsHardeningV1){P.patched=true;return true}",'existing hardening wrapper must restore internal patched state');
 need(hard,"document.addEventListener('abu-runtime-loaded'",'customer hardening must react to runtime load events');
+need(hard,"P.currentId=detail?.classList.contains('on')?String(id||''):''",'destructive customer actions must bind only after detail view opens');
 forbid(hard,"__dev_secure_",'customer hardening must not read device secrets from localStorage');
 forbid(hard,".from('abu_bassam_devices')",'direct device table read in hardening runtime');
 forbid(workflow,'سلة محذوفات','recycle bin');
