@@ -11,6 +11,15 @@ need(src,'allowFileAccessFromFileURLs={false}','file-to-file cross-origin access
 need(src,'mixedContentMode="never"','mixed content must stay disabled');
 need(src,'const STARTUP_WATCHDOG_MS = 12000;','canonical startup watchdog');
 need(src,"message.type === 'webBootReady'",'canonical web boot handshake');
+for(const marker of ['MAX_BRIDGE_MESSAGE_CHARS = 96 * 1024 * 1024','MAX_DATA_URL_CHARS = 32 * 1024 * 1024','MAX_HTML_CHARS = 32 * 1024 * 1024','MAX_SECURE_VALUE_CHARS = 1024 * 1024','MAX_PRINT_PAGES = 100'])need(src,marker,'native bridge resource bounds '+marker);
+need(src,'if (raw.length > MAX_DATA_URL_CHARS)','data URL size guard');
+need(src,'if (imagePages.length > MAX_PRINT_PAGES)','print page-count guard');
+need(src,"throw new Error('مقاس الورق المخصص خارج الحدود المدعومة')",'custom paper bounds');
+need(src,'key={webInstanceKey}','WebView remount key');
+need(src,'onLoadStart={(event) => {','reload readiness reset');
+need(src,'onRenderProcessGone={() => {','renderer crash recovery');
+need(src,'setWebInstanceKey((value) => value + 1)','renderer remount recovery');
+need(src,"if (value.length > MAX_SECURE_VALUE_CHARS)",'SecureStore value bound');
 forbid(src,"originWhitelist={['*']}",'wildcard WebView origin whitelist');
 forbid(src,'mixedContentMode="always"','unsafe mixed content');
 forbid(src,'allowFileAccess allowFileAccessFromFileURLs','legacy broad file access flags');
