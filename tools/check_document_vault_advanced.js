@@ -18,6 +18,13 @@ need(vault,"document.visibilityState!=='hidden'&&automaticDue()",'periodic sync 
 need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must resume when visible');
 need(vault,'LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY])','only legacy sync preferences may migrate across scopes');
 need(vault,'LEGACY_SYNC_PREFS.has(key)','last-sync state must remain scoped');
+need(vault,"crypto.subtle.digest('SHA-256'",'cloud vault blob hashing');
+need(vault,'integrityVersion:1','cloud vault integrity metadata');
+need(vault,'sha256=await blobSha256(item.blob)','cloud uploads must hash file content');
+need(vault,'verifyRemoteBlob(remote,await service.downloadVault','cloud conflict downloads must verify integrity');
+need(vault,'verifyRemoteBlob(data,await service.downloadVault','cloud pull downloads must verify integrity');
+need(vault,"blob.size!==size",'cloud downloads must verify declared size');
+need(vault,"(await blobSha256(blob))!==expected",'cloud downloads must reject SHA-256 mismatch');
 need(hardening,"!key.includes(':')",'settings backup must exclude scoped branch/account keys');
 need(hardening,"manifest={format:'AbuBassamVault',version:7",'local backup manifest v7');
 need(hardening,'sha256=await blobHash(item.blob)','local backup must hash every file');
