@@ -49,8 +49,9 @@ function validateSigningConfiguration() {
   return configured;
 }
 
-function findApk(dir) {
-  if (!fs.existsSync(dir)) return null;
+function findReleaseApk(dir) {
+  if (!fs.existsSync(dir)) return '';
+  const apks = [];
   const stack = [dir];
   while (stack.length) {
     const cur = stack.pop();
@@ -58,10 +59,11 @@ function findApk(dir) {
       const p = path.join(cur, name);
       const st = fs.statSync(p);
       if (st.isDirectory()) stack.push(p);
-      else if (/\.apk$/i.test(name)) return p;
+      else if (/\.apk$/i.test(name)) apks.push(p);
     }
   }
-  return null;
+  if (apks.length !== 1) throw new Error(`Expected exactly one release APK, found ${apks.length}`);
+  return apks[0];
 }
 
 function ensureReleaseSigningHook(configured) {
@@ -156,8 +158,8 @@ try {
   run(gradle, ['assembleRelease', '--no-daemon'], androidDir);
 
   console.log('4/6 Verifying embedded JS bundle...');
-  const apk = findApk(path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release'));
-  if (!apk || !fs.statSync(apk).size) throw new Error('Release APK was not produced');
+  const apk = findReleaseApk(path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release'));
+  if (!fs.statSync(apk).size) throw new Error('Release APK was not produced');
   verifyBundle(apk);
 
   console.log('5/6 Verifying APK signature and certificate...');
@@ -171,13 +173,18 @@ try {
   console.log('6/6 Preparing distributable files...');
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist, { recursive: true });
+  for (const name of fs.readdirSync(dist)) {
+    if (/^Abu_Bassam_Library_.*\.apk$/i.test(name) || ['SHA256.txt','SIGNING_CERTIFICATE.txt','BUILD_TYPE.txt'].includes(name)) {
+      fs.rmSync(path.join(dist, name), { force: true });
+    }
+  }
   const apkFileName = `Abu_Bassam_Library_${appVersion}.apk`;
   const out = path.join(dist, apkFileName);
   fs.copyFileSync(apk, out);
   const hash = sha256(out);
   fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  ${apkFileName}\n`);
   fs.writeFileSync(path.join(dist, 'SIGNING_CERTIFICATE.txt'), certificate);
-  fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), customSigning ? 'signed-production-release-with-embedded-js\n' : 'local-test-release-default-key-with-embedded-js\n');
+  fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), customSigning ? 'signed-production-release-with-embedded-js\n' : 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES\n');
   if (requireReleaseKey && !customSigning) throw new Error('Refusing to mark an unsigned/test APK as a production release');
   console.log(`APK ready: ${out}`);
   console.log(`SHA-256: ${hash}`);
