@@ -21,16 +21,16 @@ function loadOne(id,src,flag){
   if(window[flag])return Promise.resolve(true);
   const existing=document.getElementById(id);
   if(existing){
-    if(existing.dataset.abuLoaded==='1'){if(window[flag])return Promise.resolve(true);return Promise.reject(new Error(src+' loaded without readiness flag '+flag))}
+    if(existing.dataset.abuLoaded==='1'){if(window[flag])return Promise.resolve(true);existing.remove();return Promise.reject(new Error(src+' loaded without readiness flag '+flag))}
     return new Promise((resolve,reject)=>{
-      existing.addEventListener('load',()=>{if(window[flag])resolve(true);else reject(new Error(src+' loaded without readiness flag '+flag))},{once:true});
-      existing.addEventListener('error',()=>reject(new Error(src+' failed to load')),{once:true})
+      existing.addEventListener('load',()=>{if(window[flag])resolve(true);else{existing.remove();reject(new Error(src+' loaded without readiness flag '+flag))}},{once:true});
+      existing.addEventListener('error',()=>{existing.remove();reject(new Error(src+' failed to load'))},{once:true})
     })
   }
   return new Promise((resolve,reject)=>{
     const script=document.createElement('script');script.id=id;script.src=src;script.async=false;
-    script.onload=()=>{if(!window[flag]){reject(new Error(src+' loaded without readiness flag '+flag));return}script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-    script.onerror=()=>reject(new Error(src+' failed to load'));
+    script.onload=()=>{if(!window[flag]){script.remove();reject(new Error(src+' loaded without readiness flag '+flag));return}script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
+    script.onerror=()=>{script.remove();reject(new Error(src+' failed to load'))};
     document.body.appendChild(script)
   })
 }
