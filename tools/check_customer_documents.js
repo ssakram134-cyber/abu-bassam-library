@@ -17,6 +17,8 @@ const native=read('index.js');
 new Function(ui);new Function(workflow);new Function(hard);new Function(quality);
 need(loader,'customer-permissions-hardening-runtime.js','permission hardening loader');
 need(ui,'مستمسكات الزبائن','customer documents center');
+forbid(ui,'setInterval(()=>{inject()','customer documents button injection polling');
+need(ui,'observer.disconnect()','customer documents injection observer must stop after button insertion');
 need(ui,'كل فرع مستقل تمامًا','branch isolation notice');
 need(ui,"p_device_secret",'device secret required');
 need(ui,"role()==='owner'",'owner-only cross-branch UI');
