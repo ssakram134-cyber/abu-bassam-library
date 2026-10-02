@@ -15,6 +15,8 @@ need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader'
 need(loader,'document-vault-encrypted-runtime.js','encrypted vault runtime loader');
 need(vault,"document.visibilityState!=='hidden'&&automaticDue()",'periodic sync must pause while hidden');
 need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must resume when visible');
+need(vault,'LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY])','only legacy sync preferences may migrate across scopes');
+need(vault,'LEGACY_SYNC_PREFS.has(key)','last-sync state must remain scoped');
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
