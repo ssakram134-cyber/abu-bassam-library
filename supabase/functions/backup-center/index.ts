@@ -116,5 +116,5 @@ Deno.serve(async(req:Request)=>{
     }
     if(action==='cleanup'&&req.method==='POST'){const body=await req.json().catch(()=>({})),base=await context(req,'backupRestore'),pending=await cleanupPending(base),ready=await cleanupReady(base,Math.max(1,Math.min(30,Number(body.retention)||7)));return json({ok:true,cleanup_deferred:pending+ready})}
     return json({error:'UNSUPPORTED_ACTION'},400);
-  }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=/NOT_ALLOWED|NOT_AUTHENTICATED|DEVICE|SCOPE/.test(message)?403:500;return json({error:message},status)}
+  }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=message==='NOT_AUTHENTICATED'?401:/NOT_ALLOWED|DEVICE|SCOPE/.test(message)?403:500;return json({error:message},status)}
 });
