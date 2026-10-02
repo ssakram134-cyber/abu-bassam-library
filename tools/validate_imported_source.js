@@ -11,7 +11,7 @@ function forbid(rel,markers){const text=read(rel);for(const marker of markers)if
 function walk(dir,out=[]){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isSymbolicLink())fail(`symbolic link is not allowed: ${path.relative(root,p)}`);if(entry.isDirectory()){if(!['node_modules','.git','dist','android','ios'].includes(entry.name))walk(p,out)}else out.push(p)}return out}
 
 for(const rel of [
-  'package.json','package-lock.json','app.json','index.js','index-auth.js','web/index.html','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js','web/fail-closed-runtime.js','web/branch-vault-runtime.js','web/backup-center-runtime.js','web/account-recovery-hardening-runtime.js',
+  'package.json','package-lock.json','app.json','index.js','index-auth.js','web/index.html','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js','web/app-security-runtime.js','web/secure-sync-runtime.js','web/branch-vault-runtime.js','web/backup-center-runtime.js','web/account-recovery-hardening-runtime.js',
   'web/questions-paper-runtime.js','web/questions-en-fixes-runtime.js','web/card-template-library.js','web/notification-excel-runtime.js',
   'scripts/build-android-local.mjs','scripts/prepare-android-assets.mjs','tools/check_project.js','tools/check_security_controls.js','tools/check_account_center.js','tools/check_fail_closed_runtime.js','tools/check_branch_private_vault.js','tools/check_backup_center.js'
 ])if(!fs.existsSync(path.join(root,rel)))fail(`missing ${rel}`);
@@ -62,14 +62,17 @@ need('web/security-bootstrap-guard-runtime.js',['__ABU_SECURITY_BOOTSTRAP_GUARD_
 need('web/security-hardening-runtime.js',['__ABU_SECURITY_HARDENING_V2__','OFFLINE_GRACE_MS=12*60*60*1000',"name:'HMAC',hash:'SHA-256'",'constantTime(expected,env.mac)','revalidateOfflineSession']);
 need('web/security-extras-runtime.js',['NATIVE_SECURITY_REQUIRED','requireNativeSecurity','passwordWeakness',"AbuBassamCloud?.session?.()?.user",'v.length<12',"c.auth.signOut({scope:'others'})",'تعذر تفعيل الخصوصية العالية']);
 forbid('web/security-extras-runtime.js',["const MAIN_EMAIL=",'__dev_secure_','next.length<10','١٠ محارف']);
-need('web/device-name-runtime.js',['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()','loadFailClosedRuntime(loadBranchVault)','account-recovery-hardening-runtime.js']);
-forbid('web/device-name-runtime.js',['loadBranchVault();']);
+need('web/device-name-runtime.js',['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','script.async=false','account-recovery-hardening-runtime.js']);
+forbid('web/device-name-runtime.js',['fail-closed-runtime.js']);
 need('web/device-reconcile-runtime.js',['SECURE_STORAGE_REQUIRED','abu_bassam_owner_devices','abu_bassam_manage_device']);
 forbid('web/device-reconcile-runtime.js',['__dev_secure_']);
-need('web/fail-closed-runtime.js',['__ABU_FAIL_CLOSED_RUNTIME_V1__','VAULT_GATEWAY_NOT_READY','SECURE_STORAGE_REQUIRED','ACCOUNT_RECOVERY_HARDENING_REQUIRED','recoveryHardeningReady','sensitiveReady']);
+need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','registerVaultAdapter','VAULT_GATEWAY_NOT_READY',"String(kind)==='vault'"]);
+forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'"]);
+need('web/app-security-runtime.js',['AbuBassamNativeSecurity']);
+forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function']);
 need('web/account-recovery-hardening-runtime.js',['__ABU_ACCOUNT_RECOVERY_HARDENING_V1__','verifyLocalArchiveEmpty','PENDING_SECRET_KEY','skipBrowserRedirect:true','visibleRecoveryCode','copyVisibleRecoveryCode','shareVisibleRecoveryCode']);
-need('web/branch-vault-runtime.js',['SECURE_STORAGE_REQUIRED','Object.prototype.hasOwnProperty.call(VAULT_DEFAULT,key)',"typeof value==='boolean'?value:VAULT_DEFAULT[key]","if(!allowed('vaultDelete')||!allowed('vaultSync'))",'if(path)await removeVault(path)']);
-forbid('web/branch-vault-runtime.js',['__dev_secure_',"permissions?.[key]!==false",'removeVault(path).catch(()=>{})']);
+need('web/branch-vault-runtime.js',['registerCloudAdapter','registerVaultAdapter','SECURE_STORAGE_REQUIRED',"return api.can(key)===true","device().permissions?.[key]===true","if(!allowed('vaultDelete')||!allowed('vaultSync'))",'if(path)await removeVault(path)']);
+forbid('web/branch-vault-runtime.js',['__dev_secure_',"permissions?.[key]!==false",'VAULT_DEFAULT','patchCloud','window.AbuBassamNativeSecurityResult','removeVault(path).catch(()=>{})']);
 need('web/backup-center-runtime.js',['SECURE_STORAGE_REQUIRED',"typeof restore!=='function'",'خدمة الاستعادة الآمنة غير جاهزة']);
 forbid('web/backup-center-runtime.js',['__dev_secure_']);
 need('web/questions-paper-runtime.js',['A4P','A4L','A5P','A5L','value="custom"']);
