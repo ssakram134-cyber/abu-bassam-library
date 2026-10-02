@@ -89,7 +89,7 @@ async function download(urls,path,minBytes,label='Android asset'){
       }
     }
   }
-  throw new Error(`Failed to prepare required offline OCR asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
+  throw new Error(`Failed to prepare required Android asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
 }
 
 
@@ -100,7 +100,7 @@ await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
 
 for(const [relative,urls,minBytes] of OCR_ASSETS){
-  await download(urls,resolve(vendorRoot,relative),minBytes,'OCR Android asset');
+  await download(urls,resolve(vendorRoot,relative),minBytes);
 }
 for(const [relative,urls,minBytes] of MEDIAPIPE_ASSETS){
   await download(urls,resolve(mediaPipeRoot,relative),minBytes,'MediaPipe Android asset');
