@@ -2,16 +2,19 @@ const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
 function forbid(src,token,label){if(src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+const vault=read('web/document-vault-runtime.js');
 const advanced=read('web/document-vault-advanced-runtime.js');
 const offline=read('web/document-vault-offline-ocr-runtime.js');
 const encrypted=read('web/document-vault-encrypted-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const startup=read('web/device-name-runtime.js');
 const assets=read('scripts/prepare-android-assets.mjs');
-new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
+new Function(vault);new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
 need(loader,'document-vault-advanced-runtime.js','advanced vault runtime loader');
 need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader');
 need(loader,'document-vault-encrypted-runtime.js','encrypted vault runtime loader');
+need(vault,"document.visibilityState!=='hidden'&&automaticDue()",'periodic sync must pause while hidden');
+need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must resume when visible');
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
