@@ -11,6 +11,10 @@ const SYNC_POLICY_KEY='abuBassamSyncPolicyV5';
 const $=id=>document.getElementById(id);
 const VIEW_KEY='abuBassamVaultViewV5';
 const SYSTEM_FOLDERS=['المستمسكات','المعاملات','الباجات'];
+function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
+function syncKey(key){return key+':'+syncScope()}
+function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
 const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
@@ -21,19 +25,20 @@ function isImage(item){return item.category==='image'||String(item.mime||'').sta
 function formatBytes(size){let n=Number(size)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function formatTime(value){try{return new Date(value).toLocaleString('ar-IQ')}catch(e){return value||''}}
 function sessionOk(){return !!(window.AbuBassamCloud&&AbuBassamCloud.isConnected())}
-function autoSync(){return localStorage.getItem(AUTO_SYNC_KEY)!=='0'}
-function syncPolicy(){try{return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(localStorage.getItem(SYNC_POLICY_KEY)||'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
+function autoSync(){return syncGet(AUTO_SYNC_KEY)!=='0'}
+function syncPolicy(){try{return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(syncGet(SYNC_POLICY_KEY)||'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
 function knownNonWifi(){let connection=navigator.connection||navigator.mozConnection||navigator.webkitConnection,type=String(connection&&connection.type||'').toLowerCase();return !!type&&!['wifi','ethernet','unknown'].includes(type)}
-function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&knownNonWifi())return false;let elapsed=Date.now()-Number(localStorage.getItem(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return hasPending()||elapsed>=900000}
+function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&knownNonWifi())return false;let elapsed=Date.now()-Number(syncGet(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return hasPending()||elapsed>=900000}
 
 let dbPromise;
 function openDb(){
   if(dbPromise)return dbPromise;
   dbPromise=new Promise((resolve,reject)=>{
     let request=indexedDB.open(DB_NAME,1);
-    request.onupgradeneeded=()=>{let db=request.result,store=db.createObjectStore(STORE,{keyPath:'id'});store.createIndex('category','category');store.createIndex('updatedAt','updatedAt')};
+    request.onupgradeneeded=()=>{let db=request.result;if(!db.objectStoreNames.contains(STORE)){let store=db.createObjectStore(STORE,{keyPath:'id'});store.createIndex('category','category');store.createIndex('updatedAt','updatedAt')}};
     request.onsuccess=()=>resolve(request.result);
-    request.onerror=()=>reject(request.error||new Error('تعذر فتح قاعدة الحفظ'));
+    request.onerror=()=>{dbPromise=null;reject(request.error||new Error('تعذر فتح قاعدة الحفظ'))};
+    request.onblocked=()=>{dbPromise=null;reject(new Error('قاعدة الحفظ مستخدمة من جلسة أخرى'))};
   });
   return dbPromise
 }
@@ -97,7 +102,7 @@ function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy')
 function showModal(id){$(id).classList.add('show')}
 function closeModal(id){$(id).classList.remove('show')}
 function setSyncStatus(text){if($('vSyncStatus'))$('vSyncStatus').textContent='المزامنة: '+text}
-function setAutoSync(value){localStorage.setItem(AUTO_SYNC_KEY,value?'1':'0');setSyncStatus(value?'تلقائية مفعّلة':'تلقائية متوقفة')}
+function setAutoSync(value){syncSet(AUTO_SYNC_KEY,value?'1':'0');setSyncStatus(value?'تلقائية مفعّلة':'تلقائية متوقفة')}
 function hasPending(){return state.items.some(item=>item.syncState==='pending')}
 function logOperation(type,title,details='',fileName=''){if(window.AbuBassamOps&&AbuBassamOps.add)AbuBassamOps.add({type,title,details,fileName,section:'الحفظ والمستندات'})}
 
@@ -250,80 +255,83 @@ async function restoreBackup(file){
 }
 
 function cloud(){return window.AbuBassamCloud}
-function remoteItem(data,blob){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',blob,syncState:'synced',deleted:false}}
+function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',blob,syncState:'synced',deleted:false}}
 async function syncNow(manual=true){
   if(state.syncing)return false;
   if(!manual&&!automaticDue())return false;
-  let policy=syncPolicy();
+  const policy=syncPolicy();
   if(policy.wifiOnly&&knownNonWifi()){
     setSyncStatus('بانتظار شبكة Wi‑Fi حسب الإعداد');
     if(manual)alert('المزامنة مضبوطة على Wi‑Fi فقط. اتصل بشبكة Wi‑Fi أو غيّر الإعداد.');
     return false
   }
-  if(!navigator.onLine){
-    setSyncStatus('لا يوجد إنترنت • التغييرات محفوظة محلياً');
-    if(manual)alert('لا يوجد اتصال بالإنترنت الآن');
-    return false
-  }
-  if(!sessionOk()){
-    setSyncStatus('اربط حسابك لتفعيل المزامنة الآمنة');
-    if(manual&&cloud())cloud().openLogin();
-    return false
-  }
-  state.syncing=true;
-  setSyncStatus('جاري رفع التغييرات إلى الحاوية الخاصة...');
+  if(!navigator.onLine){setSyncStatus('لا يوجد إنترنت • التغييرات محفوظة محلياً');if(manual)alert('لا يوجد اتصال بالإنترنت الآن');return false}
+  if(!sessionOk()){setSyncStatus('اربط حسابك لتفعيل المزامنة الآمنة');if(manual&&cloud())cloud().openLogin();return false}
+  if(!window.AbuBassamSecurity?.device?.()?.device_id){setSyncStatus('يلزم اعتماد الجهاز قبل المزامنة');return false}
+  state.syncing=true;setSyncStatus('جاري رفع التغييرات إلى الحاوية الخاصة...');
   try{
-    let service=cloud(),pending=state.items.filter(item=>item.syncState==='pending');
-    for(let item of pending){
-      let row=await service.get('vault',item.id),remote=row&&row.data;
-      if(remote&&remote.updatedAt&&remote.updatedAt!==item.updatedAt&&!remote.deleted&&!item.deleted){
-        let remoteTime=Date.parse(remote.updatedAt||0),localTime=Date.parse(item.updatedAt||0);
-        if(remoteTime>localTime){
-          let copy=Object.assign({},item,{id:uuid(),name:niceName(item.name.replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbPut(copy);
-          item.syncState='synced';
-          await dbPut(item);
+    const service=cloud(),pending=(await dbAll()).filter(item=>item.syncState==='pending');
+    for(const item of pending){
+      const row=await service.get('vault',item.id),remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
+      const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
+      if(remoteChanged){
+        if(item.deleted){
+          if(remote?.deleted){await dbDelete(item.id);continue}
+          if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
+          const remoteBlob=await service.downloadVault(remote.storagePath);
+          await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
           continue
         }
-        if(remote.storagePath){
-          let remoteBlob=await service.downloadVault(remote.storagePath);
-          await dbPut(remoteItem(Object.assign({},remote,{id:uuid(),name:String(remote.name||item.name).replace(/(\.[^.]+)?$/,' (نسخة جهاز آخر)$1'),updatedAt:new Date().toISOString()}),remoteBlob))
+        if(remote?.deleted){
+          const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
+          await dbPut(copy);await dbDelete(item.id);continue
         }
+        if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
+        const remoteBlob=await service.downloadVault(remote.storagePath);
+        const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
+        await dbPut(localCopy);
+        await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+        continue
       }
-      let data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:!!item.deleted,storagePath:remote&&remote.storagePath||''};
+
       if(item.deleted){
-        if(data.storagePath)await service.removeVault(data.storagePath).catch(()=>{});
-        data.storagePath=''
-      }else if(item.blob){
-        data.storagePath=await service.uploadVault(item.id,item.blob,item.mime)
+        if(!row){await dbDelete(item.id);continue}
+        const oldPath=String(remote?.storagePath||'');
+        const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
+        await service.upsert('vault',item.id,data);
+        await dbDelete(item.id);
+        if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
+        continue
       }
-      await service.upsert('vault',item.id,data);
-      item.syncState='synced';
-      await dbPut(item)
+
+      if(!item.blob)throw new Error('ملف محلي بلا محتوى فعلي: '+String(item.name||item.id));
+      const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);
+      const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
+      let saved;
+      try{saved=await service.upsert('vault',item.id,data)}
+      catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
+      item.remoteUpdatedAt=String(saved?.updated_at||'');item.syncState='synced';await dbPut(item);
+      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
+
     setSyncStatus('جاري استقبال تغييرات الأجهزة...');
-    let rows=await service.list('vault',1000),local=new Map((await dbAll()).map(item=>[item.id,item]));
-    for(let row of rows){
-      let data=row.data;
-      if(!data||!data.id)continue;
-      let here=local.get(data.id),remoteTime=Date.parse(data.updatedAt||0),localTime=Date.parse(here&&here.updatedAt||0);
-      if(here&&localTime>remoteTime)continue;
-      if(data.deleted){await dbDelete(data.id);continue}
-      if(here&&localTime===remoteTime&&here.syncState==='synced')continue;
-      if(!data.storagePath)continue;
-      let blob=await service.downloadVault(data.storagePath);
-      await dbPut(remoteItem(data,blob))
+    const rows=await service.list('vault',1000),local=new Map((await dbAll()).map(item=>[String(item.id),item]));
+    for(const row of rows){
+      const data=row?.data;if(!data?.id)continue;
+      const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
+      if(here?.syncState==='pending')continue;
+      if(data.deleted){if(here)await dbDelete(id);continue}
+      if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
+      if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
+      const blob=await service.downloadVault(data.storagePath);
+      await dbPut(remoteItem(data,blob,remoteVersion))
     }
-    localStorage.setItem(LAST_SYNC_KEY,String(Date.now()));
-    await refresh();
-    setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
+    syncSet(LAST_SYNC_KEY,String(Date.now()));
+    await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
-  }catch(e){
-    setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');
-    if(manual)alert('تعذرت المزامنة: '+(e.message||e));
-    return false
-  }finally{state.syncing=false}
+  }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
+  finally{state.syncing=false}
 }
 function onShow(){refresh();let last=Number(localStorage.getItem(LAST_SYNC_KEY)||0);if(last)setSyncStatus('آخر مرة '+formatTime(last))}
 async function stats(){let items=state.items.length?state.items:await dbAll(),active=items.filter(item=>!item.deleted);return{count:active.length,bytes:active.reduce((sum,item)=>sum+(Number(item.size)||0),0),images:active.filter(isImage).length,pdf:active.filter(item=>ext(item.name)==='pdf').length}}
