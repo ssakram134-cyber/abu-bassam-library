@@ -4,14 +4,13 @@ if(window.__ABU_CUSTOMER_PERMISSIONS_HARDENING_V1__)return;
 window.__ABU_CUSTOMER_PERMISSIONS_HARDENING_V1__=true;
 const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/customer-documents';
 const SECRET_KEY='abu_bassam_device_secret_v1';
-const P={wait:new Map(),seq:0,currentId:'',patched:false};
+const P={currentId:'',patched:false};
 const role=()=>window.AbuBassamSecurity?.role?.()||window.AbuBassamSecurity?.device?.()?.role||'';
 const device=()=>window.AbuBassamSecurity?.device?.()||{};
 const client=()=>window.AbuBassamCloud?.client||null;
 const session=()=>window.AbuBassamCloud?.session?.()||null;
 function can(key){try{if(role()==='owner')return true;const s=window.AbuBassamSecurity;if(typeof s?.can==='function')return !!s.can(key);const p=s?.device?.()?.permissions||{};return p[key]===true}catch{return false}}
-function wrapSecurity(){if(window.__ABU_CUST_HARD_SEC__)return;window.__ABU_CUST_HARD_SEC__=1;const old=window.AbuBassamNativeSecurityResult;window.AbuBassamNativeSecurityResult=m=>{const d=typeof m==='string'?(()=>{try{return JSON.parse(m)}catch{return{}}})():m||{},q=P.wait.get(d.requestId);if(q){clearTimeout(q.t);P.wait.delete(d.requestId);return d.ok===false?q.reject(new Error(d.error||'تعذر التحقق')):q.resolve(String(d.value||''))}if(typeof old==='function')return old(m)}}
-function secret(){wrapSecurity();if(!(window.Android&&typeof Android.security==='function'))return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return new Promise((resolve,reject)=>{const id='cust-hard-'+Date.now()+'-'+(++P.seq),t=setTimeout(()=>{P.wait.delete(id);reject(new Error('انتهت مهلة التحقق'))},10000);P.wait.set(id,{resolve,reject,t});Android.security('secureGet',id,{key:SECRET_KEY})})}
+async function secret(){const api=window.AbuBassamNativeSecurity;if(!api?.request)throw new Error('SECURE_STORAGE_REQUIRED');return String(await api.request('secureGet',{key:SECRET_KEY})||'')}
 async function auth(){await window.AbuBassamCloud?.ready?.();const s=session(),id=String(device().device_id||window.AbuBassamDevices?.ensure?.()?.id||''),sec=await secret();if(!s?.access_token)throw new Error('اربط الحساب بالإنترنت أولًا.');if(!id||!sec)throw new Error('هذا الجهاز غير موثق.');return{token:s.access_token,id,secret:sec}}
 async function rpc(name,args){const c=client();if(!c)throw new Error('خدمة المزامنة غير جاهزة.');const{data,error}=await c.rpc(name,args);if(error)throw error;return data}
 function message(e){const s=String(e?.message||e||'تعذر التنفيذ');if(/SECURE_STORAGE_REQUIRED/.test(s))return'تم إيقاف العملية لأن SecureStore الأصلي غير متاح. لن يُقرأ سر الجهاز من تخزين عادي.';if(/CUSTOMER_DELETE_NOT_ALLOWED/.test(s))return'الأدمن منع حذف الزبائن على هذا الفرع.';if(/CUSTOMER_TRANSFER_NOT_ALLOWED/.test(s))return'نقل الزبائن بين الفروع متاح للأدمن فقط.';if(/CUSTOMER_.*_NOT_ALLOWED/.test(s))return'هذه العملية غير مسموحة لهذا الفرع.';return s}
