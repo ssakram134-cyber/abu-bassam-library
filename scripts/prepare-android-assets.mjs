@@ -116,4 +116,5 @@ for(const [relative,,minBytes] of MEDIAPIPE_ASSETS){
 }
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
-process.stdout.write('Offline OCR assets (Arabic + English) and MediaPipe background-removal assets are embedded only in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('MediaPipe background-removal assets are embedded only in generated Android assets; privileged WebView runtime does not load them from a CDN.\n');
