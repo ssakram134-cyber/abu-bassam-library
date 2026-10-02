@@ -109,8 +109,9 @@ for(const file of files){
   const rel=path.relative(root,file);
   if(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text))fail(`private key material found in ${rel}`);
   if(/(?:SUPABASE_SERVICE_ROLE_KEY|ANDROID_KEYSTORE_PASSWORD|ANDROID_KEY_PASSWORD)\s*[=:]\s*['\"]?[A-Za-z0-9_\-\.]{8,}/i.test(text)&&!/process\.env|Deno\.env|getenv|secrets\./i.test(text))fail(`possible embedded secret in ${rel}`);
-  if(/Ahmed Hassan|أحمد حسن/i.test(text))fail(`previous designer identity found in ${rel}`);
-  if(text.includes('أكرم حاتم الغزالي')||text.includes('Akram Hatem Al-Ghazali'))approvedDesigner=true;
+  const userFacingIdentityScan=!rel.replaceAll('\\','/').startsWith('tools/');
+  if(userFacingIdentityScan&&/Ahmed Hassan|أحمد حسن/i.test(text))fail(`previous designer identity found in ${rel}`);
+  if(userFacingIdentityScan&&(text.includes('أكرم حاتم الغزالي')||text.includes('Akram Hatem Al-Ghazali')))approvedDesigner=true;
 }
 if(!approvedDesigner)fail('approved designer identity أكرم حاتم الغزالي is missing');
 
