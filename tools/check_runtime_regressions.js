@@ -20,7 +20,10 @@ const recovery=read('feature-recovery-runtime.js');
 for(const marker of ["addCardTool(types,'envelope'",'scheduleRecovery','top:76px','width:52px','height:52px'])need(recovery,marker,'cards/startup UI');
 
 const device=read('device-name-runtime.js');
-for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-throttle-fix-runtime.js','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+for(const marker of ['dismissSplash','installSplashWatchdog','setTimeout(dismissSplash,1800)','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
+const security=read('app-security-runtime.js');
+for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
 
 for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','feature-recovery-runtime.js','device-name-runtime.js']){
   try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
