@@ -111,7 +111,7 @@ function findApksigner() {
 function verifySignature(apk) {
   const apksigner = findApksigner();
   if (!apksigner) throw new Error('Android SDK apksigner was not found; cannot verify APK signature');
-  const cert = capture(apksigner, ['verify', '--verbose', '--print-certs', apk]);
+  const cert = capture(apksigner, ['verify', '--verbose', '--print-certs', apk], root, buildEnvironment());
   if (!/certificate SHA-256 digest:/i.test(cert) && !/Signer #1 certificate/i.test(cert)) {
     throw new Error('APK signer certificate details were not produced');
   }
