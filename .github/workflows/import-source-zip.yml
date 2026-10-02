@@ -59,6 +59,8 @@ jobs:
           env_file=pathlib.Path(sys.argv[3])
           raw=pathlib.PurePosixPath(raw_text)
 
+          if any(ord(ch)<32 or ord(ch)==127 for ch in raw_text):
+              raise SystemExit('Archive rejected: source_zip contains control characters')
           if not raw_text or raw.is_absolute() or '..' in raw.parts or raw.suffix.lower()!='.zip':
               raise SystemExit(f'Archive rejected: source_zip must be a relative .zip path inside the repository: {raw_text!r}')
 
@@ -83,6 +85,7 @@ jobs:
           forbidden_ext={'.jks','.keystore','.p12','.pfx','.pem','.key'}
           count=0
           total=0
+          normalized_names=set()
           with zipfile.ZipFile(resolved) as z:
               for item in z.infolist():
                   count+=1
@@ -91,9 +94,15 @@ jobs:
                   if item.flag_bits & 0x1:
                       raise SystemExit(f'Archive rejected: encrypted ZIP entry {item.filename!r}')
                   name=item.filename.replace('\\','/')
+                  if any(ord(ch)<32 or ord(ch)==127 for ch in name):
+                      raise SystemExit(f'Archive rejected: control character in path {name!r}')
                   p=pathlib.PurePosixPath(name)
                   if not name or p.is_absolute() or '..' in p.parts:
                       raise SystemExit(f'Archive rejected: unsafe path {name!r}')
+                  normalized=p.as_posix().rstrip('/')
+                  if normalized in normalized_names:
+                      raise SystemExit(f'Archive rejected: duplicate path {name!r}')
+                  normalized_names.add(normalized)
                   mode=(item.external_attr >> 16) & 0o170000
                   if mode==stat.S_IFLNK:
                       raise SystemExit(f'Archive rejected: symbolic link {name!r}')
