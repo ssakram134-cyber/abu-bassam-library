@@ -9,6 +9,9 @@ const root = path.resolve(here, '..');
 const win = process.platform === 'win32';
 const requireReleaseKey = process.argv.includes('--require-release-key');
 const signingVars = ['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'];
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const appVersion = String(packageJson.version || '').trim();
+if (!appVersion) throw new Error('package.json version is missing');
 
 function run(cmd, args, cwd = root, env = process.env) {
   const r = spawnSync(cmd, args, { cwd, env, stdio: 'inherit', shell: win });
@@ -24,14 +27,18 @@ function capture(cmd, args, cwd = root, env = process.env) {
 }
 
 function signingConfigured() {
-  return signingVars.every(name => String(process.env[name] || '').trim());
+  const present = signingVars.filter(name => String(process.env[name] || '').trim());
+  if (present.length > 0 && present.length < signingVars.length) {
+    const missing = signingVars.filter(name => !String(process.env[name] || '').trim());
+    throw new Error(`Incomplete Android signing configuration. Missing: ${missing.join(', ')}`);
+  }
+  return present.length === signingVars.length;
 }
 
 function validateSigningConfiguration() {
   const configured = signingConfigured();
   if (requireReleaseKey && !configured) {
-    const missing = signingVars.filter(name => !String(process.env[name] || '').trim());
-    throw new Error(`Production release signing is required. Missing: ${missing.join(', ')}`);
+    throw new Error(`Production release signing is required. Missing: ${signingVars.join(', ')}`);
   }
   if (configured && !fs.existsSync(process.env.ANDROID_KEYSTORE_FILE)) {
     throw new Error(`ANDROID_KEYSTORE_FILE does not exist: ${process.env.ANDROID_KEYSTORE_FILE}`);
@@ -111,6 +118,22 @@ function verifySignature(apk) {
   return cert;
 }
 
+function expectedReleaseCertificateDigest() {
+  const file = path.join(root, 'config', 'release-signing-certificate.sha256');
+  if (!fs.existsSync(file)) throw new Error('Missing config/release-signing-certificate.sha256');
+  const digest = fs.readFileSync(file, 'utf8').replace(/\s+/g, '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('release-signing-certificate.sha256 must contain exactly one SHA-256 digest');
+  return digest;
+}
+
+function certificateDigest(certText) {
+  const match = String(certText).match(/^Signer #1 certificate SHA-256 digest:\s*([^\r\n]+)$/mi);
+  if (!match) throw new Error('APK signer SHA-256 certificate digest was not produced');
+  const digest = match[1].replace(/[:\s]/g, '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('APK signer certificate SHA-256 digest is invalid');
+  return digest;
+}
+
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
@@ -139,14 +162,20 @@ try {
 
   console.log('5/6 Verifying APK signature and certificate...');
   const certificate = verifySignature(apk);
+  if (customSigning) {
+    const expected = expectedReleaseCertificateDigest();
+    const actual = certificateDigest(certificate);
+    if (actual !== expected) throw new Error(`Production signing certificate mismatch. Expected ${expected}, got ${actual}`);
+  }
 
   console.log('6/6 Preparing distributable files...');
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist, { recursive: true });
-  const out = path.join(dist, 'Abu_Bassam_Library_4.3.2.apk');
+  const apkFileName = `Abu_Bassam_Library_${appVersion}.apk`;
+  const out = path.join(dist, apkFileName);
   fs.copyFileSync(apk, out);
   const hash = sha256(out);
-  fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  Abu_Bassam_Library_4.3.2.apk\n`);
+  fs.writeFileSync(path.join(dist, 'SHA256.txt'), `${hash}  ${apkFileName}\n`);
   fs.writeFileSync(path.join(dist, 'SIGNING_CERTIFICATE.txt'), certificate);
   fs.writeFileSync(path.join(dist, 'BUILD_TYPE.txt'), customSigning ? 'signed-production-release-with-embedded-js\n' : 'local-test-release-default-key-with-embedded-js\n');
   if (requireReleaseKey && !customSigning) throw new Error('Refusing to mark an unsigned/test APK as a production release');
