@@ -19,11 +19,18 @@ const pkg=readJson('package.json');
 const lock=readJson('package-lock.json');
 const app=readJson('app.json').expo||{};
 if(pkg.name!=='abu-bassam-library-native')fail('unexpected package name');
-if(pkg.version!=='4.3.2'||app.version!=='4.3.2')fail('version must remain 4.3.2 for this import workflow');
+if(typeof pkg.version!=='string'||!pkg.version.trim()||app.version!==pkg.version)fail('package.json and app.json versions must match');
+const versionCode=Number(app.android?.versionCode);
+if(!Number.isInteger(versionCode)||versionCode<=0)fail('Android versionCode must be a positive integer');
+const trustedVersion=String(process.env.ABU_TRUSTED_APP_VERSION||'').trim();
+const trustedVersionCode=Number(process.env.ABU_TRUSTED_VERSION_CODE||0);
+if(Number.isInteger(trustedVersionCode)&&trustedVersionCode>0){
+  if(versionCode<trustedVersionCode)fail(`Android versionCode downgrade is not allowed: imported ${versionCode}, trusted ${trustedVersionCode}`);
+  if(trustedVersion&&pkg.version!==trustedVersion&&versionCode===trustedVersionCode)fail('a changed app version must increment Android versionCode');
+}
 if(pkg.main!=='index-auth.js')fail('package main must remain index-auth.js so auth callbacks are captured before the native app entry');
 if(app.slug!=='abu-bassam-library')fail('unexpected Expo slug');
 if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Android package');
-if(Number(app.android?.versionCode)!==432)fail('unexpected Android versionCode');
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
 if(pkg.engines?.node!=='>=20 <25')fail('Node engine must remain >=20 <25');
 if(pkg.scripts?.['build:apk:local']!=='node scripts/build-android-local.mjs')fail('local APK test build command is missing or changed');
@@ -33,8 +40,9 @@ if(!checkWeb.startsWith('node tools/check_project.js'))fail('check:web must be r
 if(/scripts\/patch-|repair:source/.test(checkWeb))fail('check:web must not repair or mutate source');
 for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
 for(const name of ['start','android','android:prebuild'])if(/scripts\/patch-/.test(String(pkg.scripts?.[name]||'')))fail(`${name} must not auto-patch canonical source`);
-const repair=String(pkg.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker))fail(`repair:source missing explicit compatibility repair: ${marker}`);
+if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source command must not return');
+for(const rel of ['scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js'])
+  if(fs.existsSync(path.join(root,rel)))fail(`obsolete patch/touch file is not allowed: ${rel}`);
 const buildScript=read('scripts/build-android-local.mjs');
 for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'",'Production release signing is required.','SIGNING_CERTIFICATE.txt'])if(!buildScript.includes(marker))fail(`local APK signing safeguard missing: ${marker}`);
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);
