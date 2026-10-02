@@ -9,6 +9,7 @@ forbid(runtime,'__dev_secure_','device secret must never use web storage');
 forbid(runtime,'window.AbuBassamNativeSecurityResult','Backup Center must not install another native callback');
 for(const src of [runtime,vaultHardening]){need(src,"abubassamcustomfontsv5'?8*1024*1024:500000",'custom font backup size allowance');need(src,'settingValueLimit(','per-setting backup size guard')}
 for(const m of ['captureSettings()','replaceSettingsSnapshot(before)','value.length>=settingValueLimit(k)','if(archiveApplied)','await applyAtomic(existing,{replaceAll:true})'])need(vaultHardening,m,'atomic restore rollback '+m);
+need(vaultHardening,'AbuBassamTypography?.reloadPersisted?.()','successful restore must refresh typography runtime');
 for(const m of ['saveBase64Confirmed','AbuBassamNativeFileSaveResult','writeBase64Download',"message.type === 'saveBase64Confirmed'"])need(native,m,'confirmed native backup save '+m);
 for(const m of ['{confirmed=false}={}','Android.saveBase64Confirmed',"نسخة Android الحالية لا تدعم تأكيد حفظ نسخة الأمان","{confirmed:true}"])need(vaultHardening,m,'confirmed safety backup '+m);
 for(const m of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','await loadBackupCenter();'])need(loader,m,'deterministic loader '+m);
