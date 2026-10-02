@@ -10,6 +10,7 @@ const androidAssets=read('scripts/prepare-android-assets.mjs');
 for(const t of ["VERSION='0.1.1675465747'","LOCAL_BASE='vendor/mediapipe/'",'REMOTE_BASE=`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@${VERSION}/`','nativeBridgeAvailable()?LOCAL_BASE:REMOTE_BASE','window.getSelfie=async function','locateFile:file=>BASE+file',"mode:nativeBridgeAvailable()?'embedded':'remote-browser-only'"])need(pin,t,'MediaPipe pin runtime');
 for(const t of ['mediapipe-pin-runtime.js','loadMediaPipePin','loadPasswordPolicy','await loadMediaPipePin();','await loadPasswordPolicy();','await loadSecurity();'])need(loader,t,'startup dependency loader');
 need(index,'abuBassamBgConsent','background-removal consent');
+need(index,"window.AbuBassamMediaPipe?.mode==='embedded'",'embedded Android background removal must not request internet-download consent');
 need(index,'تُعالج الصورة محليًا ولا تُرسل إلى خادم التطبيق','local-processing disclosure');
 need(index,"if(window.Android&&typeof Android.security==='function')throw new Error('مكوّن إزالة الخلفية المحلي لم يُحمّل بأمان. أعد فتح التطبيق.')",'native MediaPipe fail-closed fallback');
 need(index,'@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js','pinned browser-only MediaPipe fallback');
