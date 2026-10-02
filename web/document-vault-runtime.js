@@ -110,7 +110,7 @@ async function build(){
   window.addEventListener('online',()=>{setSyncStatus('عاد الإنترنت • فحص جدول المزامنة');if(automaticDue())syncNow(false)});
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   setTimeout(()=>{if(automaticDue())syncNow(false)},5000);
-  setInterval(()=>{if(automaticDue())syncNow(false)},900000);document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())syncNow(false)},900000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&automaticDue())syncNow(false)});document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
