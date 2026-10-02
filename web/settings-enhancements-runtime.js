@@ -7,8 +7,7 @@ const LIMIT_KEY='abuBassamDeviceLimitV1';
 const PRINTER_KEY='abuBassamPrinterProfilesV1';
 const DEFAULT_PRINTER_KEY='abuBassamDefaultPrinterV1';
 const SECRET_KEY='abu_bassam_device_secret_v1';
-const pending=new Map();let seq=0;let currentCount=0;
-const previousNativeResult=window.AbuBassamNativeSecurityResult;
+let currentCount=0;
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
 function owner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function client(){return window.AbuBassamCloud?.client||null}
@@ -16,7 +15,6 @@ function connected(){return !!window.AbuBassamCloud?.isConnected?.()}
 function log(title,details=''){try{window.AbuBassamOps?.add?.({type:'settings',title,section:'الإعدادات',details})}catch(e){}}
 function identity(){return window.AbuBassamDevices?.ensure?.()||{id:localStorage.getItem('abuBassamLockedDeviceIdV3')||''}}
 function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return api.request(action,payload)}
-window.AbuBassamNativeSecurityResult=function(message){const data=typeof message==='string'?(()=>{try{return JSON.parse(message)}catch(e){return{}}})():message||{},slot=pending.get(data.requestId);if(slot){clearTimeout(slot.timer);pending.delete(data.requestId);data.ok===false?slot.reject(new Error(data.error||'تعذر تنفيذ العملية')):slot.resolve(data.value);return}if(typeof previousNativeResult==='function')previousNativeResult(message)};
 function cachedLimit(){return Math.max(1,Math.min(50,Number(localStorage.getItem(LIMIT_KEY)||5)||5))}
 async function readLimit(){if(!client()||!connected())return cachedLimit();try{const {data,error}=await client().rpc('abu_bassam_get_device_limit');if(error)throw error;const n=Math.max(1,Math.min(50,Number(data)||5));localStorage.setItem(LIMIT_KEY,String(n));return n}catch(e){return cachedLimit()}}
 async function readCount(){if(!owner()||!client()||!connected())return 0;try{if(window.AbuBassamDeviceRegistry?.count)return Math.max(0,Number(await AbuBassamDeviceRegistry.count())||0);const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||''),actor=identity().id;if(!secret||!actor)throw new Error('تعذر التحقق من الجهاز الرئيسي');const {data,error}=await client().rpc('abu_bassam_owner_device_count',{p_actor_device_id:actor,p_actor_secret:secret});if(error)throw error;return Math.max(0,Number(data)||0)}catch(e){return 0}}
