@@ -11,6 +11,7 @@
   let session = null;
   let readyPromise = null;
   let authBusy = false;
+  let vaultAdapter = null;
   let authMemory = '';
   const nativePending = new Map();
   let nativeSeq = 0;
@@ -114,7 +115,11 @@
   }
 
   async function upsert(kind, clientId, data) {
-    if (['operation','vault','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.upsert) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.upsert(clientId, data);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const row = {
@@ -130,7 +135,11 @@
   }
 
   async function list(kind, limit = 1000) {
-    if (['operation','vault','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.list) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.list(limit);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE)
@@ -144,7 +153,11 @@
   }
 
   async function get(kind, clientId) {
-    if (['operation','vault','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.get) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.get(clientId);
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE)
@@ -158,7 +171,11 @@
   }
 
   async function removeKind(kind) {
-    if (['operation','vault','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
+    if (String(kind)==='vault') {
+      if (!vaultAdapter?.removeKind) throw new Error('VAULT_GATEWAY_NOT_READY');
+      return vaultAdapter.removeKind();
+    }
+    if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
     const account = requireUser();
     const result = await client.from(TABLE).delete().eq('user_id', account.id).eq('kind', String(kind));
@@ -385,6 +402,14 @@
     }, 120000);
   }
 
+  function registerVaultAdapter(adapter) {
+    if (!adapter || typeof adapter!=='object') throw new Error('INVALID_VAULT_ADAPTER');
+    for (const name of ['list','get','upsert','upload','download','remove']) if (typeof adapter[name]!=='function') throw new Error('INVALID_VAULT_ADAPTER');
+    vaultAdapter=Object.freeze({...adapter});
+    return true;
+  }
+  function unregisterVaultAdapter(adapter) { if (!adapter || vaultAdapter===adapter) vaultAdapter=null; }
+
   window.AbuBassamCloud = {
     ready,
     client,
@@ -398,6 +423,11 @@
     list,
     get,
     removeKind,
+    registerVaultAdapter,
+    unregisterVaultAdapter,
+    uploadVault:(...args)=>vaultAdapter?.upload?vaultAdapter.upload(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
+    downloadVault:(...args)=>vaultAdapter?.download?vaultAdapter.download(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
+    removeVault:(...args)=>vaultAdapter?.remove?vaultAdapter.remove(...args):Promise.reject(new Error('VAULT_GATEWAY_NOT_READY')),
   };
   window.AbuBassamOps = { add: addOperation, open: openOperations, close: closeOps, sync: () => syncOperations(true), list: loadOperations, login: openLogin, logout, isConnected: connected, pushSettings: pushPrintSettings };
   window.openOps = openOperations;
