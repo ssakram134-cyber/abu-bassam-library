@@ -91,7 +91,15 @@ let total=0;
 for(const file of files){const rel=path.relative(root,file).replaceAll('\\','/');const st=fs.statSync(file);total+=st.size;if(st.size>100*1024*1024)fail(`file too large: ${rel}`);const base=path.basename(file).toLowerCase(),ext=path.extname(file).toLowerCase();if(forbiddenNames.has(base)||forbiddenExt.has(ext))fail(`secret/signing file is forbidden: ${rel}`);if(/(^|\/)\.git(\/|$)/.test(rel))fail(`embedded git metadata is forbidden: ${rel}`);}
 if(total>500*1024*1024)fail('uncompressed source is larger than 500 MB');
 
-for(const file of files){if(!/\.(?:js|mjs)$/i.test(file))continue;const result=cp.spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(result.status!==0)fail(`JavaScript syntax error in ${path.relative(root,file)}: ${(result.stderr||result.stdout||'').trim()}`)}
+for(const file of files){
+  if(!/\.(?:js|mjs)$/i.test(file))continue;
+  const rel=path.relative(root,file).replaceAll('\\','/');
+  // index.js is the React Native entry and contains JSX. Plain `node --check`
+  // cannot parse JSX; Metro/Gradle validates this entry during the Android build.
+  if(rel==='index.js')continue;
+  const result=cp.spawnSync(process.execPath,['--check',file],{encoding:'utf8'});
+  if(result.status!==0)fail(`JavaScript syntax error in ${rel}: ${(result.stderr||result.stdout||'').trim()}`)
+}
 
 const scanExt=/\.(?:js|mjs|ts|json|yml|yaml|gradle|properties|html|sql)$/i;
 let approvedDesigner=false;
