@@ -87,8 +87,9 @@ function apply(closeAfter=true){
   try{window.fitToScreen?.();window.checkAutoFlow?.();window.scheduleQuestionDraft?.()}catch(e){}
   if(closeAfter)close();
 }
+function reportSupportError(src){try{window.parent?.postMessage({type:'abuQuestionRuntimeError',message:'تعذر تحميل مكون الأسئلة: '+src},'*')}catch(_){}}
 function loadSupport(){
-  [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js'],['abuQuestionCustomLibraryExternal','questions-custom-library-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
+  [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js','__ABU_Q_TEMPLATE_TOOLS__'],['abuQuestionCompletionExternal','questions-completion-runtime.js','__ABU_QUESTIONS_COMPLETION_V2__'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js','__ABU_QUESTION_MAINTENANCE_V1__'],['abuQuestionCustomLibraryExternal','questions-custom-library-runtime.js','__ABU_QUESTION_CUSTOM_LIBRARY_V1__']].forEach(([id,src,flag])=>{let old=document.getElementById(id);if(old&&window[flag])return;if(old)old.remove();let s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onload=()=>{if(!window[flag]){s.remove();reportSupportError(src)}};s.onerror=()=>{s.remove();reportSupportError(src)};document.head.appendChild(s)})
 }
 function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
 window.AbuQuestionPaper={open,close,preset,apply,deletePage,state:()=>({...state})};
