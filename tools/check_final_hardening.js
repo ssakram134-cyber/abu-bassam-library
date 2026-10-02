@@ -69,7 +69,7 @@ const envelopeIds=[...envelopeSection.matchAll(/id:'env-(\d+)'/g)].map(m=>Number
 if(envelopeIds.length!==9||envelopeIds.some((n,i)=>n!==i+1))errors.push(`card template library must contain exactly env-1..env-9; found ${envelopeIds.join(',')}`);
 if(envelopeSection.includes("env-10"))errors.push('card template library must not expose obsolete env-10');
 
-const deviceLimitMigration=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
+const deviceLimitMigration=read('supabase/migrations/20260926234535_strict_device_limit_owner_secret.sql');
 need(deviceLimitMigration,"coalesce(trim(p_actor_device_id),'') = ''",'device-limit change must reject an empty actor device id');
 need(deviceLimitMigration,"coalesce(p_actor_secret,'') = ''",'device-limit change must reject an empty owner secret');
 need(deviceLimitMigration,"coalesce(v_actor.secret_hash,'') = ''",'device-limit change must reject owner rows without a stored secret hash');
