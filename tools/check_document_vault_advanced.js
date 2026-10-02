@@ -19,6 +19,11 @@ need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must res
 need(vault,'LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY])','only legacy sync preferences may migrate across scopes');
 need(vault,'LEGACY_SYNC_PREFS.has(key)','last-sync state must remain scoped');
 need(hardening,"!key.includes(':')",'settings backup must exclude scoped branch/account keys');
+need(hardening,"manifest={format:'AbuBassamVault',version:7",'local backup manifest v7');
+need(hardening,'sha256=await blobHash(item.blob)','local backup must hash every file');
+need(hardening,"manifestVersion>=7&&!/^[0-9a-f]{64}$/i.test",'modern backups require valid file hashes');
+need(hardening,"blob.size!==declaredSize",'modern restore must verify declared size');
+need(hardening,"(await blobHash(blob))!==expected",'restore must reject SHA-256 mismatch');
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
