@@ -6,7 +6,7 @@ const runtime=read('web/branch-vault-runtime.js');
 const hard=read('web/document-vault-hardening-runtime.js');
 const guard=read('web/document-vault-permission-guard-runtime.js');
 const loader=read('web/device-name-runtime.js');
-const migration=read('supabase/migrations/202609240013_branch_private_document_vault.sql');
+const migration=read('supabase/migrations/20260924203338_branch_private_document_vault.sql');
 const edge=read('supabase/functions/branch-vault/index.ts');
 new vm.Script(runtime,{filename:'branch-vault-runtime.js'});new vm.Script(hard,{filename:'document-vault-hardening-runtime.js'});new vm.Script(guard,{filename:'document-vault-permission-guard-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
 for(const t of ['__ABU_BRANCH_VAULT_V1__','vaultView','vaultAdd','vaultEdit','vaultDelete','vaultExport','vaultSync','vaultBackup','abu_bassam_vault_list','abu_bassam_vault_get','abu_bassam_vault_upsert','uploadToSignedUrl','branch-vault','abuBassamVaultLocalScopeV1','الفروع الأخرى لا تستطيع رؤيتها'])need(runtime,t,t);
