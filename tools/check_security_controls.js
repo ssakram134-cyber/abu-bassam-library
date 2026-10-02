@@ -18,7 +18,8 @@ need('web/security-hardening-runtime.js',["SECURE_TRUST_KEY='abu_bassam_offline_
 forbid('web/security-hardening-runtime.js',['window.AbuBassamNativeSecurityResult']);
 need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
 forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
-need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
+need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})","if(!install())throw new Error('SECURITY_EXTRAS_REQUIRED')"]);
+forbid('web/password-policy-runtime.js',['setInterval(()=>{tries++','setTimeout(install,20)']);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
 need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()']);
 forbid('web/device-name-runtime.js',['login-throttle-fix-runtime.js','fail-closed-runtime.js',"cloud.list('device')"]);
