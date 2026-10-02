@@ -15,7 +15,7 @@
     "ios": "expo run:ios"
   },
   "engines": {
-    "node": ">=20 <25"
+    "node": ">=20.19 <25"
   },
   "dependencies": {
     "expo": "54.0.10",
