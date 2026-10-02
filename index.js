@@ -385,7 +385,7 @@ function App() {
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
         ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
-        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
+        allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
         onShouldStartLoadWithRequest={(request) => {
           const url = String(request?.url || '');
