@@ -32,6 +32,7 @@ no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const typography=read(path.join(web,'typography-runtime.js'));
 need(typography,'if(!save()){custom=before','custom font import rollback on persistence failure');
 need(typography,'return false','font persistence failure must be observable');
+for(const m of ["const oldState=localStorage.getItem(KEY),oldCustom=localStorage.getItem(CUSTOM_KEY)","localStorage.setItem(KEY,oldState)","localStorage.setItem(CUSTOM_KEY,oldCustom)",'تم التراجع عن التغيير غير المحفوظ'])need(typography,m,'atomic typography persistence '+m);
 need(typography,'function reloadPersisted()','restored typography must reload persisted state');
 need(typography,'custom=load(CUSTOM_KEY,[])','restored custom fonts must reload from storage');
 const loader=read(path.join(web,'device-name-runtime.js'));
