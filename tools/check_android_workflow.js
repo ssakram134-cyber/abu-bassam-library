@@ -37,6 +37,7 @@ for(const marker of [
   'npm run build:apk:local',
   "grep -qx 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES' dist/BUILD_TYPE.txt",
   'uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0',
+  'name: abu-bassam-android-test-${{ github.event.pull_request.head.sha || github.sha }}',
   'dist/*.apk',
   'dist/BUILD_TYPE.txt',
   'dist/SHA256.txt',
