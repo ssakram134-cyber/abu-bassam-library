@@ -263,14 +263,13 @@
     localStorage.setItem(OPS_KEY, JSON.stringify(operations.map(cleanOperation).slice(0, 500)));
   }
 
-  function addOperation(input, push = true) {
+  function addOperation(input) {
     const operation = cleanOperation(input);
     operation.id ||= uuid();
     operation.uploadedAt ||= new Date().toISOString();
     operation.deviceName ||= typeof window.AbuBassamDeviceName === 'function' ? window.AbuBassamDeviceName() : 'أكرم';
     saveOperations([operation, ...loadOperations().filter((item) => item.id !== operation.id)]);
     renderOperations();
-    if (push && connected()) upsert('operation', operation.id, operation).catch(() => {});
   }
 
   const labels = { print: 'طباعة', upload: 'تصوير / رفع', gallery: 'حفظ في المعرض', pdf: 'حفظ PDF', save: 'حفظ', open: 'فتح', rename: 'إعادة تسمية', delete: 'حذف', share: 'مشاركة', backup: 'نسخة احتياطية', restore: 'استعادة', sync: 'مزامنة', settings: 'إعدادات', crop: 'قص', failure: 'فشل معالجة', card: 'كارت' };
@@ -357,34 +356,26 @@
       if (manual) openLogin();
       return false;
     }
-    updateStatus('جاري مزامنة السجل والإعدادات...');
+    updateStatus('جاري مزامنة الإعدادات...');
     try {
-      const local = loadOperations();
-      await Promise.all(local.map((operation) => upsert('operation', operation.id, operation)));
-      const [rows, settings] = await Promise.all([list('operation', 500), list('settings', 10)]);
-      const map = new Map(local.map((operation) => [operation.id, operation]));
-      rows.forEach((row) => { if (row.data?.id) map.set(row.data.id, cleanOperation(row.data)); });
-      saveOperations([...map.values()].sort((left, right) => Date.parse(right.printedAt || right.uploadedAt || 0) - Date.parse(left.printedAt || left.uploadedAt || 0)));
+      const settings = await list('settings', 10);
       const shared = settings.find((row) => row.client_id === 'shared');
       if (shared?.data) localStorage.setItem('abuBassamPrintSettingsV1', JSON.stringify(shared.data));
       renderOperations();
-      updateStatus('تمت المزامنة الآمنة الآن ✓');
+      updateStatus('تمت مزامنة الإعدادات ✓');
       return true;
     } catch (error) {
-      updateStatus('تعذرت المزامنة الآن');
+      updateStatus('تعذرت مزامنة الإعدادات الآن');
       if (manual) alert(authMessage(error));
       return false;
     }
   }
 
   async function clearOperations() {
-    if (!confirm(connected() ? 'مسح السجل المحلي والسحابي؟' : 'مسح السجل المحلي؟')) return;
+    if (!confirm('مسح سجل العمليات المحلي من هذا الجهاز؟')) return;
     saveOperations([]);
     renderOperations();
-    if (connected()) {
-      try { await removeKind('operation'); updateStatus('تم مسح السجل المحلي والسحابي ✓'); }
-      catch (_) { updateStatus('مُسح المحلي فقط؛ تعذر الوصول للسحابة'); }
-    }
+    updateStatus('تم مسح السجل المحلي فقط ✓');
   }
 
   function wrapActions() {

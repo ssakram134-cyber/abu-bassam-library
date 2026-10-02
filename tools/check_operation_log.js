@@ -6,15 +6,19 @@ const runtimePath=path.join(root,'web','operation-log-corrections-runtime.js');
 const scrubPath=path.join(root,'web','operation-log-storage-migration-runtime.js');
 const loaderPath=path.join(root,'web','device-name-runtime.js');
 const migrationPath=path.join(root,'supabase','migrations','202609240011_strict_activity_device_secret.sql');
+const secureSyncPath=path.join(root,'web','secure-sync-runtime.js');
 const runtime=fs.readFileSync(runtimePath,'utf8');
 const scrub=fs.readFileSync(scrubPath,'utf8');
 const loader=fs.readFileSync(loaderPath,'utf8');
 const migration=fs.readFileSync(migrationPath,'utf8');
+const secureSync=fs.readFileSync(secureSyncPath,'utf8');
 const errors=[];
 const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
 try{new vm.Script(runtime,{filename:'operation-log-corrections-runtime.js'})}catch(e){errors.push(`operation log syntax: ${e.message}`)}
 try{new vm.Script(scrub,{filename:'operation-log-storage-migration-runtime.js'})}catch(e){errors.push(`operation scrub syntax: ${e.message}`)}
+try{new vm.Script(secureSync,{filename:'secure-sync-runtime.js'})}catch(e){errors.push(`secure sync syntax: ${e.message}`)}
+for(const marker of ["upsert('operation'","list('operation'","removeKind('operation')"])no(secureSync,marker,'retired direct operation sync');
 for(const marker of [
   '__ABU_OPERATION_LOG_CORRECTIONS_V2__',
   'abu_bassam_owner_activity_devices',
