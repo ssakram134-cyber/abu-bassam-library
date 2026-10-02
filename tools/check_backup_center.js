@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm');
 const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.readFileSync(p,'utf8')};
 const need=(s,t,l)=>{if(!s.includes(t))throw new Error(`backup center check failed: ${l}`)};
 const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`backup center check failed: ${l}`)};
-const runtime=read('web/backup-center-runtime.js'),loader=read('web/device-name-runtime.js'),edge=read('supabase/functions/backup-center/index.ts'),migration=read('supabase/migrations/202609260001_backup_center.sql'),state=read('supabase/migrations/202609260002_backup_snapshot_state.sql'),deny=read('supabase/migrations/202609260003_backup_metadata_direct_deny.sql');
+const runtime=read('web/backup-center-runtime.js'),loader=read('web/device-name-runtime.js'),edge=read('supabase/functions/backup-center/index.ts'),migration=read('supabase/migrations/20260926114655_backup_center.sql'),state=read('supabase/migrations/20260926114726_backup_snapshot_state.sql'),deny=read('supabase/migrations/20260926115616_backup_metadata_direct_deny.sql');
 new vm.Script(runtime,{filename:'backup-center-runtime.js'});
 for(const marker of ['__ABU_BACKUP_CENTER_V1__','AbuBassamDocumentVaultV4','CHUNK=5*1024*1024','MAX_ZIP=120*1024*1024','crypto.subtle.digest','fingerprint()','part_count:parts','uploadToSignedUrl','backup_kind:kind','pre_restore','retention()','backupCreate','backupRestore','backupDelete','SECURE_STORAGE_REQUIRED',"typeof restore!=='function'",'خدمة الاستعادة الآمنة غير جاهزة','visibilitychange','abu-bassam-auth-changed','15*60*1000','آخر 30 نسخة'])need(runtime,marker,marker);
 forbid(runtime,'__dev_secure_','backup center must never read the device secret from localStorage');
