@@ -128,6 +128,8 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
+  const cameraBusyRef = useRef(false);
+  const barcodeLockRef = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -149,6 +151,8 @@ function App() {
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    cameraBusyRef.current = false;
+    barcodeLockRef.current = false;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
@@ -182,6 +186,7 @@ function App() {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      cameraBusyRef.current = false; barcodeLockRef.current = false;
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
@@ -189,23 +194,35 @@ function App() {
   }, [cameraError, cameraPermission, requestCameraPermission]);
 
   const captureDocument = useCallback(async () => {
-    if (!cameraReady || cameraBusy || !cameraRef.current) return;
+    if (!cameraReady || cameraBusy || cameraBusyRef.current || !cameraRef.current) return;
+    cameraBusyRef.current = true;
     setCameraBusy(true);
+    let picture = null;
     try {
-      const picture = await cameraRef.current.takePictureAsync({ base64: true, exif: false, quality: 1, skipProcessing: false });
+      picture = await cameraRef.current.takePictureAsync({ base64: true, exif: false, quality: 1, skipProcessing: false });
       if (!picture?.base64) throw new Error('لم تُحفظ الصورة');
       const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
       closeCamera();
       inject('AbuBassamNativeCameraResult', { mode, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
-    } catch (_) { setCameraBusy(false); cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.'); }
+    } catch (_) {
+      setCameraBusy(false);
+      cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.');
+    } finally {
+      cameraBusyRef.current = false;
+      const cacheRoot = FileSystem.cacheDirectory;
+      if (picture?.uri && cacheRoot && String(picture.uri).startsWith(cacheRoot)) {
+        await FileSystem.deleteAsync(picture.uri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+    if (barcodeLocked || barcodeLockRef.current || !result?.data) return;
+    barcodeLockRef.current = true;
     setBarcodeLocked(true);
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
+    setTimeout(() => { barcodeLockRef.current = false; setBarcodeLocked(false); }, 500);
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
@@ -299,11 +316,12 @@ function App() {
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
+    let result = null;
     try {
       const value = String(html || '');
       if (!value.trim()) throw new Error('لا توجد كروت لحفظها');
       if (value.length > MAX_HTML_CHARS) throw new Error('محتوى PDF أكبر من الحد الآمن');
-      const result = await Print.printToFileAsync({ html: value, base64: true });
+      result = await Print.printToFileAsync({ html: value, base64: true });
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
@@ -311,13 +329,21 @@ function App() {
       if (!permission.granted) return;
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+    } catch (error) {
+      Alert.alert('تعذر حفظ PDF', String(error?.message || error));
+    } finally {
+      const cacheRoot = FileSystem.cacheDirectory;
+      if (result?.uri && cacheRoot && String(result.uri).startsWith(cacheRoot)) {
+        await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
-    const parsed = splitDataUrl(data), finalName = safeName(name), uri = `${FileSystem.cacheDirectory}abu_bassam_${Date.now()}_${finalName}`;
+    const cacheRoot = FileSystem.cacheDirectory;
+    if (!cacheRoot) throw new Error('مجلد الملفات المؤقتة غير متاح');
+    const parsed = splitDataUrl(data), finalName = safeName(name), uri = `${cacheRoot}abu_bassam_${Date.now()}_${finalName}`;
     await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
     return { uri, name: finalName, type: mime || parsed.mime };
   }, []);
@@ -436,7 +462,7 @@ function App() {
         onShouldStartLoadWithRequest={(request) => {
           const url = String(request?.url || '');
           if (url.startsWith('file:///android_asset/library/') || url === 'about:blank') return true;
-          if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});
+          if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) void openExternal({ url });
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
