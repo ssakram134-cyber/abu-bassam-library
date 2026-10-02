@@ -1,0 +1,256 @@
+{
+  "schema": 1,
+  "source": "supabase_migrations.schema_migrations",
+  "project_ref": "dlbxcqkbmvnrcrbhuttv",
+  "first_version": "20260920064926",
+  "last_version": "20261002001245",
+  "count": 41,
+  "entries": [
+    {
+      "version": "20260920064926",
+      "name": "secure_sync_v4_2",
+      "file": "20260920064926_secure_sync_v4_2.sql",
+      "sha256": "2a850de2bc3294ce94ae46a820caf9794d58dfe77a592a63fbe76417a97f62e4"
+    },
+    {
+      "version": "20260920065005",
+      "name": "secure_sync_least_privilege",
+      "file": "20260920065005_secure_sync_least_privilege.sql",
+      "sha256": "8464c3ff5a270a363e31380c15d0f27dfa1978d66f4b02f6e80b72c97d6fd17c"
+    },
+    {
+      "version": "20260920065840",
+      "name": "lock_legacy_sync",
+      "file": "20260920065840_lock_legacy_sync.sql",
+      "sha256": "ab0235f4efbcc449aeefb5bb33a4efdc793a0d4c620391a8df5dd627586da2e7"
+    },
+    {
+      "version": "20260920234839",
+      "name": "add_abu_bassam_device_security",
+      "file": "20260920234839_add_abu_bassam_device_security.sql",
+      "sha256": "3a3002c2e9331fb2cb3311b5b2801526bfa94741e1c1cbd601c2062726a1e46b"
+    },
+    {
+      "version": "20260920235847",
+      "name": "lock_down_abu_bassam_device_rpcs",
+      "file": "20260920235847_lock_down_abu_bassam_device_rpcs.sql",
+      "sha256": "6dc625c303ab9c2c1a46ce1a31f006e9b1a4a44fcdcba76afb3bc67840118d67"
+    },
+    {
+      "version": "20260921093251",
+      "name": "device_reconciliation",
+      "file": "20260921093251_device_reconciliation.sql",
+      "sha256": "619584e81f4df15743fde2e8112ec4c75e534b3e7c0968880c4ea03f065ef905"
+    },
+    {
+      "version": "20260921123051",
+      "name": "allow_authenticated_device_secret_rotation",
+      "file": "20260921123051_allow_authenticated_device_secret_rotation.sql",
+      "sha256": "4eb10494ac902e96bd3c237577a9f9ce4b701ff09d6a305352934ca886a96031"
+    },
+    {
+      "version": "20260924100414",
+      "name": "configurable_device_limit",
+      "file": "20260924100414_configurable_device_limit.sql",
+      "sha256": "174fa8da757a997786a14e59aadbb4ac550b675512c2ca5fcdd2a8a17b489220"
+    },
+    {
+      "version": "20260924100439",
+      "name": "notification_audit_center",
+      "file": "20260924100439_notification_audit_center.sql",
+      "sha256": "019471e9538a324a86be86daa5b0446f6fcbcf20320cadea7143f8b952e44475"
+    },
+    {
+      "version": "20260924100939",
+      "name": "operation_log_privacy_boundary",
+      "file": "20260924100939_operation_log_privacy_boundary.sql",
+      "sha256": "c0c40c2212a3df1de946d6e36efc2a16344bd8297f8ab63f336b478168d4196d"
+    },
+    {
+      "version": "20260924114428",
+      "name": "customer_documents_branch_isolation",
+      "file": "20260924114428_customer_documents_branch_isolation.sql",
+      "sha256": "c392c52d3ed82eb371a1e0e9ad906d6c66a0b4383a6d9759c9d6cd7e8312e685"
+    },
+    {
+      "version": "20260924122212",
+      "name": "customer_documents_workflow",
+      "file": "20260924122212_customer_documents_workflow.sql",
+      "sha256": "006be4537cd51f47df804e576fbaaf71e6c517e9cfef06d11922bf847825339e"
+    },
+    {
+      "version": "20260924134703",
+      "name": "device_registry_privacy_boundary",
+      "file": "20260924134703_device_registry_privacy_boundary.sql",
+      "sha256": "3919bc005fdd067ee71da74b4bc461b7a7a160cd22276c4ad5c5e0f400f5fe03"
+    },
+    {
+      "version": "20260924135306",
+      "name": "device_secret_representation",
+      "file": "20260924135306_device_secret_representation.sql",
+      "sha256": "6b9ac54a6fa2ff7220a81a7f2b8c9ec2e8f2355a9f98214505d8fad09042365a"
+    },
+    {
+      "version": "20260924135859",
+      "name": "private_tables_deny_all_and_device_index_cleanup",
+      "file": "20260924135859_private_tables_deny_all_and_device_index_cleanup.sql",
+      "sha256": "d70535e4add3c5b64f6f417e0c2e9a981dc0fcee5429d02001af8a34c7cc5bad"
+    },
+    {
+      "version": "20260924140905",
+      "name": "strict_device_registration_identity",
+      "file": "20260924140905_strict_device_registration_identity.sql",
+      "sha256": "69e3b9a1bc35345ed92d59f5bddc23ae7b4f9118581dc8456f2bec8753c2fc6d"
+    },
+    {
+      "version": "20260924141732",
+      "name": "atomic_customer_document_revisions",
+      "file": "20260924141732_atomic_customer_document_revisions.sql",
+      "sha256": "637bd5fba590c7976fe373aab579ba0d1482790764d04679f614f738025b6179"
+    },
+    {
+      "version": "20260924142207",
+      "name": "customer_document_bucket_mime_policy",
+      "file": "20260924142207_customer_document_bucket_mime_policy.sql",
+      "sha256": "0e50a743550b79456741a51c4b3ad2a7dfabb87eee2c27d029df7f8deb10ced1"
+    },
+    {
+      "version": "20260924200804",
+      "name": "strict_activity_device_secret",
+      "file": "20260924200804_strict_activity_device_secret.sql",
+      "sha256": "4ee26e6c4bac62b503a0e3865a776356ba714219724a55ed439d19c44bf028e2"
+    },
+    {
+      "version": "20260924201804",
+      "name": "notification_audit_server_redaction",
+      "file": "20260924201804_notification_audit_server_redaction.sql",
+      "sha256": "ceba62fc4a7621d049cc222a4a8959478e71360e6f6ae05011b5758d8aa8be48"
+    },
+    {
+      "version": "20260924203338",
+      "name": "branch_private_document_vault",
+      "file": "20260924203338_branch_private_document_vault.sql",
+      "sha256": "75f8820a7698025f89227de645f3617d6c261c57cec5c671ab622876b9fc02a8"
+    },
+    {
+      "version": "20260924225545",
+      "name": "advanced_admin_permissions",
+      "file": "20260924225545_advanced_admin_permissions.sql",
+      "sha256": "ddae204878f53a30c2738234c52f4d2d5a73aacf7ca1871205c44d5623fb5ccd"
+    },
+    {
+      "version": "20260924225659",
+      "name": "customer_permission_helper",
+      "file": "20260924225659_customer_permission_helper.sql",
+      "sha256": "129a5bef0747369d7cca963f859637b72910b5b249772d150cfbfdcec0b4859a"
+    },
+    {
+      "version": "20260924230011",
+      "name": "advanced_permissions_capacity",
+      "file": "20260924230011_advanced_permissions_capacity.sql",
+      "sha256": "4127d2c38a150d83266a67f2c9aeb77bfa21729556667c41e10e7014d9a92697"
+    },
+    {
+      "version": "20260925070831",
+      "name": "customer_permissions_enforcement",
+      "file": "20260925070831_customer_permissions_enforcement.sql",
+      "sha256": "868fe79372929200f0273e4c2063990b7b70a706c3ba3b01bff51db5a4db1bb0"
+    },
+    {
+      "version": "20260926114655",
+      "name": "backup_center",
+      "file": "20260926114655_backup_center.sql",
+      "sha256": "9cf109e7858ac377179378c0a5acd8b02f4897573554a2fc77ff02c3e1579159"
+    },
+    {
+      "version": "20260926114726",
+      "name": "backup_snapshot_state",
+      "file": "20260926114726_backup_snapshot_state.sql",
+      "sha256": "78684b0b47ed8547e43a7dedaa73ad65991f54dc30eb7ce74a6d04ee8c3175ae"
+    },
+    {
+      "version": "20260926115616",
+      "name": "backup_metadata_direct_deny",
+      "file": "20260926115616_backup_metadata_direct_deny.sql",
+      "sha256": "bb67b97c78e6ade80171b2c4d47034c48533ac6ffc8a1f573cec2214dd5add89"
+    },
+    {
+      "version": "20260926123021",
+      "name": "account_center_and_recovery",
+      "file": "20260926123021_account_center_and_recovery.sql",
+      "sha256": "e8bb88ec76ae97371d0f87c58ea0f3a4257c4258f65c4dbaaa4812ba9a72122d"
+    },
+    {
+      "version": "20260926123310",
+      "name": "account_recovery_rpcs",
+      "file": "20260926123310_account_recovery_rpcs.sql",
+      "sha256": "09dbfb48f0a5024c223e5a17b129d76eb96177231effc35b2f0d13b8488842ce"
+    },
+    {
+      "version": "20260926123759",
+      "name": "profile_least_privilege",
+      "file": "20260926123759_profile_least_privilege.sql",
+      "sha256": "c8a8daec4cf3f94034e61cf891f5c32574b3e2c9da051661c00c51f1b708a213"
+    },
+    {
+      "version": "20260926124544",
+      "name": "recovery_codes_explicit_deny",
+      "file": "20260926124544_recovery_codes_explicit_deny.sql",
+      "sha256": "27b7a3bab66b00994d877b236591befc748120c40f948e7806d5eb3eac6579c3"
+    },
+    {
+      "version": "20260926132541",
+      "name": "recovery_two_phase_safety",
+      "file": "20260926132541_recovery_two_phase_safety.sql",
+      "sha256": "0ca3fb87a7e13dcb821e9d5f8c4818825ad5491daaaa566b9cae0b183f7ff9aa"
+    },
+    {
+      "version": "20260926215416",
+      "name": "app_release_update_center",
+      "file": "20260926215416_app_release_update_center.sql",
+      "sha256": "718ff23df3b3541b552d9dc2d22d3786bb36bff8fa0d5b534284c9ab803435a5"
+    },
+    {
+      "version": "20260926221900",
+      "name": "app_release_publish_rpc",
+      "file": "20260926221900_app_release_publish_rpc.sql",
+      "sha256": "da4e78538301ea5743b1f25198aa70f67dabc8b79fca85a16be847b74dddd8e9"
+    },
+    {
+      "version": "20260926222206",
+      "name": "app_release_publisher_guard",
+      "file": "20260926222206_app_release_publisher_guard.sql",
+      "sha256": "3acbf1ab1eec22c5f98da113e1224071e2a284a2f08ab31b9600cb998235f917"
+    },
+    {
+      "version": "20260926222446",
+      "name": "release_signing_baseline",
+      "file": "20260926222446_release_signing_baseline.sql",
+      "sha256": "30c07754b364d514a65e33808c1b6c4246621d53f3f01402b7fe3910dfcae42d"
+    },
+    {
+      "version": "20260926234535",
+      "name": "strict_device_limit_owner_secret",
+      "file": "20260926234535_strict_device_limit_owner_secret.sql",
+      "sha256": "32c909d47ca3144dfd1c4f6f459aa8b6fc24e1fcb41dff9e294b23df5b6e34be"
+    },
+    {
+      "version": "20260926234810",
+      "name": "strict_device_secret_checks_all_paths",
+      "file": "20260926234810_strict_device_secret_checks_all_paths.sql",
+      "sha256": "75435ce6077d7fcb5ce511d05f567b11ab84709c1fce3b210026564409bd17f3"
+    },
+    {
+      "version": "20261001204929",
+      "name": "fix_release_code_reuse",
+      "file": "20261001204929_fix_release_code_reuse.sql",
+      "sha256": "129441a31e3e26d84085848e428f69718e0faad9ef83d5678d13803a7aba82f3"
+    },
+    {
+      "version": "20261002001245",
+      "name": "customer_document_upload_plan_volatility",
+      "file": "20261002001245_customer_document_upload_plan_volatility.sql",
+      "sha256": "cc28ce9c283fc7dcfe325a8f721963fe0bc619c60047fb939b707524a54d1e1a"
+    }
+  ]
+}
