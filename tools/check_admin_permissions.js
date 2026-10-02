@@ -5,9 +5,9 @@ const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`admin permissions check
 const runtime=read('web/admin-permissions-runtime.js');
 const guards=read('web/permission-section-guards-runtime.js');
 const loader=read('web/device-name-runtime.js');
-const migration=read('supabase/migrations/202609250001_advanced_admin_permissions.sql');
-const capacity=read('supabase/migrations/202609250003_advanced_permissions_capacity.sql');
-const helper=read('supabase/migrations/202609250002_customer_permission_helper.sql');
+const migration=read('supabase/migrations/20260924225545_advanced_admin_permissions.sql');
+const capacity=read('supabase/migrations/20260924230011_advanced_permissions_capacity.sql');
+const helper=read('supabase/migrations/20260924225659_customer_permission_helper.sql');
 const edge=read('supabase/functions/customer-documents/index.ts');
 new vm.Script(runtime,{filename:'admin-permissions-runtime.js'});
 new vm.Script(guards,{filename:'permission-section-guards-runtime.js'});
