@@ -104,6 +104,9 @@ need(hard,'window.AbuBassamNativeSecurity','canonical native security adapter re
 need(hard,"api.request('secureGet'",'SecureStore read must use canonical dispatcher');
 forbid(hard,'wrapSecurity()','obsolete customer-specific native security dispatcher');
 forbid(hard,"typeof Android.security==='function'",'direct native security bridge bypass');
+forbid(hard,'setInterval(','customer permission hardening must be event-driven, not polling');
+need(hard,"if(api.__permissionsHardeningV1){P.patched=true;return true}",'existing hardening wrapper must restore internal patched state');
+need(hard,"document.addEventListener('abu-runtime-loaded'",'customer hardening must react to runtime load events');
 forbid(hard,"__dev_secure_",'customer hardening must not read device secrets from localStorage');
 forbid(hard,".from('abu_bassam_devices')",'direct device table read in hardening runtime');
 forbid(workflow,'سلة محذوفات','recycle bin');
