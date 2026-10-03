@@ -7,7 +7,8 @@ const prepare=fs.readFileSync(path.join(root,'scripts/prepare-android-assets.mjs
 const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
 const requiredRecovery=[
   "function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||'').trim().toLowerCase()}",
-  "resetPasswordForEmail(accountEmail()",
+  "const email=accountEmail();if(!email)throw new Error('تعذر تحديد بريد الحساب المعتمد')",
+  "resetPasswordForEmail(email,{redirectTo:`${CALLBACK}?flow=${FLOW}`})",
   "exchangeCodeForSession(code)",
   "updateUser({password})",
   "abu-bassam-library://auth/callback",
