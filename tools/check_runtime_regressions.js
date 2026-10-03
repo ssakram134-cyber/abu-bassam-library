@@ -27,7 +27,7 @@ forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
 for(const metadataMarker of ["window.__ABU_APP_META__ =","releaseDate: RELEASE_DATE"])need(native,metadataMarker,'canonical native app metadata');
-for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js']){
+for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js','app-security-runtime.js','security-hardening-runtime.js']){
   const src=read(file);need(src,'__ABU_APP_META__','runtime app metadata');forbid(src,"'4.3.2'",'runtime hard-coded app version');
 }
 
