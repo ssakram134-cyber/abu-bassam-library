@@ -25,6 +25,8 @@ BLUE_DARK = "#063a72"
 SKY = "#eaf8ff"
 BLACK = "#0b0b0c"
 GOLD_LIGHT = "#efd08b"
+DEMO_LOGIN_EMAIL = "user@example.invalid"
+DEMO_LOGIN_PASSWORD = "DEMO-NOT-A-REAL-PASSWORD"
 
 
 def font(size: int, bold: bool = False):
@@ -222,10 +224,10 @@ def login_front():
     rtl(d, (1145, 343), "معلومات تسجيل الدخول", 39, "#111", bold=True, anchor="mm")
     rtl(d, (1555, 465), "البريد الإلكتروني", 35, GOLD_LIGHT, bold=True)
     d.rounded_rectangle((720, 495, 1560, 585), radius=22, fill="#fffdf5", outline=GOLD, width=4)
-    cap_text(d, 755, 513, "AkramA1992@gmail.com", 38)
+    cap_text(d, 755, 513, DEMO_LOGIN_EMAIL, 38)
     rtl(d, (1555, 675), "كلمة السر", 35, GOLD_LIGHT, bold=True)
     d.rounded_rectangle((720, 705, 1560, 795), radius=22, fill="#fffdf5", outline=GOLD, width=4)
-    cap_text(d, 755, 723, "AbuBassam2026", 42)
+    cap_text(d, 755, 723, DEMO_LOGIN_PASSWORD, 42)
     footer(im, "#2b2117", GOLD_LIGHT)
     return im
 
@@ -237,14 +239,14 @@ def login_back():
     d.rounded_rectangle((18, 18, W-18, H-18), radius=60, outline=GOLD, width=10)
     logo(im, (70, 50, 405, 305))
     rtl(d, (1550, 145), "معلوماتك لتسجيل الدخول إلى فيسبوك", 58, GOLD_LIGHT, bold=True)
-    qr(im, "الخدمة: Facebook\nالبريد: AkramA1992@gmail.com\nكلمة السر: AbuBassam2026\nملاحظات: حساب شخصي", (85, 355, 640, 910), ink="#050505", border=GOLD)
+    qr(im, f"الخدمة: Facebook\nالبريد: {DEMO_LOGIN_EMAIL}\nكلمة السر: {DEMO_LOGIN_PASSWORD}\nملاحظات: بيانات تجريبية غير حقيقية", (85, 355, 640, 910), ink="#050505", border=GOLD)
     d.rounded_rectangle((705, 345, 1605, 840), radius=38, outline=GOLD, width=5)
     rtl(d, (1530, 450), "الخدمة:", 38, GOLD_LIGHT, bold=True)
     rtl(d, (1190, 450), "Facebook", 42, "white", bold=True, anchor="ra")
     rtl(d, (1530, 585), "البريد:", 38, GOLD_LIGHT, bold=True)
-    d.text((760, 585), "AkramA1992@gmail.com", font=font(34, True), fill="white", anchor="la")
+    d.text((760, 585), DEMO_LOGIN_EMAIL, font=font(34, True), fill="white", anchor="la")
     rtl(d, (1530, 720), "كلمة السر:", 38, GOLD_LIGHT, bold=True)
-    d.text((760, 720), "AbuBassam2026", font=font(38, True), fill="white", anchor="la")
+    d.text((760, 720), DEMO_LOGIN_PASSWORD, font=font(38, True), fill="white", anchor="la")
     rtl(d, (1150, 810), "الحروف الكبيرة تظهر بالأحمر في الوجه الأمامي", 28, "#ff9a9a", bold=True, anchor="mm")
     footer(im, "#2b2117", GOLD_LIGHT)
     return im
