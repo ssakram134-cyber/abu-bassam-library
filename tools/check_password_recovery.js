@@ -6,8 +6,7 @@ const recovery=fs.readFileSync(path.join(root,'web/password-recovery-runtime.js'
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-android-assets.mjs'),'utf8');
 const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
 const requiredRecovery=[
-  "const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com'",
-  "function accountEmail()",
+  "function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||'').trim().toLowerCase()}",
   "resetPasswordForEmail(accountEmail()",
   "exchangeCodeForSession(code)",
   "updateUser({password})",
@@ -19,6 +18,7 @@ const requiredRecovery=[
 ];
 for(const needle of requiredRecovery){if(!recovery.includes(needle))throw new Error(`password recovery missing: ${needle}`)}
 if(recovery.includes('akramag1992@gmail.com'))throw new Error('password recovery contains obsolete incorrect account email');
+if(/DEFAULT_ACCOUNT_EMAIL|akrama1992@gmail\.com/.test(recovery))throw new Error('password recovery must derive the account email from the canonical security identity');
 const requiredPrepare=[
   "const source = resolve(projectRoot, 'web')",
   "await rm(destination, { recursive: true, force: true });",
