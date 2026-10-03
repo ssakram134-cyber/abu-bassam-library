@@ -24,7 +24,7 @@ for(const filename of ['index.html','questions-ar.html','questions-en.html','ima
   while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${filename}#${index}`})}catch(e){errors.push(`${filename} inline script ${index}: ${e.message}`)}}
 }
 const packageJson=JSON.parse(readRoot('package.json'));
-if(!/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(String(packageJson.version||'')))errors.push(`package.json: invalid semantic version ${packageJson.version||'missing'}`);
+if(!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(String(packageJson.version||'')))errors.push(`package.json: invalid semantic version ${packageJson.version||'missing'}`);
 if(packageJson.engines?.node!=='>=20.19 <25')errors.push(`package.json: Node engine must remain >=20.19 <25`);
 for(const dep of ['expo','react-native','react-native-webview','expo-print','expo-secure-store','expo-local-authentication','expo-camera'])if(!packageJson.dependencies?.[dep])errors.push(`package.json: missing ${dep}`);
 const appJson=JSON.parse(readRoot('app.json'));const expoConfig=appJson.expo||{},android=expoConfig.android||{};
