@@ -37,7 +37,17 @@ const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
 ];
-const SECURE_KEY = /^abu_bassam_[a-z0-9_]{3,80}$/i;
+const SECURE_KEYS = new Set([
+  'abu_bassam_auth_session_v1',
+  'abu_bassam_auth_callback_v1',
+  'abu_bassam_device_secret_v1',
+  'abu_bassam_biometric_enabled_v1',
+  'abu_bassam_offline_trust_v2',
+  'abu_bassam_danger_pin_hash_v1',
+  'abu_bassam_danger_pin_failures_v1',
+  'abu_bassam_danger_pin_lock_until_v1',
+  'abu_bassam_recovery_pending_secret_v1',
+]);
 
 const ANDROID_BRIDGE = `
 (function () {
@@ -354,7 +364,7 @@ function App() {
 
   const handleSecurity = useCallback(async (message) => {
     const action = String(message.action || ''), requestId = String(message.requestId || ''), payload = message.payload && typeof message.payload === 'object' ? message.payload : {};
-    const safeKey = () => { const key = String(payload.key || ''); if (!SECURE_KEY.test(key)) throw new Error('مفتاح التخزين الآمن غير مسموح'); return key; };
+    const safeKey = () => { const key = String(payload.key || ''); if (!SECURE_KEYS.has(key)) throw new Error('مفتاح التخزين الآمن غير مسموح'); return key; };
     try {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
       if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
