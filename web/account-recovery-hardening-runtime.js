@@ -10,7 +10,7 @@ const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';
 const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
 const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
 const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
-const APP='4.3.2';
+const APP=String(window.__ABU_APP_META__?.version||'');
 let googleBusy=false,recoveryBusy=false;
 const $=id=>document.getElementById(id);
 function setMsg(text,bad=false){const e=$('acctMsg');if(e){e.textContent=String(text||'');e.style.color=bad?'#a52e3b':'#087f72'}}
