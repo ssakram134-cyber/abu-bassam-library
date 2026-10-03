@@ -1,7 +1,8 @@
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
-const APP_VERSION='4.3.2',BUILD_NUMBER='432',RELEASE_DATE='2026-09-20';
+const APP_META=window.__ABU_APP_META__||{};
+const APP_VERSION=String(APP_META.version||'—'),BUILD_NUMBER=String(APP_META.buildNumber||'—'),RELEASE_DATE=String(APP_META.releaseDate||'—');
 const APP_NAME='مكتبة أبو بسام',LIBRARY_NAME='مكتبة أبو بسام للتصوير والقرطاسية';
 const PROGRAMMER='أكرم حاتم الغزالي',PHONE='07829667521';
 const AUTO_SYNC_KEY='abuBassamVaultAutoSyncV4',SYNC_POLICY_KEY='abuBassamSyncPolicyV5',WA_KEY='abuBassamWhatsAppSettingsV5';

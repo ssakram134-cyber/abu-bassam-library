@@ -1,7 +1,7 @@
 (()=>{
 'use strict';
 if(window.__ABU_ACCOUNT_CENTER_V1__)return;window.__ABU_ACCOUNT_CENTER_V1__=true;
-const PROFILE='abu_bassam_profiles',BUCKET='abu-bassam-private',CALLBACK='abu-bassam-library://auth/callback',CALLBACK_KEY='abu_bassam_auth_callback_v1',SECRET_KEY='abu_bassam_device_secret_v1',APP='4.3.2';
+const PROFILE='abu_bassam_profiles',BUCKET='abu-bassam-private',CALLBACK='abu-bassam-library://auth/callback',CALLBACK_KEY='abu_bassam_auth_callback_v1',SECRET_KEY='abu_bassam_device_secret_v1',APP=String(window.__ABU_APP_META__?.version||'');
 const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3',DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3',DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3',VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
 const $=id=>document.getElementById(id);let built=false,busy=false,profile=null,avatarUrl='',callbackFails=0,lastRecoveryCode='';
 const cloud=()=>window.AbuBassamCloud,client=()=>cloud()?.client||null,session=()=>cloud()?.session?.()||null,user=()=>session()?.user||null;

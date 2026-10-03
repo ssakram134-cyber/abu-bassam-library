@@ -41,6 +41,9 @@
     ],
     "platforms": [
       "android"
-    ]
+    ],
+    "extra": {
+      "releaseDate": "2026-09-20"
+    }
   }
 }

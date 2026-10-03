@@ -30,6 +30,7 @@ const RCTAbuBassamWebView = requireNativeComponent('RCTAbuBassamWebView');
 const APP_CONFIG = require('./app.json').expo;
 const APP_VERSION = String(APP_CONFIG.version || '');
 const BUILD_NUMBER = String(APP_CONFIG.android?.versionCode || '');
+const RELEASE_DATE = String(APP_CONFIG.extra?.releaseDate || '');
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
@@ -40,6 +41,7 @@ const SECURE_KEY = /^abu_bassam_[a-z0-9_]{3,80}$/i;
 
 const ANDROID_BRIDGE = `
 (function () {
+  window.__ABU_APP_META__ = ${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })};
   function send(type, payload) {
     try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
     catch (error) {}

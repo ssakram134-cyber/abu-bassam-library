@@ -3,7 +3,8 @@
 if(window.__ABU_APP_UPDATE_V1__)return;
 window.__ABU_APP_UPDATE_V1__=true;
 const ENDPOINT='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/app-update';
-const APP_VERSION='4.3.2',BUILD_NUMBER=432,LAST_CHECK_KEY='abuBassamUpdateLastCheckV1';
+const APP_META=window.__ABU_APP_META__||{};
+const APP_VERSION=String(APP_META.version||''),BUILD_NUMBER=Number(APP_META.buildNumber||0),LAST_CHECK_KEY='abuBassamUpdateLastCheckV1';
 let state={busy:false,result:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,6 +28,7 @@ async function check(options={}){
   if(state.busy)return state.result;state.busy=true;
   const btn=$('abuUpdateCheck');if(btn)btn.disabled=true;
   try{
+    if(!APP_VERSION||!Number.isInteger(BUILD_NUMBER)||BUILD_NUMBER<=0)throw new Error('APP_METADATA_UNAVAILABLE');
     if(!navigator.onLine)throw new Error('OFFLINE');
     await window.AbuBassamCloud?.ready?.();const s=session();if(!s?.access_token)throw new Error('LOGIN_REQUIRED');
     status('جاري فحص آخر إصدار...');
@@ -35,7 +37,7 @@ async function check(options={}){
     const data=await r.json().catch(()=>({}));if(!r.ok||data.error)throw new Error(data.error||'UPDATE_CHECK_FAILED');
     localStorage.setItem(LAST_CHECK_KEY,new Date().toISOString());renderResult(data);return data;
   }catch(e){
-    const m=String(e?.message||e);if(m==='LOGIN_REQUIRED')status('سجّل الدخول إلى حسابك الشخصي أولًا لفحص التحديثات.','warn');else if(m==='OFFLINE')status('لا يوجد اتصال بالإنترنت.','warn');else status('تعذر فحص التحديث الآن: '+m,'warn');if(!options.silent)console.warn('update check',m);return null;
+    const m=String(e?.message||e);if(m==='APP_METADATA_UNAVAILABLE')status('تعذر تحديد إصدار التطبيق الحالي. أعد فتح التطبيق ثم حاول مرة أخرى.','warn');else if(m==='LOGIN_REQUIRED')status('سجّل الدخول إلى حسابك الشخصي أولًا لفحص التحديثات.','warn');else if(m==='OFFLINE')status('لا يوجد اتصال بالإنترنت.','warn');else status('تعذر فحص التحديث الآن: '+m,'warn');if(!options.silent)console.warn('update check',m);return null;
   }finally{state.busy=false;if(btn)btn.disabled=false}
 }
 function buildCard(){

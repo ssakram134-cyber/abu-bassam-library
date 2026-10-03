@@ -26,6 +26,11 @@ for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi()
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
+for(const metadataMarker of ["window.__ABU_APP_META__ =","releaseDate: RELEASE_DATE"])need(native,metadataMarker,'canonical native app metadata');
+for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js']){
+  const src=read(file);need(src,'__ABU_APP_META__','runtime app metadata');forbid(src,"'4.3.2'",'runtime hard-coded app version');
+}
+
 for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
 for(const marker of ['webViewKey','restartWebView','onRenderProcessGone','nativeConfig={{ component: RCTAbuBassamWebView }}'])need(native,marker,'native WebView recovery');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
@@ -33,6 +38,9 @@ const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
 for(const marker of ['clearOrphanInteractionLayers',"#paperZoomOverlay.show","window.closeSheets","el.classList.contains('sheet')"])need(security,marker,'touch/backdrop cleanup');
 const sectionGuards=read('permission-section-guards-runtime.js');
+need(sectionGuards,"#cardsCenter,.cs-modal,#abuRecoveryModal",'card permission context');
+forbid(sectionGuards,'[class*="card" i]','over-broad card permission context');
+
 for(const marker of ["const secondary=()=>window.AbuBassamSecurity?.role?.()==='secondary'","abu-bassam-security-state","abuSectionGuarded"])need(sectionGuards,marker,'secondary permission UI restoration');
 const adminPermissions=read('admin-permissions-runtime.js');
 for(const marker of ['setUiGuardDisabled','restorePermissionUi',"role()!=='secondary'","abu-bassam-security-state","abuPermissionHidden"])need(adminPermissions,marker,'permission UI lifecycle restoration');
