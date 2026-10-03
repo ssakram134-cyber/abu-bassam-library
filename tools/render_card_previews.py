@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import math
 import subprocess
 from pathlib import Path
 
@@ -71,7 +70,7 @@ def logo(im: Image.Image, box):
 
 
 def qr_matrix(payload: str):
-    raw = subprocess.check_output(["node", str(ROOT / "tools" / "qr_matrix.js"), payload, "M"], text=True)
+    raw = subprocess.check_output(["node", str(ROOT / "tools" / "qr_matrix.js"), payload, "M"], text=True, timeout=10)
     return json.loads(raw)
 
 
