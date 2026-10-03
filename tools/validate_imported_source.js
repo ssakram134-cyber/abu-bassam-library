@@ -40,7 +40,10 @@ if(Number.isInteger(trustedVersionCode)&&trustedVersionCode>0){
 }
 if(pkg.main!=='index-auth.js')fail('package main must remain index-auth.js so auth callbacks are captured before the native app entry');
 if(app.slug!=='abu-bassam-library')fail('unexpected Expo slug');
+if(JSON.stringify(app.platforms)!=='["android"]')fail('project must remain explicitly Android-only');
 if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Android package');
+const cameraPlugin=(app.plugins||[]).find(p=>Array.isArray(p)&&p[0]==='expo-camera');
+if(!cameraPlugin||cameraPlugin[1]?.recordAudioAndroid!==false)fail('expo-camera must keep recordAudioAndroid=false');
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
 const lockRoot=lock.packages?.[''];
 if(!lockRoot||lockRoot.name!==pkg.name||lockRoot.version!==pkg.version)fail('package-lock root package identity/version does not match package.json');
@@ -66,7 +69,7 @@ need('index.js',[
   'expo-secure-store','expo-local-authentication','expo-screen-capture'
 ]);
 forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"']);
-need('index-auth.js',['validAuthCallback','base !== AUTH_CALLBACK_PREFIX','await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value)','lastCallback = value',"require('./index.js')"]);
+need('index-auth.js',['validAuthCallback','MAX_AUTH_CALLBACK_LENGTH = 8192','value.length > MAX_AUTH_CALLBACK_LENGTH','base !== AUTH_CALLBACK_PREFIX','await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value)','lastCallback = value',"require('./index.js')"]);
 forbid('index-auth.js',['.startsWith(AUTH_CALLBACK_PREFIX)']);
 const authEntry=read('index-auth.js'),secureWrite=authEntry.indexOf('await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value)'),dedupeWrite=authEntry.indexOf('lastCallback = value');
 if(secureWrite<0||dedupeWrite<secureWrite)fail('auth callback must be marked handled only after SecureStore write succeeds');
