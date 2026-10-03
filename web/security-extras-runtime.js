@@ -5,6 +5,8 @@ window.__ABU_SECURITY_EXTRAS_V1__=true;
 
 const $=id=>document.getElementById(id);
 const PIN_KEY='abu_bassam_danger_pin_hash_v1';
+const PIN_FAIL_KEY='abu_bassam_danger_pin_failures_v1';
+const PIN_LOCK_KEY='abu_bassam_danger_pin_lock_until_v1';
 const SNAPSHOT_KEY='abuBassamEmergencySnapshotV1';
 const PRIVACY_KEY='abuBassamPrivacyModeV1';
 let bypassTarget=null;
@@ -24,16 +26,43 @@ async function digest(value){
   return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('')
 }
 async function pinHash(){return String(await nativeRequest('secureGet',{key:PIN_KEY})||'')}
-function validPin(value){return /^\d{4,8}$/.test(String(value||''))}
+async function pinThrottleState(){
+  const failures=Math.max(0,Number(await nativeRequest('secureGet',{key:PIN_FAIL_KEY})||0)||0);
+  const lockUntil=Math.max(0,Number(await nativeRequest('secureGet',{key:PIN_LOCK_KEY})||0)||0);
+  if(lockUntil&&lockUntil<=Date.now()){await nativeRequest('secureDelete',{key:PIN_LOCK_KEY}).catch(()=>{});return{failures,lockUntil:0}}
+  return{failures,lockUntil}
+}
+async function clearPinFailures(){await nativeRequest('secureDelete',{key:PIN_FAIL_KEY}).catch(()=>{});await nativeRequest('secureDelete',{key:PIN_LOCK_KEY}).catch(()=>{})}
+async function recordPinFailure(){
+  const state=await pinThrottleState(),failures=state.failures+1;
+  if(failures<5){await nativeRequest('secureSet',{key:PIN_FAIL_KEY,value:String(failures)});return{failures,lockUntil:0}}
+  const blocks=Math.max(1,Math.floor(failures/5)),duration=Math.min(15*60*1000,30000*(2**Math.min(5,blocks-1))),lockUntil=Date.now()+duration;
+  await nativeRequest('secureSet',{key:PIN_FAIL_KEY,value:String(failures)});
+  await nativeRequest('secureSet',{key:PIN_LOCK_KEY,value:String(lockUntil)});
+  return{failures,lockUntil}
+}
+function pinWaitText(ms){const seconds=Math.max(1,Math.ceil(ms/1000));return seconds<60?`${seconds} ثانية`:`${Math.ceil(seconds/60)} دقيقة`}
+async function verifyStoredPin(reason){
+  const state=await pinThrottleState();
+  if(state.lockUntil>Date.now()){alert(`تم إيقاف محاولات الرمز مؤقتًا. حاول بعد ${pinWaitText(state.lockUntil-Date.now())}.`);return false}
+  const hash=await pinHash();if(!hash)return false;
+  const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
+  if(await digest(value)===hash){await clearPinFailures();return true}
+  const failed=await recordPinFailure();
+  if(failed.lockUntil>Date.now())alert(`رمز العمليات الحساسة غير صحيح. تم إيقاف المحاولات مؤقتًا لمدة ${pinWaitText(failed.lockUntil-Date.now())}.`);
+  else alert(`رمز العمليات الحساسة غير صحيح. المتبقي قبل الإيقاف المؤقت: ${Math.max(0,5-(failed.failures%5))}.`);
+  log('فشل تحقق رمز العمليات الحساسة',reason);return false
+}
+function validPin(value){return /^\d{6,8}$/.test(String(value||''))}
 async function setDangerPin(){
   if(!isOwner())return alert('رمز العمليات الحساسة يضبطه الجهاز الرئيسي فقط.');
   if(!requireNativeSecurity())return;
   try{
     const existing=await pinHash();
-    if(existing){const old=String(prompt('أدخل رمز العمليات الحساسة الحالي:')||'');if(await digest(old)!==existing)return alert('الرمز الحالي غير صحيح.')}
-    const first=String(prompt('اختر رمزًا رقميًا من ٤ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز يجب أن يتكون من ٤ إلى ٨ أرقام.');
+    if(existing&&!(await verifyStoredPin('تغيير رمز العمليات الحساسة')))return;
+    const first=String(prompt('اختر رمزًا رقميًا من ٦ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز الجديد يجب أن يتكون من ٦ إلى ٨ أرقام.');
     const second=String(prompt('أعد كتابة الرمز للتأكيد:')||'');if(first!==second)return alert('الرمزان غير متطابقين.');
-    await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
+    await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});await clearPinFailures();log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
   }catch(e){alert('تعذر حفظ رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function removeDangerPin(){
@@ -41,8 +70,8 @@ async function removeDangerPin(){
   if(!requireNativeSecurity())return;
   try{
     const hash=await pinHash();if(!hash)return;
-    const value=String(prompt('أدخل رمز العمليات الحساسة لإلغائه:')||'');if(await digest(value)!==hash)return alert('الرمز غير صحيح.');
-    await nativeRequest('secureDelete',{key:PIN_KEY});log('إلغاء رمز العمليات الحساسة');render()
+    if(!(await verifyStoredPin('إلغاء رمز العمليات الحساسة')))return;
+    await nativeRequest('secureDelete',{key:PIN_KEY});await clearPinFailures();log('إلغاء رمز العمليات الحساسة');render()
   }catch(e){alert('تعذر إلغاء رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function verifyDangerPin(reason='هذه عملية حساسة'){
@@ -51,9 +80,7 @@ async function verifyDangerPin(reason='هذه عملية حساسة'){
   try{
     let hash=await pinHash();
     if(!hash){if(!confirm(`${reason}\nلم يتم إنشاء رمز مستقل للعمليات الحساسة بعد. سيتم إنشاؤه الآن قبل المتابعة.`))return false;await setDangerPin();hash=await pinHash();if(!hash)return false}
-    const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
-    if(await digest(value)!==hash){alert('رمز العمليات الحساسة غير صحيح.');log('فشل تحقق رمز العمليات الحساسة',reason);return false}
-    return true
+    return verifyStoredPin(reason)
   }catch(e){alert('تعذر التحقق من رمز العمليات الحساسة: '+String(e?.message||e));return false}
 }
 
