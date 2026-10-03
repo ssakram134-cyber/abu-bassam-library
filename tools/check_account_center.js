@@ -20,5 +20,7 @@ for(const marker of ['create or replace function public.abu_bassam_recover_devic
 forbid(twoPhase,'next_recovery_code','two-phase server must not rotate recovery code before local secret persistence');
 need(password,"AbuBassamCloud?.session?.()?.user?.email",'password change must use current signed-in account email');
 forbid(password,"const MAIN_EMAIL=",'password change must not hardcode one account email');
+need(runtime,"async function localArchiveEmpty(){try{const stats=window.DocumentVault?.stats;if(typeof stats!=='function')return false;",'legacy recovery archive check must fail closed');
+forbid(runtime,'catch{return true}','legacy recovery archive check must not fail open');
 forbid(runtime,'SUPABASE_SERVICE_ROLE_KEY','client must not contain service role key');forbid(runtime,'service_role','client must not contain service role marker');forbid(hardening,'SUPABASE_SERVICE_ROLE_KEY','hardening client must not contain service role key');
 console.log('account center checks passed: exact retry-safe native callback capture, profile, least privilege, explicit recovery-code deny, fail-closed local archive recovery guard, retry-safe two-phase recovery, visible-code copy/share, external Google OAuth, stale callback cleanup, branch-vault enforcement, strong signup, password recovery, private avatar, current-account password change, and owner-device recovery are wired.');
