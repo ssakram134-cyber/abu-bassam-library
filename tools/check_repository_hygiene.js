@@ -3,12 +3,13 @@ const path=require('path');
 const vm=require('vm');
 const root=path.resolve(__dirname,'..');
 const failures=[];
-const authoredExt=new Set(['.js','.html','.mjs','.ts','.sql','.json','.yml','.yaml','.gradle','.md']);
+const authoredExt=new Set(['.js','.html','.mjs','.ts','.sql','.json','.yml','.yaml','.gradle','.md','.py']);
 const vendorNames=new Set(['jspdf.umd.min.js','jszip.min.js','supabase-2.58.0.js','qrcode.js','qrcode_UTF8.js']);
 const secretExt=/\.(?:jks|keystore|p12|pfx|pem|key)$/i;
 const forbiddenSecretNames=/^(?:\.env(?:\..*)?|id_rsa|id_ed25519)$/i;
-const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows'];
+const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows','tools'];
 const forbiddenLegacyFiles=['tools/rebuild_apk.py','tools/apk_v2.py','tools/verify_release.py'];
+const unfinishedWorkPattern=new RegExp(`\\b(?:${'TO'+'DO'}|${'FIX'+'ME'})\\b`,'i');
 const files=[];
 
 function walk(dir){
@@ -34,14 +35,18 @@ for(const full of files){
   const src=fs.readFileSync(full,'utf8');
   if(src.includes('\0'))failures.push(`${rel}: contains NUL byte`);
   if(/^(?:<{7}|={7}|>{7})(?: .*)?$/m.test(src))failures.push(`${rel}: unresolved merge-conflict marker`);
-  if(!vendorNames.has(base)&&['.js','.html','.mjs','.ts'].includes(ext)&&/\b(?:TODO|FIXME)\b/i.test(src))failures.push(`${rel}: TODO/FIXME left in executable source`);
+  if(!vendorNames.has(base)&&['.js','.html','.mjs','.ts','.py'].includes(ext)&&unfinishedWorkPattern.test(src))failures.push(`${rel}: unfinished-work marker left in executable source`);
   if(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(src))failures.push(`${rel}: embedded private key detected`);
   if(/\bghp_[A-Za-z0-9]{30,}\b/.test(src)||/\bgithub_pat_[A-Za-z0-9_]{30,}\b/.test(src))failures.push(`${rel}: embedded GitHub credential detected`);
   if(/\bsb_secret_[A-Za-z0-9_-]{20,}\b/.test(src))failures.push(`${rel}: embedded Supabase secret key detected`);
   if(src.includes('com.akramghazali.phonerepair'))failures.push(`${rel}: obsolete PhoneRepair package identity returned`);
   if(src.includes('مركز أكرم الغزالي'))failures.push(`${rel}: obsolete application identity returned`);
-  if(rel.startsWith('web/')&&ext==='.js'&&!vendorNames.has(base)){
+  if((rel.startsWith('web/')||rel.startsWith('tools/'))&&ext==='.js'&&!vendorNames.has(base)){
     try{new vm.Script(src,{filename:rel})}catch(e){failures.push(`${rel}: JavaScript syntax error: ${e.message}`)}
+  }
+  if(rel==='tools/render_card_previews.py'){
+    if(/@gmail\.com/i.test(src))failures.push(`${rel}: preview generator must not embed personal Gmail credentials`);
+    if(!src.includes('user@example.invalid')||!src.includes('DEMO-NOT-A-REAL-PASSWORD'))failures.push(`${rel}: preview generator must use explicit non-secret demo credentials`);
   }
 }
 
