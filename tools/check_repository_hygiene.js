@@ -45,8 +45,13 @@ for(const full of files){
     try{new vm.Script(src,{filename:rel})}catch(e){failures.push(`${rel}: JavaScript syntax error: ${e.message}`)}
   }
   if(rel==='tools/render_card_previews.py'){
-    for(const marker of ['DEMO_LOGIN_EMAIL = "user@example.invalid"','DEMO_LOGIN_PASSWORD = "DEMO-NOT-A-REAL-PASSWORD"','cap_text(d, 755, 513, DEMO_LOGIN_EMAIL','cap_text(d, 755, 723, DEMO_LOGIN_PASSWORD','{DEMO_LOGIN_EMAIL}','{DEMO_LOGIN_PASSWORD}']){
+    for(const marker of ['DEMO_LOGIN_EMAIL = "user@example.invalid"','DEMO_LOGIN_PASSWORD = "DEMO-NOT-A-REAL-PASSWORD"','cap_text(d, 755, 513, DEMO_LOGIN_EMAIL','cap_text(d, 755, 723, DEMO_LOGIN_PASSWORD','timeout=10','{DEMO_LOGIN_EMAIL}','{DEMO_LOGIN_PASSWORD}']){
       if(!src.includes(marker))failures.push(`${rel}: login preview must use explicit non-secret demo credentials: ${marker}`);
+    }
+  }
+  if(rel==='tools/qr_matrix.js'){
+    for(const marker of ['MAX_PAYLOAD_BYTES = 1000',"VALID_LEVELS = new Set(['L', 'M', 'Q', 'H'])","Buffer.byteLength(payload, 'utf8')",'count > 177']){
+      if(!src.includes(marker))failures.push(`${rel}: bounded QR utility safeguard missing: ${marker}`);
     }
   }
 }
