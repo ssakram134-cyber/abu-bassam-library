@@ -32,7 +32,7 @@ const layouts=read('standalone-card-layouts-plus-runtime.js');for(const m of ['a
 const appSecurity=read('app-security-runtime.js');for(const m of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','recordCredentialFailure','clearCredentialFailures','signOut({scope:\'local\'})'])need(appSecurity,m,'core login security');
 const direction=read('login-input-direction-runtime.js');for(const m of ["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"])need(direction,m,'login LTR');
 
-const native=rootRead('index.js');for(const m of ["message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])need(native,m,'native startup');
+const native=rootRead('index.js');for(const m of ["message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onShouldStartLoadWithRequest','onRenderProcessGone'])need(native,m,'native startup');
 for(const m of ['onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}','onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}'])forbid(native,m,'native startup');
 for(const f of files.filter(x=>x.endsWith('.js'))){try{new vm.Script(read(f),{filename:f})}catch(e){errors.push(`${f}: ${e.message}`)}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
