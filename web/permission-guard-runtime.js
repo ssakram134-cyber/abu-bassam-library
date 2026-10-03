@@ -39,9 +39,27 @@ function keyGuard(event){
   if(!secondary()||allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
   if(event.key.length===1||['Backspace','Delete','Enter'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();deny('edit')}
 }
+function restoreDecorated(){
+  document.querySelectorAll('[data-abu-permission-guarded="1"]').forEach(el=>{
+    el.style.opacity=el.dataset.abuPermissionPrevOpacity||'';
+    if(el.dataset.abuPermissionPrevTitle)el.title=el.dataset.abuPermissionPrevTitle;else el.removeAttribute('title');
+    delete el.dataset.abuPermissionGuarded;delete el.dataset.abuPermissionPrevOpacity;delete el.dataset.abuPermissionPrevTitle;delete el.dataset.abuPermissionDenied
+  })
+}
 function decorate(){
-  if(!secondary())return;
-  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
+  if(!secondary()){restoreDecorated();return}
+  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{
+    if(exempt(el))return;
+    const permission=permissionFor(el),denied=!!permission&&!allowed(permission);
+    if(denied){
+      if(el.dataset.abuPermissionGuarded!=='1'){el.dataset.abuPermissionGuarded='1';el.dataset.abuPermissionPrevOpacity=el.style.opacity||'';el.dataset.abuPermissionPrevTitle=el.title||''}
+      el.dataset.abuPermissionDenied='1';el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`
+    }else if(el.dataset.abuPermissionGuarded==='1'){
+      el.style.opacity=el.dataset.abuPermissionPrevOpacity||'';
+      if(el.dataset.abuPermissionPrevTitle)el.title=el.dataset.abuPermissionPrevTitle;else el.removeAttribute('title');
+      delete el.dataset.abuPermissionGuarded;delete el.dataset.abuPermissionPrevOpacity;delete el.dataset.abuPermissionPrevTitle;delete el.dataset.abuPermissionDenied
+    }
+  })
 }
 let decorateQueued=false;
 function scheduleDecorate(){
@@ -57,6 +75,7 @@ function boot(){
   document.addEventListener('keydown',keyGuard,true);
   document.addEventListener('abu-runtime-loaded',scheduleDecorate);
   document.addEventListener('abu-bassam-auth-changed',scheduleDecorate);
+  document.addEventListener('abu-bassam-security-state',scheduleDecorate);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleDecorate()});
   decorate()
 }

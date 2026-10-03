@@ -38,6 +38,9 @@ const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
 for(const marker of ['clearOrphanInteractionLayers',"#paperZoomOverlay.show","window.closeSheets","el.classList.contains('sheet')"])need(security,marker,'touch/backdrop cleanup');
 const sectionGuards=read('permission-section-guards-runtime.js');
+const legacyPermissionGuard=read('permission-guard-runtime.js');
+for(const marker of ['function restoreDecorated()','data-abu-permission-guarded','abu-bassam-security-state'])need(legacyPermissionGuard,marker,'legacy permission guard restoration');
+
 need(sectionGuards,"#cardsCenter,.cs-modal,#abuRecoveryModal",'card permission context');
 forbid(sectionGuards,'[class*="card" i]','over-broad card permission context');
 
