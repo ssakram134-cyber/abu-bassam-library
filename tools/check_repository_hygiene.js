@@ -45,8 +45,9 @@ for(const full of files){
     try{new vm.Script(src,{filename:rel})}catch(e){failures.push(`${rel}: JavaScript syntax error: ${e.message}`)}
   }
   if(rel==='tools/render_card_previews.py'){
-    if(/@gmail\.com/i.test(src))failures.push(`${rel}: preview generator must not embed personal Gmail credentials`);
-    if(!src.includes('user@example.invalid')||!src.includes('DEMO-NOT-A-REAL-PASSWORD'))failures.push(`${rel}: preview generator must use explicit non-secret demo credentials`);
+    for(const marker of ['DEMO_LOGIN_EMAIL = "user@example.invalid"','DEMO_LOGIN_PASSWORD = "DEMO-NOT-A-REAL-PASSWORD"','cap_text(d, 755, 513, DEMO_LOGIN_EMAIL','cap_text(d, 755, 723, DEMO_LOGIN_PASSWORD','{DEMO_LOGIN_EMAIL}','{DEMO_LOGIN_PASSWORD}']){
+      if(!src.includes(marker))failures.push(`${rel}: login preview must use explicit non-secret demo credentials: ${marker}`);
+    }
   }
 }
 
@@ -73,4 +74,4 @@ const gitignore=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
 for(const pattern of ['*.jks','*.keystore','*.p12','*.pfx','*.pem','*.key'])if(!gitignore.includes(pattern))failures.push(`.gitignore: missing signing/secret exclusion ${pattern}`);
 
 if(failures.length){console.error(failures.join('\n'));process.exit(1)}
-console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; every permanent check_*.js is wired into check:web; legacy APK repack/sign paths and old app identity stay removed; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
+console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web/tool JavaScript parses; every permanent check_*.js is wired into check:web; legacy APK repack/sign paths and old app identity stay removed; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
