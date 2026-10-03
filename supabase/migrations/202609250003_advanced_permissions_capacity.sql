@@ -17,6 +17,7 @@ declare
   v_hash text;
   v_key text;
   v_value jsonb;
+  v_permission_count integer;
 begin
   if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if coalesce(trim(p_actor_device_id),'')='' or coalesce(p_actor_secret,'')='' then raise exception 'OWNER_REQUIRED'; end if;
@@ -29,7 +30,8 @@ begin
   if p_permissions is not null then
     if v_target.role='owner' then raise exception 'OWNER_PERMISSIONS_IMMUTABLE'; end if;
     if jsonb_typeof(p_permissions)<>'object' then raise exception 'PERMISSIONS_INVALID'; end if;
-    if jsonb_object_length(p_permissions)>260 then raise exception 'PERMISSIONS_TOO_LARGE'; end if;
+    select count(*) into v_permission_count from jsonb_object_keys(p_permissions);
+    if v_permission_count>260 then raise exception 'PERMISSIONS_TOO_LARGE'; end if;
     for v_key,v_value in select key,value from jsonb_each(p_permissions) loop
       if not public._abu_bassam_permission_key_allowed(v_key) then raise exception 'PERMISSION_KEY_NOT_ALLOWED:%',v_key; end if;
       if jsonb_typeof(v_value)<>'boolean' then raise exception 'PERMISSION_VALUE_INVALID:%',v_key; end if;
