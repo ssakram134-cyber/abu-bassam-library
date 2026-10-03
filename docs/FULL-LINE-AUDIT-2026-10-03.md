@@ -143,7 +143,13 @@
 - ❌ حراس صلاحيات الفرع كانوا يعملون قبل اكتمال هوية الجهاز؛ أثناء الدور الفارغ كانوا يعاملون الواجهة كفرع بلا صلاحيات، ما يعطّل/يخفي عناصر قبل دخول الأدمن.
 - ❌ بعض الأزرار ونافذة الإعدادات التي عُطلت بهذه المرحلة لم يكن لها مسار استعادة بعد ثبوت دور الأدمن. أضيفت استعادة reversible لا تغيّر إلا العناصر التي عطّلها الحارس نفسه.
 - ✅ أضيف الاستماع إلى `abu-bassam-security-state` حتى يعاد تطبيق/استعادة الواجهة بعد تعيين `currentDevice` الحقيقي، لا عند حدث Supabase المبكر فقط.
-- 🔍 يلزم CI على head الجديد قبل اعتماد هذه الإصلاحات، ثم يستمر فحص WebView/دورة الحياة والأمان.
+- تم ✅ إصلاحات backdrop/الصلاحيات اجتازت CI على commit `7e732eedcd3bf56e719a55db38c56182d2b41be5` عبر run `37099339085` ورفع Artifact مطابق للـSHA.
+- ❌ كان WebView يعمل من `file:///android_asset` مع `allowUniversalAccessFromFileURLs` مفعّلًا، ما يوسّع صلاحية صفحة file-origin للوصول إلى origins خارجية.
+- ✅ نُقل أصل ملفات التطبيق إلى `https://appassets.androidplatform.net/library/` عبر WebView manager محلي يقاطع هذا المضيف والمسار فقط ويقرأ من `assets/library` مع منع traversal.
+- ✅ أصبحت `allowFileAccess` و`allowFileAccessFromFileURLs` و`allowUniversalAccessFromFileURLs` جميعها `false`.
+- ✅ بقيت اتصالات HTTPS الخارجية (Supabase/CDN) اتصالات شبكة عادية من أصل HTTPS بدل إعطاء file-origin وصولًا عامًا.
+- ❌ لم يكن انهيار/قتل WebView renderer يعيد إنشاء الواجهة. أضيف `onRenderProcessGone` مع remount آمن، وأصبح خطأ التحميل والـwatchdog يعرضان إعادة محاولة فعلية.
+- 🔍 يلزم CI على head الجديد للتحقق من تجميع native manager وتسجيله بواسطة Expo prebuild، ثم يستمر فحص بقية Stage 4.
 
 ## قراءة تمهيدية قبل اعتماد الترتيب الجديد
 هذه الملفات قُرئت قبل أن يحدد المستخدم أن البداية الرسمية يجب أن تكون workflows. لا تُعد مرحلة مغلقة ولا تمنحها حالة `تم ✅`:

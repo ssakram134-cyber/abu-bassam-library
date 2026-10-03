@@ -4,8 +4,11 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const need=(file,markers)=>{const s=read(file);for(const m of markers)if(!s.includes(m))failures.push(`${file}: missing ${m}`)};
 const forbid=(file,markers)=>{const s=read(file);for(const m of markers)if(s.includes(m))failures.push(`${file}: forbidden ${m}`)};
 
-need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync',"action === 'privacyMode'",'AbuBassamNativeSecurityResult',"message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"']);
-forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"','onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}']);
+need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync',"action === 'privacyMode'",'AbuBassamNativeSecurityResult',"message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onRenderProcessGone']);
+forbid('index.js',["originWhitelist={['*']}","originWhitelist={['file://*','about:*']}","file:///android_asset/library/index.html",'mixedContentMode="always"','onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}']);
+need('native/android/AbuBassamWebViewManager.java',['RCTAbuBassamWebView','appassets.androidplatform.net','safeRelativePath','shouldInterceptRequest']);
+need('native/android/AbuBassamWebViewPackage.java',['new AbuBassamWebViewManager()']);
+need('scripts/prepare-android-assets.mjs',['installHardenedWebView','add(AbuBassamWebViewPackage())']);
 
 need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY']);
 forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);

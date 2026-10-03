@@ -11,7 +11,7 @@ function forbid(rel,markers){const text=read(rel);for(const marker of markers)if
 function walk(dir,out=[]){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isSymbolicLink())fail(`symbolic link is not allowed: ${path.relative(root,p)}`);if(entry.isDirectory()){if(!['node_modules','.git','dist','android','ios'].includes(entry.name))walk(p,out)}else out.push(p)}return out}
 
 for(const rel of [
-  'package.json','package-lock.json','app.json','index.js','index-auth.js','web/index.html','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js','web/app-security-runtime.js','web/secure-sync-runtime.js','web/branch-vault-runtime.js','web/backup-center-runtime.js','web/account-recovery-hardening-runtime.js',
+  'package.json','package-lock.json','app.json','index.js','index-auth.js','native/android/AbuBassamWebViewManager.java','native/android/AbuBassamWebViewPackage.java','web/index.html','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js','web/app-security-runtime.js','web/secure-sync-runtime.js','web/branch-vault-runtime.js','web/backup-center-runtime.js','web/account-recovery-hardening-runtime.js',
   'web/questions-paper-runtime.js','web/questions-en-fixes-runtime.js','web/card-template-library.js','web/notification-excel-runtime.js',
   'scripts/build-android-local.mjs','scripts/prepare-android-assets.mjs','tools/check_project.js','tools/check_security_controls.js','tools/check_account_center.js','tools/check_fail_closed_runtime.js','tools/check_branch_private_vault.js','tools/check_backup_center.js'
 ])if(!fs.existsSync(path.join(root,rel)))fail(`missing ${rel}`);
@@ -63,12 +63,15 @@ for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_K
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);
 
 need('index.js',[
-  'STARTUP_WATCHDOG_MS',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest',"if (message.type === 'webBootReady')",
+  'STARTUP_WATCHDOG_MS',"const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onShouldStartLoadWithRequest','onRenderProcessGone',"if (message.type === 'webBootReady')",
   'cameraFrameKind','cardDocumentFrame','photoDocumentFrame','openCamera(message.mode, message.frameKind)',
   'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);',
   'expo-secure-store','expo-local-authentication','expo-screen-capture'
 ]);
-forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"']);
+forbid('index.js',["originWhitelist={['*']}","originWhitelist={['file://*','about:*']}","file:///android_asset/library/index.html",'mixedContentMode="always"']);
+need('native/android/AbuBassamWebViewManager.java',['RCTAbuBassamWebView','appassets.androidplatform.net','safeRelativePath','shouldInterceptRequest']);
+need('native/android/AbuBassamWebViewPackage.java',['new AbuBassamWebViewManager()']);
+need('scripts/prepare-android-assets.mjs',['installHardenedWebView','add(AbuBassamWebViewPackage())']);
 need('index-auth.js',['validAuthCallback','MAX_AUTH_CALLBACK_LENGTH = 8192','value.length > MAX_AUTH_CALLBACK_LENGTH','base !== AUTH_CALLBACK_PREFIX','await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value)','lastCallback = value',"require('./index.js')"]);
 forbid('index-auth.js',['.startsWith(AUTH_CALLBACK_PREFIX)']);
 const authEntry=read('index-auth.js'),secureWrite=authEntry.indexOf('await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value)'),dedupeWrite=authEntry.indexOf('lastCallback = value');

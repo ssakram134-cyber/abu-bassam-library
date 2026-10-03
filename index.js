@@ -6,6 +6,7 @@ import {
   BackHandler,
   Linking,
   Platform,
+  requireNativeComponent,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -23,7 +24,9 @@ import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 
-const APP_URL = 'file:///android_asset/library/index.html';
+const APP_ORIGIN = 'https://appassets.androidplatform.net';
+const APP_URL = `${APP_ORIGIN}/library/index.html`;
+const RCTAbuBassamWebView = requireNativeComponent('RCTAbuBassamWebView');
 const APP_CONFIG = require('./app.json').expo;
 const APP_VERSION = String(APP_CONFIG.version || '');
 const BUILD_NUMBER = String(APP_CONFIG.android?.versionCode || '');
@@ -117,6 +120,7 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [webViewKey, setWebViewKey] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -129,14 +133,27 @@ function App() {
   const closeCamera = useCallback(() => {
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
+  const restartWebView = useCallback((notice = '') => {
+    closeCamera();
+    setWebReady(false);
+    setWebViewKey((value) => value + 1);
+    if (notice) Alert.alert('استعادة واجهة التطبيق', notice);
+  }, [closeCamera]);
 
   useEffect(() => {
     if (webReady) return undefined;
     const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
+      Alert.alert(
+        'تعذر إكمال تشغيل التطبيق',
+        'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة.',
+        [
+          { text: 'إعادة المحاولة', onPress: () => restartWebView() },
+          { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ],
+      );
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [restartWebView, webReady]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -386,17 +403,29 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
-        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
-        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
+        key={`abu-web-${webViewKey}`}
+        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={[APP_ORIGIN,'about:*']} javaScriptEnabled domStorageEnabled
+        nativeConfig={{ component: RCTAbuBassamWebView }}
+        allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false} mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
         onShouldStartLoadWithRequest={(request) => {
           const url = String(request?.url || '');
-          if (url.startsWith('file:///android_asset/library/') || url === 'about:blank') return true;
+          if (url.startsWith(`${APP_ORIGIN}/library/`) || url === 'about:blank') return true;
           if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onRenderProcessGone={(event) => {
+          const crashed = !!event?.nativeEvent?.didCrash;
+          restartWebView(crashed ? 'تعطلت عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.' : 'أوقف Android عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.');
+        }}
+        onError={() => {
+          setWebReady(false);
+          Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.', [
+            { text: 'إعادة المحاولة', onPress: () => restartWebView() },
+            { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
+          ]);
+        }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (

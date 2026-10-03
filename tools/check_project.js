@@ -51,11 +51,15 @@ const bootstrap=read('security-bootstrap-guard-runtime.js');for(const t of ['__A
 const deviceLoader=read('device-name-runtime.js');for(const t of ['security-bootstrap-guard-runtime.js','loadSecurityBootstrapGuard','loadSecurityHardening()'])has(deviceLoader,t,'security startup order');
 const native=readRoot('index.js');for(const t of [
   'expo-local-authentication','expo-secure-store','expo-screen-capture','expo-print','ANDROID_BRIDGE','BackHandler.exitApp','STARTUP_WATCHDOG_MS',
-  "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest',"if (message.type === 'webBootReady')",
+  "const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onShouldStartLoadWithRequest','onRenderProcessGone',"if (message.type === 'webBootReady')",
   'cameraFrameKind','cardDocumentFrame','photoDocumentFrame','openCamera(message.mode, message.frameKind)',
   'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);'
 ])has(native,t,'index.js');
-for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
+for(const t of ["originWhitelist={['*']}","originWhitelist={['file://*','about:*']}","file:///android_asset/library/index.html",'mixedContentMode="always"'])forbid(native,t,'index.js');
+const nativeManager=readRoot('native/android/AbuBassamWebViewManager.java'),nativePackage=readRoot('native/android/AbuBassamWebViewPackage.java'),prepareAndroid=readRoot('scripts/prepare-android-assets.mjs');
+for(const t of ['RCTAbuBassamWebView','appassets.androidplatform.net','safeRelativePath','shouldInterceptRequest'])has(nativeManager,t,'native WebView manager');
+has(nativePackage,'new AbuBassamWebViewManager()','native WebView package');
+for(const t of ['installHardenedWebView','AbuBassamWebViewManager.java','AbuBassamWebViewPackage.java','add(AbuBassamWebViewPackage())'])has(prepareAndroid,t,'Android native asset preparation');
 for(const t of ['Print.printAsync','Print.printToFileAsync','StorageAccessFramework.createFileAsync'])has(native,t,'native print/export');
 const workflow=readRoot('.github/workflows/android.yml');for(const t of ['npm ci --no-audit --no-fund','npm run build:apk:local','test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES','actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'])has(workflow,t,'android test workflow');
 const productionWorkflow=readRoot('.github/workflows/android-production.yml');for(const t of ['workflow_dispatch:',"if: ${{ github.ref == 'refs/heads/main' }}",'Build and verify APK with no production secrets','Upload verified production-signing input','needs: build','actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c','Sign and verify production APK','--ks-pass env:ANDROID_KEYSTORE_PASSWORD','signed-production-release-with-embedded-js'])has(productionWorkflow,t,'android production workflow');

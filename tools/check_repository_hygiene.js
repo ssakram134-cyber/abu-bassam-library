@@ -3,11 +3,11 @@ const path=require('path');
 const vm=require('vm');
 const root=path.resolve(__dirname,'..');
 const failures=[];
-const authoredExt=new Set(['.js','.html','.mjs','.ts','.sql','.json','.yml','.yaml','.gradle','.md','.py']);
+const authoredExt=new Set(['.js','.html','.mjs','.ts','.sql','.json','.yml','.yaml','.gradle','.md','.py','.java','.kt']);
 const vendorNames=new Set(['jspdf.umd.min.js','jszip.min.js','supabase-2.58.0.js','qrcode.js','qrcode_UTF8.js']);
 const secretExt=/\.(?:jks|keystore|p12|pfx|pem|key)$/i;
 const forbiddenSecretNames=/^(?:\.env(?:\..*)?|id_rsa|id_ed25519)$/i;
-const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows','tools'];
+const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows','tools','native'];
 const forbiddenLegacyFiles=['tools/rebuild_apk.py','tools/apk_v2.py','tools/verify_release.py'];
 const unfinishedWorkPattern=new RegExp(`\\b(?:${'TO'+'DO'}|${'FIX'+'ME'})\\b`,'i');
 const obsoletePackage=['com','akramghazali','phonerepair'].join('.');
@@ -37,7 +37,7 @@ for(const full of files){
   const src=fs.readFileSync(full,'utf8');
   if(src.includes('\0'))failures.push(`${rel}: contains NUL byte`);
   if(/^(?:<{7}|={7}|>{7})(?: .*)?$/m.test(src))failures.push(`${rel}: unresolved merge-conflict marker`);
-  if(!vendorNames.has(base)&&['.js','.html','.mjs','.ts','.py'].includes(ext)&&unfinishedWorkPattern.test(src))failures.push(`${rel}: unfinished-work marker left in executable source`);
+  if(!vendorNames.has(base)&&['.js','.html','.mjs','.ts','.py','.java','.kt'].includes(ext)&&unfinishedWorkPattern.test(src))failures.push(`${rel}: unfinished-work marker left in executable source`);
   if(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(src))failures.push(`${rel}: embedded private key detected`);
   if(/\bghp_[A-Za-z0-9]{30,}\b/.test(src)||/\bgithub_pat_[A-Za-z0-9_]{30,}\b/.test(src))failures.push(`${rel}: embedded GitHub credential detected`);
   if(/\bsb_secret_[A-Za-z0-9_-]{20,}\b/.test(src))failures.push(`${rel}: embedded Supabase secret key detected`);
@@ -75,8 +75,9 @@ if(packageJson){
 }
 
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const bad of ["originWhitelist={['*']}",'mixedContentMode="always"','allowUniversalAccessFromFileURLs={true}'])if(native.includes(bad))failures.push(`index.js: insecure WebView setting returned: ${bad}`);
-for(const good of ["originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])if(!native.includes(good))failures.push(`index.js: missing hardened WebView marker: ${good}`);
+for(const bad of ["originWhitelist={['*']}","originWhitelist={['file://*','about:*']}","file:///android_asset/library/index.html",'mixedContentMode="always"','allowUniversalAccessFromFileURLs={true}'])if(native.includes(bad))failures.push(`index.js: insecure WebView setting returned: ${bad}`);
+if(/\ballowUniversalAccessFromFileURLs(?=\s|\/>)/.test(native)||/\ballowFileAccessFromFileURLs(?=\s|\/>)/.test(native)||/\ballowFileAccess(?=\s|\/>)/.test(native))failures.push('index.js: bare true file-access WebView prop returned');
+for(const good of ["const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onShouldStartLoadWithRequest','onRenderProcessGone'])if(!native.includes(good))failures.push(`index.js: missing hardened WebView marker: ${good}`);
 const gitignore=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
 for(const pattern of ['*.jks','*.keystore','*.p12','*.pfx','*.pem','*.key'])if(!gitignore.includes(pattern))failures.push(`.gitignore: missing signing/secret exclusion ${pattern}`);
 

@@ -6,6 +6,7 @@ const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(projectRoot, 'web');
 const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library');
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
+const nativeAndroidSource = resolve(projectRoot, 'native', 'android');
 const DOWNLOAD_TIMEOUT_MS = 45000;
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
@@ -51,6 +52,31 @@ async function fetchWithTimeout(url){
   try{return await fetch(url,{redirect:'follow',signal:controller.signal})}
   finally{clearTimeout(timer)}
 }
+async function installHardenedWebView(){
+  const appJson=JSON.parse(await readFile(resolve(projectRoot,'app.json'),'utf8'));
+  const androidPackage=String(appJson?.expo?.android?.package||'').trim();
+  if(!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/.test(androidPackage))throw new Error('Invalid Android package for hardened WebView');
+  const javaRoot=resolve(projectRoot,'android','app','src','main','java',...androidPackage.split('.'));
+  const mainApplication=resolve(javaRoot,'MainApplication.kt');
+  if(!(await existsEnough(mainApplication,100)))throw new Error('Generated MainApplication.kt was not found');
+  await mkdir(javaRoot,{recursive:true});
+  for(const name of ['AbuBassamWebViewManager.java','AbuBassamWebViewPackage.java']){
+    const sourcePath=resolve(nativeAndroidSource,name);
+    if(!(await existsEnough(sourcePath,100)))throw new Error(`Missing native WebView source template: ${name}`);
+    const sourceText=(await readFile(sourcePath,'utf8')).replace(/^package\s+[\w.]+;/m,`package ${androidPackage};`);
+    await writeFile(resolve(javaRoot,name),sourceText,'utf8');
+  }
+  let mainText=await readFile(mainApplication,'utf8');
+  const marker='PackageList(this).packages.apply {';
+  const registration='add(AbuBassamWebViewPackage())';
+  const count=mainText.split(marker).length-1;
+  if(count!==1)throw new Error(`Expected exactly one MainApplication package-list marker, found ${count}`);
+  if(!mainText.includes(registration))mainText=mainText.replace(marker,`${marker}\n              ${registration}`);
+  if((mainText.split(registration).length-1)!==1)throw new Error('Hardened WebView package registration must occur exactly once');
+  await writeFile(mainApplication,mainText,'utf8');
+  process.stdout.write('Hardened Android WebView asset origin installed and registered.\n');
+}
+
 async function download(urls,path,minBytes){
   if(await existsEnough(path,minBytes))return;
   await mkdir(dirname(path),{recursive:true});
@@ -89,6 +115,8 @@ for(const [relative,,minBytes] of OCR_ASSETS){
   const path=resolve(vendorRoot,relative);
   if(!(await existsEnough(path,minBytes)))throw new Error(`Required offline OCR asset is missing or incomplete: ${relative}`);
 }
+
+await installHardenedWebView();
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
 process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
