@@ -13,7 +13,9 @@ const requiredRecovery=[
   "updateUser({password})",
   "abu-bassam-library://auth/callback",
   "نسيت كلمة المرور؟",
-  "PASSWORD_RECOVERY"
+  "PASSWORD_RECOVERY",
+  "if(!email||email!==accountEmail())throw new Error('تعذر تأكيد أن الحساب المفتوح يطابق البريد المعتمد')",
+  "if(email&&email===accountEmail())openResetModal()"
 ];
 for(const needle of requiredRecovery){if(!recovery.includes(needle))throw new Error(`password recovery missing: ${needle}`)}
 if(recovery.includes('akramag1992@gmail.com'))throw new Error('password recovery contains obsolete incorrect account email');
