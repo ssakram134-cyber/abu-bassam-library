@@ -24,11 +24,16 @@ for(const filename of ['index.html','questions-ar.html','questions-en.html','ima
   while((match=scripts.exec(source))){index++;if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:`${filename}#${index}`})}catch(e){errors.push(`${filename} inline script ${index}: ${e.message}`)}}
 }
 const packageJson=JSON.parse(readRoot('package.json'));
-if(packageJson.version!=='4.3.2')errors.push(`package.json: expected version 4.3.2, got ${packageJson.version}`);
+if(!/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(String(packageJson.version||'')))errors.push(`package.json: invalid semantic version ${packageJson.version||'missing'}`);
+if(packageJson.engines?.node!=='>=20.19 <25')errors.push(`package.json: Node engine must remain >=20.19 <25`);
 for(const dep of ['expo','react-native','react-native-webview','expo-print','expo-secure-store','expo-local-authentication','expo-camera'])if(!packageJson.dependencies?.[dep])errors.push(`package.json: missing ${dep}`);
-const appJson=JSON.parse(readRoot('app.json'));const android=appJson.expo?.android||{};
+const appJson=JSON.parse(readRoot('app.json'));const expoConfig=appJson.expo||{},android=expoConfig.android||{};
+if(expoConfig.version!==packageJson.version)errors.push(`app/package version mismatch: package=${packageJson.version||'missing'} app=${expoConfig.version||'missing'}`);
 if(android.package!=='com.abubassam.librarycamera3')errors.push(`app.json: unexpected Android package ${android.package||'missing'}`);
-if(String(android.versionCode)!=='432')errors.push(`app.json: expected versionCode 432, got ${android.versionCode}`);
+if(!Number.isInteger(android.versionCode)||android.versionCode<=0)errors.push(`app.json: Android versionCode must be a positive integer, got ${android.versionCode}`);
+if(JSON.stringify(expoConfig.platforms)!=='["android"]')errors.push('app.json: project must remain explicitly Android-only');
+const cameraPlugin=(expoConfig.plugins||[]).find(p=>Array.isArray(p)&&p[0]==='expo-camera');
+if(!cameraPlugin||cameraPlugin[1]?.recordAudioAndroid!==false)errors.push('app.json: expo-camera must keep recordAudioAndroid=false');
 const librarySource=read('card-template-library.js');const sandbox={window:{}};vm.runInNewContext(librarySource,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
 if(!Array.isArray(groups))errors.push('card-template-library.js: library did not load');
 else{
