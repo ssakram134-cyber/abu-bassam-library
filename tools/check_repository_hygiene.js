@@ -10,6 +10,8 @@ const forbiddenSecretNames=/^(?:\.env(?:\..*)?|id_rsa|id_ed25519)$/i;
 const executableRoots=['web','scripts','supabase/functions','supabase/migrations','.github/workflows','tools'];
 const forbiddenLegacyFiles=['tools/rebuild_apk.py','tools/apk_v2.py','tools/verify_release.py'];
 const unfinishedWorkPattern=new RegExp(`\\b(?:${'TO'+'DO'}|${'FIX'+'ME'})\\b`,'i');
+const obsoletePackage=['com','akramghazali','phonerepair'].join('.');
+const obsoleteIdentity=['مركز','أكرم','الغزالي'].join(' ');
 const files=[];
 
 function walk(dir){
@@ -39,8 +41,8 @@ for(const full of files){
   if(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(src))failures.push(`${rel}: embedded private key detected`);
   if(/\bghp_[A-Za-z0-9]{30,}\b/.test(src)||/\bgithub_pat_[A-Za-z0-9_]{30,}\b/.test(src))failures.push(`${rel}: embedded GitHub credential detected`);
   if(/\bsb_secret_[A-Za-z0-9_-]{20,}\b/.test(src))failures.push(`${rel}: embedded Supabase secret key detected`);
-  if(src.includes('com.akramghazali.phonerepair'))failures.push(`${rel}: obsolete PhoneRepair package identity returned`);
-  if(src.includes('مركز أكرم الغزالي'))failures.push(`${rel}: obsolete application identity returned`);
+  if(src.includes(obsoletePackage))failures.push(`${rel}: obsolete PhoneRepair package identity returned`);
+  if(src.includes(obsoleteIdentity))failures.push(`${rel}: obsolete application identity returned`);
   if((rel.startsWith('web/')||rel.startsWith('tools/'))&&ext==='.js'&&!vendorNames.has(base)){
     try{new vm.Script(src,{filename:rel})}catch(e){failures.push(`${rel}: JavaScript syntax error: ${e.message}`)}
   }
