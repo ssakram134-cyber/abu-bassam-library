@@ -124,8 +124,8 @@ async function saveNewPassword(){
     const c=client();if(!c?.auth?.updateUser)throw new Error('خدمة تغيير كلمة المرور غير جاهزة');
     const {data,error}=await c.auth.updateUser({password});
     if(error)throw error;
-    const email=String(data?.user?.email||'').toLowerCase();
-    if(email&&email!==accountEmail())throw new Error('الحساب المفتوح لا يطابق البريد المعتمد');
+    const email=String(data?.user?.email||'').trim().toLowerCase();
+    if(!email||email!==accountEmail())throw new Error('تعذر تأكيد أن الحساب المفتوح يطابق البريد المعتمد');
     await c.auth.signOut({scope:'local'}).catch(()=>{});
     await closeResetModal(false);
     setLoginMessage('تم تغيير كلمة المرور بنجاح ✓ سجّل الدخول الآن بكلمة المرور الجديدة.');
@@ -140,8 +140,9 @@ function installAuthListener(){
   authListenerInstalled=true;
   c.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){
-      const email=String(session?.user?.email||'').toLowerCase();
-      if(!email||email===accountEmail())openResetModal();
+      const email=String(session?.user?.email||'').trim().toLowerCase();
+      if(email&&email===accountEmail())openResetModal();
+      else setLoginMessage('تم رفض جلسة استعادة لا تطابق حساب مكتبة أبو بسام المعتمد.',true);
     }
   });
 }
