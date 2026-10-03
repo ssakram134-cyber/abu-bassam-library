@@ -1,7 +1,7 @@
 (()=>{
 'use strict';
 if(window.__ABU_BACKUP_CENTER_V1__)return;window.__ABU_BACKUP_CENTER_V1__=true;
-const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/backup-center',BUCKET='abu-bassam-private',DB='AbuBassamDocumentVaultV4',STORE='items',APP='4.3.2',SK='abu_bassam_device_secret_v1';
+const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/backup-center',BUCKET='abu-bassam-private',DB='AbuBassamDocumentVaultV4',STORE='items',APP=String(window.__ABU_APP_META__?.version||''),SK='abu_bassam_device_secret_v1';
 const AUTO='abuBassamBackupAutoV1',CAD='abuBassamBackupCadenceV1',KEEP='abuBassamBackupRetentionV1',LAST='abuBassamBackupLastSuccessV1',LASTFP='abuBassamBackupLastFingerprintV1',LASTERR='abuBassamBackupLastErrorV1',RETRY='abuBassamBackupRetryAfterV1';
 const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,modalBuilt=false;
 function stateScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}

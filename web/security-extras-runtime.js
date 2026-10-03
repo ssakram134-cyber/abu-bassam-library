@@ -9,6 +9,7 @@ const SNAPSHOT_KEY='abuBassamEmergencySnapshotV1';
 const PRIVACY_KEY='abuBassamPrivacyModeV1';
 let bypassTarget=null;
 let snapshotTimer=null;
+let privacyHideTimer=null;
 
 function log(title,details=''){try{window.AbuBassamOps?.add?.({type:'settings',title,section:'الأمان',details})}catch(e){}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -115,14 +116,14 @@ async function applyPrivacy(enabled){
   }catch(e){localStorage.setItem(PRIVACY_KEY,'0');privacyCover().style.display='none';if(enabled)alert('تعذر تفعيل حماية لقطة الشاشة/المعاينة الحديثة: '+String(e?.message||e));render();return false}
 }
 function privacyEnabled(){return localStorage.getItem(PRIVACY_KEY)==='1'}
-function visibilityPrivacy(){const cover=privacyCover();if(document.visibilityState==='hidden'&&privacyEnabled())cover.style.display='flex';else setTimeout(()=>cover.style.display='none',60)}
+function visibilityPrivacy(){const cover=privacyCover();clearTimeout(privacyHideTimer);privacyHideTimer=null;if(document.visibilityState==='hidden'&&privacyEnabled()){cover.style.display='flex';return}privacyHideTimer=setTimeout(()=>{if(document.visibilityState!=='hidden')cover.style.display='none'},60)}
 
 function extrasHtml(){return `<section id="abuSecurityExtrasSettings" class="abu-setting-card" data-settings-keywords="خصوصية نقطة أمان استعادة رمز حساس حماية recent apps لقطة شاشة كلمة مرور خروج"><div class="abu-setting-title">🛡️ حماية إضافية واستعادة طوارئ</div><label class="abu-security-line"><span>خصوصية عالية ومنع لقطات الشاشة/المعاينة الحديثة</span><input id="abuPrivacyMode" type="checkbox" onchange="AbuBassamSecurityExtras.privacy(this.checked)"></label><div class="abu-security-setting-grid"><button onclick="AbuBassamSecurityExtras.setPin()">🔢 إنشاء/تغيير رمز العمليات الحساسة</button><button onclick="AbuBassamSecurityExtras.removePin()">إلغاء الرمز</button><button onclick="AbuBassamSecurityExtras.changePassword()">🔑 تغيير كلمة مرور الحساب</button><button onclick="AbuBassamSecurityExtras.logout()">⇥ تسجيل الخروج</button><button onclick="AbuBassamSecurityExtras.snapshot()">🛟 نقطة أمان الآن</button><button onclick="AbuBassamSecurityExtras.restore()">♻️ استعادة نقطة الأمان</button></div><div id="abuSnapshotInfo" class="abu-setting-note" style="margin-top:7px">آخر نقطة أمان: ${esc(snapshotInfo())}</div><div class="abu-setting-note">يُطلب الرمز المستقل قبل العمليات الخطرة مثل مسح السجل، إعادة ضبط الإعدادات، حذف جهاز موثوق أو استعادة نقطة أمان. لا تُخزن كلمات المرور داخل نقطة الأمان.</div></section>`}
 async function render(){
   const body=document.querySelector('#abuSettingsModal .abu-settings-body');if(!body)return;
   let old=$('abuSecurityExtrasSettings');if(old)old.outerHTML=extrasHtml();else{const security=$('abuSecuritySettings');if(security)security.insertAdjacentHTML('afterend',extrasHtml());else body.insertAdjacentHTML('afterbegin',extrasHtml())}
   const privacy=$('abuPrivacyMode');if(privacy)privacy.checked=privacyEnabled();const info=$('abuSnapshotInfo');if(info)info.textContent='آخر نقطة أمان: '+snapshotInfo();
-  const owner=isOwner();document.querySelectorAll('#abuSecurityExtrasSettings button:not([onclick*="logout"])').forEach(button=>{if(!owner){button.disabled=true;button.style.opacity='.45'}})
+  const owner=isOwner();document.querySelectorAll('#abuSecurityExtrasSettings button:not([onclick*="logout"])').forEach(button=>{if(!owner){if(button.dataset.abuSecurityExtrasOwnerGuard!=='1'){button.dataset.abuSecurityExtrasOwnerGuard='1';button.dataset.abuSecurityExtrasPrevDisabled=button.disabled?'1':'0';button.dataset.abuSecurityExtrasPrevOpacity=button.style.opacity||''}button.disabled=true;button.style.opacity='.45'}else if(button.dataset.abuSecurityExtrasOwnerGuard==='1'){button.disabled=button.dataset.abuSecurityExtrasPrevDisabled==='1';button.style.opacity=button.dataset.abuSecurityExtrasPrevOpacity||'';delete button.dataset.abuSecurityExtrasOwnerGuard;delete button.dataset.abuSecurityExtrasPrevDisabled;delete button.dataset.abuSecurityExtrasPrevOpacity}})
 }
 function inject(){render();new MutationObserver(()=>{if(document.querySelector('#abuSettingsModal .abu-settings-body')&&!$('abuSecurityExtrasSettings'))render()}).observe(document.body,{childList:true,subtree:true})}
 

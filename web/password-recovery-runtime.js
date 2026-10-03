@@ -164,6 +164,6 @@ async function boot(){
   [300,900,1800,3500].forEach(ms=>setTimeout(()=>{addUi();installAuthListener();consumeRecoveryCallback()},ms));
 }
 
-window.AbuBassamPasswordRecovery={email:accountEmail,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword};
+window.AbuBassamPasswordRecovery={email:accountEmail,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword,close:()=>closeResetModal(false)};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
