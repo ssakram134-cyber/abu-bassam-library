@@ -19,7 +19,7 @@ forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=func
 need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLegacySecretStorage','installLegacySecretStorageBlock','localStorage.removeItem(LEGACY_TRUST_KEY)','stopImmediatePropagation']);
 need('web/security-hardening-runtime.js',["SECURE_TRUST_KEY='abu_bassam_offline_trust_v2'","name:'HMAC',hash:'SHA-256'",'constantTime(expected,env.mac)','OFFLINE_GRACE_MS=12*60*60*1000','AbuBassamNativeSecurity']);
 forbid('web/security-hardening-runtime.js',['window.AbuBassamNativeSecurityResult']);
-need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
+need('web/security-extras-runtime.js',['verifyDangerPin','verifyStoredPin','PIN_FAIL_KEY','PIN_LOCK_KEY','recordPinFailure','clearPinFailures','/^\\d{6,8}$/','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
 forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
 need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
