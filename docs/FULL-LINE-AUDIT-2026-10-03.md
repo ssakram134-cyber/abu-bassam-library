@@ -71,19 +71,69 @@
 - ✅ مستورد ZIP لا يكتب إلى `main`: ينشئ `source-import-...` ويفتح PR للمراجعة.
 - ✅ PR الخاص بمصدر ZIP لا يشغّل المصدر المستورد تلقائيًا. بعد مراجعة الفرق، تطلب رسالة PR تشغيل Android test workflow يدويًا على فرع الاستيراد قبل الدمج.
 
-### تحقق CI حتى الآن
-- ✅ جولة سابقة بعد إصلاح validator اجتازت `npm run check:web`.
-- ✅ الجولة نفسها اجتازت `android:prebuild`.
-- 🔍 نتيجة CI النهائية المطلوبة هي **آخر commit في PR #20 فقط**؛ أي نتيجة لcommit أقدم لا تُغلق المرحلة.
-- 🔍 تشغيل الإنتاج بالمفتاح الحقيقي لا يتم داخل PR عمدًا. `android-production.yml` لا يعمل إلا يدويًا وعلى `main`، ومطابقة الشهادة مفروضة داخل سكربت البناء.
+### تحقق CI وإغلاق المرحلة 1
+- تم ✅ على commit `7a240135fc3f53bbfe0aa6f07bd372faf3a2d3dc` عبر run `37077936169`.
+- تم ✅ `npm ci --no-audit --no-fund`.
+- تم ✅ `npm run build:apk:local` بما يتضمن فحوص الويب وAndroid prebuild وGradle وbundle و`apksigner`.
+- تم ✅ إثبات أن الناتج Test release وليس Production.
+- تم ✅ رفع Artifact مرتبط بنفس source SHA: `abu-bassam-android-test-7a240135fc3f53bbfe0aa6f07bd372faf3a2d3dc`.
+- يحتاج تحقق 🔍: التوقيع الإنتاجي الحقيقي بالمفتاح السري؛ لا يعمل داخل PR عمدًا، ومساره محصور بـmanual/main مع بصمة شهادة إلزامية.
+- **حالة المرحلة 1: تم ✅**
 
-### شرط إغلاق المرحلة 1
-تتحول المرحلة إلى `تم ✅` فقط عندما ينجح آخر head في PR #20 في:
-1. `npm ci --no-audit --no-fund`.
-2. `npm run build:apk:local`، والذي يتضمن `check:web` + `android:prebuild` + `assembleRelease` + فحص bundle + `apksigner`.
-3. إثبات أن الناتج Test release وليس Production.
-4. رفع APK + SHA256 + شهادة التوقيع كـArtifacts.
-5. بقاء Workflow الإنتاج منفصلًا/manual/main-only مع بصمة شهادة إلزامية.
+
+## المرحلة 2 — الجذر ونقطة التشغيل والتهيئة
+
+### الملفات التي فُحصت
+- `.gitignore`
+- `package.json`
+- `package-lock.json` (هوية/إصدار/اعتمادات الجذر)
+- `app.json`
+- `index-auth.js`
+- `index.js`
+- وجود `assets/icon.png`
+
+### المشاكل المصححة
+- تم ✅ إزالة تكرار قواعد `output/` و`*.pyc` من `.gitignore`.
+- تم ✅ إلغاء النسخة وbuild number الثابتين داخل `index.js` وربطهما مباشرةً بـ`app.json`.
+- تم ✅ رفع حد Node المعلن إلى `>=20.19 <25` لمطابقة الحد الأدنى لـExpo SDK 54، وتحديث lockfile والـvalidator المرتبط.
+- تم ✅ منع `printBase64` من محاولة طباعة أنواع ملفات غير مدعومة؛ الطباعة المباشرة الأصلية أصبحت للصور وPDF فقط مع خطأ واضح لبقية الأنواع.
+- تم ✅ وضع حد أقصى 8192 محرفًا لرابط مصادقة deep-link قبل تخزينه في SecureStore.
+- تم ✅ حذف أمر iOS غير المدعوم فعليًا من `package.json`.
+- تم ✅ تثبيت المشروع صراحةً كـAndroid-only في `app.json`.
+- تم ✅ ضبط `expo-camera` على `recordAudioAndroid:false` وإزالة خيارات iOS الميتة من إعداد Android.
+- تم ✅ مطابقة `package.json` و`package-lock.json` و`app.json` في الإصدار والهوية الأساسية.
+- تم ✅ وجود ملف الأيقونة المشار إليه فعليًا.
+
+### تحقق CI وإغلاق المرحلة 2
+- تم ✅ على commit `f17cc7e4ce10ec2e81e46c1826491a0de5cd9643` عبر run `37080275420`.
+- تم ✅ تثبيت الاعتمادات المقفلة.
+- تم ✅ `check:web`.
+- تم ✅ Android prebuild/Gradle وبناء APK.
+- تم ✅ التحقق من توقيع Test release.
+- تم ✅ منع Production في مسار الاختبار.
+- تم ✅ رفع Artifacts.
+- **حالة المرحلة 2: تم ✅**
+
+## المرحلة 3 — أدوات الفحص والاختبارات داخل tools
+
+### نطاق الفحص
+- تم فحص 36 ملفًا داخل `tools/`.
+- منها 33 ملف `check_*.js`، وثلاث أدوات مساعدة: `qr_matrix.js` و`render_card_previews.py` و`validate_imported_source.js`.
+- تم ✅ التحقق أن كل ملفات `check_*.js` الـ33 مرتبطة بـ`check:web` مرة واحدة بالضبط ولا يوجد checker يتيم أو مكرر في الأمر.
+
+### المشاكل المكتشفة والمصححة
+- تم ✅ إزالة فرض الإصدار الثابت `4.3.2` و`versionCode 432` من `check_project.js`. الاختبار يتحقق الآن من semantic version واتساق package/app وكون versionCode عددًا صحيحًا موجبًا.
+- تم ✅ إضافة اختبارات رجوع تمنع إزالة حد طول رابط المصادقة `MAX_AUTH_CALLBACK_LENGTH`.
+- تم ✅ جعل validator المستورد يفرض Android-only و`recordAudioAndroid:false` وحد رابط المصادقة.
+- تم ✅ إزالة بيانات دخول تبدو حقيقية من `render_card_previews.py` واستبدالها ببيانات demo غير حقيقية.
+- تم ✅ توسيع `check_repository_hygiene.js` ليشمل `tools/` وملفات Python، مع منع Gmail شخصي داخل مولد معاينات تسجيل الدخول.
+- تم ✅ إزالة العدد الثابت 214 من فحص الصلاحيات؛ أصبح الاختبار يقارن مجموعة صلاحيات الواجهة بمجموعة صلاحيات الخادم exact-set ويكشف النقص في أي اتجاه.
+- تم ✅ إزالة حد ثابت هش لمجموعة admin-only؛ أصبحت مجموعة admin-only في الواجهة والخادم متطابقة exact-set.
+- تم ✅ اكتشاف تعارض حقيقي: checker كان يفرض `jsonb_object_length(p_permissions)` رغم أن PostgreSQL لا يوفر هذه الدالة. تم إصلاح migration إلى عد المفاتيح عبر `jsonb_object_keys`، وأصبح الاختبار يمنع عودة الدالة غير المدعومة.
+- يحتاج تحقق 🔍: تشغيل CI النهائي على أحدث head بعد جميع إصلاحات المرحلة 3.
+
+### شرط إغلاق المرحلة 3
+لا تُغلق المرحلة إلا بعد نجاح أحدث head في `check:web` والبناء والتحقق ورفع Artifact.
 
 ## قراءة تمهيدية قبل اعتماد الترتيب الجديد
 هذه الملفات قُرئت قبل أن يحدد المستخدم أن البداية الرسمية يجب أن تكون workflows. لا تُعد مرحلة مغلقة ولا تمنحها حالة `تم ✅`:
