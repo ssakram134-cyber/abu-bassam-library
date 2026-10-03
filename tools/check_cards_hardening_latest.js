@@ -14,6 +14,7 @@ const ration=read('web/ration-card.html');
 const mawkib=read('web/mawkib-cards.html');
 const thanks=read('web/thanks-letter.html');
 const student=read('web/student-thanks-cards.html');
+const previews=read('tools/render_card_previews.py');
 for(const [name,src] of Object.entries({studio,design,layouts,recovery,preload,ration,mawkib,thanks,student})){
   if(name!=='preload'&&name!=='ration'&&name!=='mawkib'&&name!=='thanks'&&name!=='student')new Function(src)
 }
@@ -27,6 +28,8 @@ need(studio,"cardsImportImage",'image import permission is missing');
 need(studio,"scanBarcodeGallery",'gallery barcode action must be canonical');
 need(studio,"student-thanks-cards.html",'student thanks tool must be canonical');
 reject(studio,"رقم خط النقل",'obsolete child transport-line field returned');
+reject(previews,"رقم خط النقل",'preview tool must not restore obsolete child transport-line field');
+need(previews,"هاتف ولي الأمر:",'preview tool must show guardian phone on child back');
 need(layouts,"abuBassamStandaloneCardLayoutV2",'standalone free-layout persistence is missing');
 need(layouts,"safeTextTarget",'standalone safe text editing is missing');
 need(layouts,"cardsEditImage",'standalone image edit permission is missing');
