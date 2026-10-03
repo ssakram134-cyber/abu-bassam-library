@@ -59,6 +59,8 @@ for(const [marker,label] of [
   ["for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])",'npm lifecycle rejection'],
   ["app.android?.package!=='com.abubassam.librarycamera3'",'Android identity validation'],
   ["app.slug!=='abu-bassam-library'",'Expo slug validation'],
+  ["JSON.stringify(app.platforms)!=='[\"android\"]'",'Android-only platform validation'],
+  ["recordAudioAndroid!==false",'camera audio permission suppression'],
   ['package.json and app.json versions must match','package/app version consistency'],
   ['Android versionCode downgrade is not allowed','versionCode downgrade rejection'],
   ['app version downgrade is not allowed','semantic app-version downgrade rejection'],
@@ -69,7 +71,8 @@ for(const [marker,label] of [
   ['forbiddenExt','signing/secret file rejection'],
   ["cp.spawnSync(process.execPath,['--check',file]",'JavaScript syntax validation'],
   ["if(rel==='index.js')continue;",'React Native JSX entry excluded from plain Node syntax checker'],
-  ["const userFacingIdentityScan=!rel.replaceAll('\\\\','/').startsWith('tools/');",'tooling excluded only from user-facing designer identity scan']
+  ["const userFacingIdentityScan=!rel.replaceAll('\\\\','/').startsWith('tools/');",'tooling excluded only from user-facing designer identity scan'],
+  ["MAX_AUTH_CALLBACK_LENGTH = 8192",'bounded auth callback validation']
 ]) need(validator,marker,label);
 
 for(const [marker,label] of [
