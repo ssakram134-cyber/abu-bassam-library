@@ -24,6 +24,8 @@ forbid(password,"const MAIN_EMAIL=",'password change must not hardcode one accou
 need(runtime,"async function localArchiveEmpty(){try{const stats=window.DocumentVault?.stats;if(typeof stats!=='function')return false;",'legacy recovery archive check must fail closed');
 forbid(runtime,'catch{return true}','legacy recovery archive check must not fail open');
 need(runtime,"async function recoverPhone(){setMsg('طبقة الاسترداد الآمن غير جاهزة.",'legacy recovery handler must fail closed');
+need(runtime,"if(!['google','confirm','recovery'].includes(flow))",'account callbacks must reject unknown flows');
+need(runtime,"await native('secureDelete',{key:CALLBACK_KEY}).catch(()=>{})",'unknown callback flow must be deleted');
 forbid(runtime,"rpc('abu_bassam_recover_device'",'base account center must not perform device recovery directly');
 forbid(runtime,'SUPABASE_SERVICE_ROLE_KEY','client must not contain service role key');forbid(runtime,'service_role','client must not contain service role marker');forbid(hardening,'SUPABASE_SERVICE_ROLE_KEY','hardening client must not contain service role key');
 console.log('account center checks passed: exact retry-safe native callback capture, profile, least privilege, explicit recovery-code deny, fail-closed local archive recovery guard, retry-safe two-phase recovery, visible-code copy/share, external Google OAuth, stale callback cleanup, branch-vault enforcement, strong signup, password recovery, private avatar, current-account password change, and owner-device recovery are wired.');
