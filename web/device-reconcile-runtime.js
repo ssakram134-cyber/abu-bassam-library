@@ -13,8 +13,21 @@ const client=()=>window.AbuBassamCloud?.client||null;
 const connected=()=>!!window.AbuBassamCloud?.isConnected?.();
 function time(v){let n=Date.parse(v||0);return Number.isFinite(n)?n:0}
 function displayName(row){let name=String(row?.device_name||'').trim(),model=String(row?.model||'').trim();if(!name||name==='جهاز المكتبة'||/^android$/i.test(name))return model||name||'جهاز';return name}
-function signature(row){let name=String(row.device_name||'').trim().toLowerCase(),model=String(row.model||'').trim().toLowerCase(),platform=String(row.platform||'').trim().toLowerCase();return name&&model?`${name}|${model}|${platform}`:''}
-function dedupe(rows){let current=CURRENT_ID(),byId=new Map();(rows||[]).forEach(row=>{if(!row?.device_id)return;let old=byId.get(row.device_id);if(!old||time(row.last_seen)>time(old.last_seen))byId.set(row.device_id,row)});let groups=new Map(),loose=[];[...byId.values()].forEach(row=>{let sig=signature(row);if(!sig){if(row.device_id===current||time(row.last_seen)>Date.now()-90*86400000)loose.push(row);return}let arr=groups.get(sig)||[];arr.push(row);groups.set(sig,arr)});let result=[...loose];groups.forEach(arr=>{arr.sort((a,b)=>{if(a.device_id===current)return-1;if(b.device_id===current)return 1;if(a.role==='owner'&&b.role!=='owner')return-1;if(b.role==='owner'&&a.role!=='owner')return 1;return time(b.last_seen)-time(a.last_seen)});result.push(arr[0])});return result.sort((a,b)=>{if(a.device_id===current)return-1;if(b.device_id===current)return 1;if(a.role==='owner'&&b.role!=='owner')return-1;if(b.role==='owner'&&a.role!=='owner')return 1;return time(b.last_seen)-time(a.last_seen)})}
+function dedupe(rows){
+  const current=CURRENT_ID(),byId=new Map();
+  (rows||[]).forEach(row=>{
+    if(!row?.device_id)return;
+    const old=byId.get(row.device_id);
+    if(!old||time(row.last_seen)>time(old.last_seen))byId.set(row.device_id,row)
+  });
+  return [...byId.values()].sort((a,b)=>{
+    if(a.device_id===current)return-1;
+    if(b.device_id===current)return 1;
+    if(a.role==='owner'&&b.role!=='owner')return-1;
+    if(b.role==='owner'&&a.role!=='owner')return 1;
+    return time(b.last_seen)-time(a.last_seen)
+  })
+}
 function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return api.request(action,payload)}
 async function secret(){return String(await nativeRequest('secureGet',{key:SECRET_KEY})||'')}
 async function ownerArgs(){if(!owner())throw new Error('OWNER_REQUIRED');const p_actor_device_id=CURRENT_ID(),p_actor_secret=await secret();if(!p_actor_device_id||!p_actor_secret)throw new Error('OWNER_REQUIRED');return{p_actor_device_id,p_actor_secret}}
