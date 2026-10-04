@@ -3,12 +3,15 @@ const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.read
 const need=(s,t,l)=>{if(!s.includes(t))throw new Error(`admin permissions check failed: ${l}`)};
 const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`admin permissions check failed: ${l}`)};
 const runtime=read('web/admin-permissions-runtime.js');
+const devices=read('web/device-reconcile-runtime.js');
 const guards=read('web/permission-section-guards-runtime.js');
 const loader=read('web/device-name-runtime.js');
 const migration=read('supabase/migrations/202609250001_advanced_admin_permissions.sql');
 const capacity=read('supabase/migrations/202609250003_advanced_permissions_capacity.sql');
 const helper=read('supabase/migrations/202609250002_customer_permission_helper.sql');
 const edge=read('supabase/functions/customer-documents/index.ts');
+forbid(devices,'function signature(row)','device list must not collapse distinct registered devices by matching metadata');
+need(devices,'const current=CURRENT_ID(),byId=new Map();','device list must deduplicate only exact device ids');
 new vm.Script(runtime,{filename:'admin-permissions-runtime.js'});
 new vm.Script(guards,{filename:'permission-section-guards-runtime.js'});
 new vm.Script(loader,{filename:'device-name-runtime.js'});
