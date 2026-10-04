@@ -53,6 +53,7 @@ jobs:
           test -s dist/SIGNING_CERTIFICATE.txt
 
       - name: Upload APK artifacts
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: abu-bassam-android-test-${{ github.event.pull_request.head.sha || github.sha }}
