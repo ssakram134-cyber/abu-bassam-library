@@ -92,7 +92,7 @@ async function guardedRecovery(){
     serverRecovered=true;
     await native('secureSet',{key:SECRET_KEY,value:secret});
     if(String(await native('secureGet',{key:SECRET_KEY})||'')!==secret)throw new Error('تعذر تثبيت سر الجهاز الجديد في التخزين الآمن');
-    localStorage.setItem(DEVICE_ID_KEY,String(recovered.device_id||''));
+    const recoveredId=String(recovered.device_id||'').trim();if(!recoveredId||!window.AbuBassamDevices?.adopt)throw new Error('تعذر تثبيت هوية الجهاز المستعاد');await window.AbuBassamDevices.adopt(recoveredId);
     localStorage.setItem(DEVICE_NAME_KEY,String(recovered.device_name||'جهاز المكتبة'));
     localStorage.setItem(DEVICE_CREATED_KEY,String(recovered.first_seen||new Date().toISOString()));
     localStorage.setItem(VAULT_SCOPE_KEY,String(recovered.device_id||''));
