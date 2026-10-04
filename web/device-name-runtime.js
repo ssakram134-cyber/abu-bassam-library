@@ -3,6 +3,7 @@
   const DEVICE_ID_KEY = 'abuBassamLockedDeviceIdV3';
   const DEVICE_NAME_KEY = 'abuBassamLockedDeviceNameV3';
   const DEVICE_CREATED_KEY = 'abuBassamLockedDeviceCreatedV3';
+  const SECURE_DEVICE_ID_KEY = 'abu_bassam_device_id_v1';
   const APP_VERSION = String(window.__ABU_APP_META__?.version || '');
   function uuid(){const id=globalThis.crypto?.randomUUID?.();if(!id)throw new Error('SECURE_DEVICE_ID_RANDOM_REQUIRED');return id}
   function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'}
@@ -10,8 +11,24 @@
   function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
   function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true')}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
-  function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
-  async function heartbeat(){return ensureIdentity()}
+  function validIdentityId(value){return /^[A-Za-z0-9._:-]{8,180}$/.test(String(value||''))}
+  function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_DEVICE_ID_STORE_REQUIRED'));return api.request(action,payload)}
+  function writeLocalIdentity(identity){localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
+  function ensureIdentity(){let identity=current();if(validIdentityId(identity.id))return identity;identity={id:uuid(),name:identity.name||'جهاز المكتبة',createdAt:identity.createdAt||new Date().toISOString()};return writeLocalIdentity(identity)}
+  async function stabilizeIdentity(){
+    let identity=current(),secureId=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(secureId&&!validIdentityId(secureId))throw new Error('SECURE_DEVICE_ID_INVALID');
+    if(secureId){
+      if(identity.id!==secureId)identity=writeLocalIdentity({id:secureId,name:identity.name||'جهاز المكتبة',createdAt:identity.createdAt||new Date().toISOString()});
+      return identity
+    }
+    identity=ensureIdentity();
+    await native('secureSet',{key:SECURE_DEVICE_ID_KEY,value:identity.id});
+    const verified=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(verified!==identity.id)throw new Error('SECURE_DEVICE_ID_PERSIST_FAILED');
+    return identity
+  }
+  async function heartbeat(){return stabilizeIdentity()}
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
@@ -97,15 +114,15 @@
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
-    ensureIdentity();
     try{
+      await stabilizeIdentity();
       await loadApprovedUi();
       signalBootReady();
       dismissSplash();
       setTimeout(heartbeat,200)
     }catch(error){showBootFailure(error)}
   }
-  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
+  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
   setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000);
   window.addEventListener('online',heartbeat);document.addEventListener('abu-bassam-auth-changed',()=>{heartbeat();window.AbuBassamSecurity?.onSessionChanged?.()});
