@@ -29,6 +29,13 @@
     return identity
   }
   async function heartbeat(){return stabilizeIdentity()}
+  async function adoptIdentity(id){
+    const value=String(id||'').trim();if(!validIdentityId(value))throw new Error('SECURE_DEVICE_ID_INVALID');
+    await native('secureSet',{key:SECURE_DEVICE_ID_KEY,value});
+    const verified=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(verified!==value)throw new Error('SECURE_DEVICE_ID_PERSIST_FAILED');
+    const old=current();return writeLocalIdentity({id:value,name:old.name||'جهاز المكتبة',createdAt:old.createdAt||new Date().toISOString()})
+  }
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
@@ -122,7 +129,7 @@
       setTimeout(heartbeat,200)
     }catch(error){showBootFailure(error)}
   }
-  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
+  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,adopt:adoptIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
   setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000);
   window.addEventListener('online',heartbeat);document.addEventListener('abu-bassam-auth-changed',()=>{heartbeat();window.AbuBassamSecurity?.onSessionChanged?.()});
