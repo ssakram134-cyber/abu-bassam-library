@@ -6,7 +6,6 @@ const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const SECRET_KEY='abu_bassam_device_secret_v1';
 const PENDING_SECRET_KEY='abu_bassam_recovery_pending_secret_v1';
-const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';
 const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
 const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
 const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
