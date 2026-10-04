@@ -42,7 +42,7 @@ for(const marker of [
   'dist/BUILD_TYPE.txt',
   'dist/SHA256.txt',
   'dist/SIGNING_CERTIFICATE.txt',
-  'retention-days: 14'
+  'retention-days: 1'
 ]) need(testWorkflow,marker,'Android test workflow missing safeguard: '+marker);
 
 for(const marker of [
