@@ -4,7 +4,7 @@
   const DEVICE_NAME_KEY = 'abuBassamLockedDeviceNameV3';
   const DEVICE_CREATED_KEY = 'abuBassamLockedDeviceCreatedV3';
   const APP_VERSION = String(window.__ABU_APP_META__?.version || '');
-  function uuid(){return globalThis.crypto?.randomUUID?.()||`device-${Date.now()}-${Math.random().toString(36).slice(2)}`}
+  function uuid(){const id=globalThis.crypto?.randomUUID?.();if(!id)throw new Error('SECURE_DEVICE_ID_RANDOM_REQUIRED');return id}
   function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'}
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
   function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
