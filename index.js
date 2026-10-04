@@ -41,6 +41,7 @@ const SECURE_KEYS = new Set([
   'abu_bassam_auth_session_v1',
   'abu_bassam_auth_callback_v1',
   'abu_bassam_device_secret_v1',
+  'abu_bassam_device_id_v1',
   'abu_bassam_biometric_enabled_v1',
   'abu_bassam_offline_trust_v2',
   'abu_bassam_danger_pin_hash_v1',
