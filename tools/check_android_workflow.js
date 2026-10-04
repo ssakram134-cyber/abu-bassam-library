@@ -42,6 +42,7 @@ for(const marker of [
   'dist/BUILD_TYPE.txt',
   'dist/SHA256.txt',
   'dist/SIGNING_CERTIFICATE.txt',
+  "if: ${{ github.event_name != 'pull_request' }}",
   'retention-days: 1'
 ]) need(testWorkflow,marker,'Android test workflow missing safeguard: '+marker);
 
