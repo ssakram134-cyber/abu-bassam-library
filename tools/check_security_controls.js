@@ -23,8 +23,8 @@ need('web/security-extras-runtime.js',['verifyDangerPin','verifyStoredPin','PIN_
 forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
 need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
-need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()']);
-forbid('web/device-name-runtime.js',['login-throttle-fix-runtime.js','fail-closed-runtime.js',"cloud.list('device')"]);
+need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()',"if(!id)throw new Error('SECURE_DEVICE_ID_RANDOM_REQUIRED')"]);
+forbid('web/device-name-runtime.js',['login-throttle-fix-runtime.js','fail-closed-runtime.js',"cloud.list('device')",'Math.random()']);
 need('web/device-reconcile-runtime.js',['abu_bassam_owner_devices','abu_bassam_owner_device_count','abu_bassam_set_device_limit','AbuBassamNativeSecurity']);
 forbid('web/device-reconcile-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
 
