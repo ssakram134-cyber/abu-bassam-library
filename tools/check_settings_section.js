@@ -93,6 +93,17 @@ for(const marker of [
   "requirePermissions(['settingsPrinting','printerProfiles'])"
 ])need(enhancements,marker,'granular printer permission '+marker);
 need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
+need(appSettings,"function autoSync(value){if(!requirePermission('settingsSync')||!requirePermission('syncAutomatic')",'automatic sync must require settingsSync and syncAutomatic');
+need(appSettings,"function archiveAutoSync(value){if(!requirePermission('settingsArchive')||!requirePermission('syncAutomatic')",'archive auto-sync must require settingsArchive and syncAutomatic');
+need(appSettings,"function syncPolicy(){if(!requirePermission('settingsSync')||!requirePermission('syncSettings')",'sync policy must require settingsSync and syncSettings');
+for(const token of [
+  "function telegramPermission(key)",
+  "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
+  "requireTelegramPermission('settingsTelegram','إعدادات Telegram')",
+  "function saveTelegramSettings()",
+  "function clearTelegramSettings()",
+  "function testTelegram()"
+])need(indexHtml,token,'Telegram permission '+token);
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
 for(const marker of [
   "nativeSecurity('privacyMode'",'abuPrivacyCapture','navigator.storage?.estimate',
