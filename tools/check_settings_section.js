@@ -27,6 +27,8 @@ need(typography,"format==='otf'?sig==='OTTO'",'restored custom fonts must verify
 need(typography,'normalizeCustomFont({name,data,format:ext})','interactive font imports must pass the same validator as restored fonts');
 need(typography,'return true}catch(e){alert','typography persistence must report success/failure');
 need(typography,'if(!save()){if(exists>=0)custom[exists]=previous;else custom.pop()','font import must roll back after persistence failure');
+need(typography,'const previousCustom=custom.slice(),previousState=clone(state)','font deletion must snapshot state before persistence');
+need(typography,'if(!save()){custom=previousCustom;state=previousState','font deletion must roll back after persistence failure');
 for(const marker of ['appScalePreset(85)','appScalePreset(100)','appScalePreset(120)','appScalePreset(140)','صغير','عادي','كبير جدًا'])need(typography,marker,'UI text size preset '+marker);
 need(typography,"const DEFAULT_ROLE_GROUPS={name:{label:'الاسم',roles:['name']},title:{label:'العناوين',roles:['title','institution']},secondary:{label:'المعلومات الثانوية',roles:['secondary','info','details']},footer:{label:'الشريط السفلي',roles:['footer']}}",'badge default role groups');
 for(const marker of ['Regular','Medium','Bold Italic','Sharp','function roleDefault(group,field,value)'])need(typography,marker,'per-role badge typography '+marker);
