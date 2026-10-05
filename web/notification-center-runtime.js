@@ -16,7 +16,7 @@ const severityIcon={info:'ℹ️',success:'✅',warning:'⚠️',error:'❌',cri
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return globalThis.crypto?.randomUUID?.()||`n-${Date.now()}-${Math.random().toString(36).slice(2)}`}
-function scrub(v){return String(v??'').replace(/(password|كلمة\s*السر|token|secret|رمز\s*الدخول|رمز\s*ربط)\s*[:=]?\s*\S+/gi,'[محجوب]').replace(/data:[^\s]+/gi,'[بيانات محجوبة]').slice(0,600)}
+function scrub(v){return String(v??'').replace(/(password|كلمة\s*السر|token|secret|authorization|رمز\s*الدخول|رمز\s*ربط)\s*[:=]?\s*\S+/gi,'[محجوب]').replace(/data:[^\s"']+/gi,'[بيانات محجوبة]').replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'[بريد محجوب]').replace(/(?:\+?964|0)?7\d{9}\b/g,'[هاتف محجوب]').replace(/\b\d{8,}\b/g,'[رقم محجوب]').slice(0,600)}
 function role(){return window.AbuBassamSecurity?.role?.()||''}
 function isOwner(){return role()==='owner'}
 function deviceIdentity(){return window.AbuBassamDevices?.ensure?.()||{id:localStorage.getItem('abuBassamLockedDeviceIdV3')||'',name:localStorage.getItem('abuBassamLockedDeviceNameV3')||'هذا الجهاز'}}
@@ -44,8 +44,8 @@ function classifyOperation(op={}){
   return{category,severity};
 }
 function normalize(input={}){
-  const now=new Date().toISOString();
-  return{
+  const now=new Date().toISOString(),context=String(input.section||'')+' '+String(input.title||'');
+  const out={
     id:String(input.id||uid()),
     category:categoryLabel[input.category]?input.category:'system',
     severity:['info','success','warning','error','critical'].includes(input.severity)?input.severity:'info',
@@ -53,7 +53,11 @@ function normalize(input={}){
     deviceId:String(input.deviceId||deviceIdentity().id||''),deviceName:scrub(input.deviceName||deviceIdentity().name||'هذا الجهاز'),
     role:String(input.role||role()||'unknown'),createdAt:String(input.createdAt||now),read:!!input.read,
     source:String(input.source||'app'),eventType:String(input.eventType||input.type||'info')
+  };
+  if(/(مستمسك|مستمسكات|هوية|الوطنية|بطاقة السكن|تموين|التموينية|زبون|الزبون|زوجة|اطفال|أطفال|customer|document|national\s*id|residence)/i.test(context)){
+    out.title='عملية مستمسكات';out.section='مستمسكات الزبائن';if(input.details)out.details='[تفاصيل زبون محجوبة]'
   }
+  return out
 }
 function add(input,options={}){
   const n=normalize(input),list=load(),idx=list.findIndex(x=>x.id===n.id);
