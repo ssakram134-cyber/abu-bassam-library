@@ -18,6 +18,11 @@ need(typography,'src:url("fonts/Cairo-Regular.ttf")','bundled Cairo must use app
 need(typography,'src:url("fonts/Tajawal-Regular.ttf")','bundled Tajawal must use appassets-relative path');
 need(typography,"const EMBEDDED_FONTS=new Set(['cairo','tajawal'])",'bundled font families must be protected');
 need(typography,"if(EMBEDDED_FONTS.has(name.toLowerCase()))throw new Error",'custom fonts must not override bundled Cairo/Tajawal');
+need(typography,'function normalizeCustomFont(font)','restored custom fonts must use a validation gate');
+need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
+need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limited to TTF/OTF');
+need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
+need(typography,"format==='otf'?sig==='OTTO'",'restored custom fonts must verify the font signature');
 no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
 need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
 need(indexHtml,'function systemThemeValue()','live system theme resolver');
