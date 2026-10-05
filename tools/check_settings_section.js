@@ -12,6 +12,7 @@ for(const file of ['app-settings-runtime.js','settings-corrections-runtime.js','
   try{new vm.Script(src,{filename:file})}catch(e){errors.push(`${file} syntax: ${e.message}`)}
 }
 const appSettings=read(path.join(web,'app-settings-runtime.js'));
+const enhancements=read(path.join(web,'settings-enhancements-runtime.js'));
 const typography=read(path.join(web,'typography-runtime.js'));
 const indexHtml=read(path.join(web,'index.html'));
 need(typography,'src:url("fonts/Cairo-Regular.ttf")','bundled Cairo must use appassets-relative path');
@@ -45,6 +46,16 @@ need(appSettings,'id="abuArchiveAutoSync"','automatic archive control must be vi
 need(appSettings,'function archiveAutoSync(value)','automatic archive control must have real behavior');
 need(appSettings,'function setAutoSyncState(value)','archive and sync toggles must share one canonical state');
 need(appSettings,'DocumentVault?.setAutoSync','automatic archive setting must drive the document vault');
+for(const marker of [
+  "requirePermission('printerProfiles')",
+  "requirePermission('printerDpi')",
+  "requirePermission('printerBorderless')",
+  "requirePermission('printerCalibration')",
+  "requirePermissions(['printerProfiles','printerAdd'])",
+  "requirePermissions(['printerProfiles','printerDelete'])",
+  "requirePermissions(['printerProfiles','printerSetDefault'])",
+  "requirePermissions(['settingsPrinting','printerProfiles'])"
+])need(enhancements,marker,'granular printer permission '+marker);
 need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
 for(const marker of [
