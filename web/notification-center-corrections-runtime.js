@@ -15,7 +15,7 @@ function scrub(v){return String(v??'')
  .replace(/(?:\+?964|0)?7\d{9}\b/g,'[هاتف محجوب]')
  .replace(/\b\d{8,}\b/g,'[رقم محجوب]')
  .slice(0,600)}
-function cleanOne(n={}){const d=identity(),out={...n};out.id=String(out.id||'');out.title=scrub(out.title||'إشعار');out.section=scrub(out.section||'');out.deviceId=String(out.deviceId||d.id||'').trim();out.deviceName=scrub(out.deviceName||d.name||'هذا الجهاز');const context=`${n.section||''} ${n.title||''}`;if(sensitiveContext(context)){out.details=n.details?'[تفاصيل زبون محجوبة]':'';out.title=out.title.replace(/[:\-–—]\s*.+$/,'').trim()||'عملية مستمسكات'}else out.details=scrub(n.details||'');return out}
+function cleanOne(n={}){const d=identity(),out={...n};out.id=String(out.id||'');out.title=scrub(out.title||'إشعار');out.section=scrub(out.section||'');out.deviceId=String(out.deviceId||d.id||'').trim();out.deviceName=scrub(out.deviceName||d.name||'هذا الجهاز');const context=`${n.section||''} ${n.title||''}`;if(sensitiveContext(context)){out.details=n.details?'[تفاصيل زبون محجوبة]':'';out.title='عملية مستمسكات';out.section='مستمسكات الزبائن'}else out.details=scrub(n.details||'');return out}
 function operationIds(){try{return new Set((window.AbuBassamOps?.list?.()||[]).map(x=>String(x?.id||'').trim()).filter(Boolean))}catch(_){return new Set()}}
 function operationTime(n){const t=Date.parse(n?.createdAt||n?.uploadedAt||n?.printedAt||0);return Number.isFinite(t)?t:0}
 function sameOperation(a,b){return a&&b&&a.source==='operations'&&b.source==='operations'&&String(a.title||'')===String(b.title||'')&&String(a.details||'')===String(b.details||'')&&String(a.section||'')===String(b.section||'')&&String(a.deviceId||'')===String(b.deviceId||'')&&Math.abs(operationTime(a)-operationTime(b))<=5000}
