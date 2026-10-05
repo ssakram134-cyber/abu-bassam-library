@@ -16,6 +16,8 @@ const typography=read(path.join(web,'typography-runtime.js'));
 const indexHtml=read(path.join(web,'index.html'));
 need(typography,'src:url("fonts/Cairo-Regular.ttf")','bundled Cairo must use appassets-relative path');
 need(typography,'src:url("fonts/Tajawal-Regular.ttf")','bundled Tajawal must use appassets-relative path');
+need(typography,"const EMBEDDED_FONTS=new Set(['cairo','tajawal'])",'bundled font families must be protected');
+need(typography,"if(EMBEDDED_FONTS.has(name.toLowerCase()))throw new Error",'custom fonts must not override bundled Cairo/Tajawal');
 no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
 need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
 need(indexHtml,'function systemThemeValue()','live system theme resolver');
