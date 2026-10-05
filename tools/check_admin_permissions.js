@@ -60,6 +60,9 @@ for(const marker of [
 ])need(guards,marker,'direct settings permission '+marker);
 need(guards,"const can=k=>!secondary()||window.AbuBassamPermissions?.can?.(k)===true;",'secondary section permissions must fail closed before permission runtime is ready');
 need(guards,"wrap(window,'applyTheme','settingsThemes')",'global theme changes must require settingsThemes');
+need(runtime,"[/ثيم|مظهر/,['settingsThemes']]",'central settings theme controls must use settingsThemes');
+need(runtime,"[/خط/,['settingsFonts','settingsCardFonts']]",'central settings font controls must allow app or badge font permission');
+need(runtime,"!keys.some(can)",'central settings UI rules must allow any accepted permission key');
 const adminBlock=(runtime.match(/const ADMIN_ONLY=new Set\(\[([\s\S]*?)\]\);/)||[])[1]||'';
 const adminKeys=[...adminBlock.matchAll(/'([A-Za-z][A-Za-z0-9]+)'/g)].map(m=>m[1]);
 if(!adminKeys.length||new Set(adminKeys).size!==adminKeys.length)throw new Error('admin permissions check failed: invalid or duplicate UI admin-only keys');
