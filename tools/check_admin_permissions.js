@@ -46,6 +46,19 @@ for(const marker of ['_abu_bassam_device_permission','secret_hash','p_permission
 for(const marker of ['admin-permissions-runtime.js','permission-section-guards-runtime.js','loadAdminPermissions()','loadPermissionSectionGuards()'])need(loader,marker,'startup loader '+marker);
 for(const marker of ['customerDocumentsAdd','customerDocumentsEdit','customerDocumentsView','customerOriginalDocumentView','customerDocumentsDelete','sha256Hex','secret_hash'])need(edge,marker,'customer edge permission '+marker);
 for(const marker of ['__ABU_PERMISSION_SECTION_GUARDS_V1__','logsViewOwn','notificationsView','securityBiometric','securityAutoLock','securityPrivacyMode','syncAutomatic','printGeneral','pdfSave','imageExport','cardsPrint','customerPhoneView','questionsView','compressUse'])need(guards,marker,'section guard '+marker);
+for(const marker of [
+  "wrap(s,'theme','settingsThemes')",
+  "wrap(s,'fonts','settingsFonts')",
+  "wrap(s,'archiveAutoSync','syncAutomatic')",
+  "wrap(s,'backup','backupCreate')",
+  "wrap(s,'sync','syncManual')",
+  "wrap(s,'cloudLogin','cloudSettings')",
+  "wrap(s,'saveWhatsApp','settingsWhatsApp')",
+  "wrap(s,'shareWhatsApp','whatsappBackup')",
+  "wrap(s,'printSettings','settingsPrinting')",
+  "wrap(s,'systemSettings','settingsPermissions')",
+  "wrap(s,'cleanCache','settingsStorage')"
+])need(guards,marker,'direct settings permission '+marker);
 const adminBlock=(runtime.match(/const ADMIN_ONLY=new Set\(\[([\s\S]*?)\]\);/)||[])[1]||'';
 const adminKeys=[...adminBlock.matchAll(/'([A-Za-z][A-Za-z0-9]+)'/g)].map(m=>m[1]);
 if(!adminKeys.length||new Set(adminKeys).size!==adminKeys.length)throw new Error('admin permissions check failed: invalid or duplicate UI admin-only keys');
