@@ -23,6 +23,8 @@ need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored 
 need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limited to TTF/OTF');
 need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
 need(typography,"format==='otf'?sig==='OTTO'",'restored custom fonts must verify the font signature');
+need(typography,'normalizeCustomFont({name,data,format:ext})','interactive font imports must pass the same validator as restored fonts');
+need(typography,'vnd\\.ms-opentype','Android OTF MIME type must remain supported');
 no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
 need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
 need(indexHtml,'function systemThemeValue()','live system theme resolver');
