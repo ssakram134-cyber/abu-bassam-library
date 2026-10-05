@@ -40,6 +40,18 @@ for(const marker of [
   'normalizeLocal(op={}){const d=device(),safe=safeOperation(op)',
   "deviceName||d.name||'هذا الجهاز'"
 ])need(runtime,marker,'operation log');
+for(const marker of [
+  "requirePermission('logsViewOwn')",
+  "format==='pdf'?'logsPdf':format==='print'?'logsPrint':'logsExport'",
+  "requirePermission('logsDeleteLocal')",
+  "manual&&!requirePermission('syncManual')",
+  "canPermission('logsSearch')",
+  "canPermission('logsFilter')",
+  "logsViewCritical",
+  "logsViewSecurity",
+  "logsViewDeviceActivity",
+  "function applyPermissionUi()"
+])need(runtime,marker,'granular operation permission');
 no(runtime,'setInterval(patch,2500)','permanent operation patch polling must not return');
 need(runtime,"document.addEventListener('abu-runtime-loaded'",'operation patch must react to runtime load events');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
