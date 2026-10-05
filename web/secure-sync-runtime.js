@@ -219,9 +219,23 @@
     allowed.forEach((key) => {
       if (source[key] !== undefined && source[key] !== null) result[key] = source[key];
     });
+    const scrub = (input) => String(input ?? '')
+      .replace(/data:[^\s"']+/gi, '[بيانات محجوبة]')
+      .replace(/(password|كلمة\s*السر|token|secret|authorization|رمز\s*الدخول|رمز\s*ربط)\s*[:=]?\s*\S+/gi, '[محجوب]')
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[بريد محجوب]')
+      .replace(/(?:\+?964|0)?7\d{9}\b/g, '[هاتف محجوب]')
+      .replace(/\b\d{8,}\b/g, '[رقم محجوب]')
+      .slice(0, 240);
     ['title', 'details', 'section', 'fileName', 'paper', 'photo', 'deviceName'].forEach((key) => {
-      if (result[key] !== undefined) result[key] = String(result[key]).replace(/(password|كلمة\s*السر|token|رمز\s*الدخول)\s*[:=]?\s*\S+/gi, '[محجوب]').slice(0, 240);
+      if (result[key] !== undefined) result[key] = scrub(result[key]);
     });
+    const context = String(source.section || '') + ' ' + String(source.title || '');
+    if (/(مستمسك|مستمسكات|هوية|الوطنية|بطاقة السكن|تموين|التموينية|زبون|الزبون|زوجة|اطفال|أطفال|customer|document|national\s*id|residence)/i.test(context)) {
+      result.title = 'عملية مستمسكات';
+      result.section = 'مستمسكات الزبائن';
+      if (source.details) result.details = '[تفاصيل زبون محجوبة]';
+      if (source.fileName) result.fileName = '[اسم ملف محجوب]';
+    }
     return result;
   }
 
@@ -245,7 +259,7 @@
     const operation = cleanOperation(input);
     operation.id ||= uuid();
     operation.uploadedAt ||= new Date().toISOString();
-    operation.deviceName ||= typeof window.AbuBassamDeviceName === 'function' ? window.AbuBassamDeviceName() : 'أكرم';
+    operation.deviceName ||= typeof window.AbuBassamDeviceName === 'function' ? window.AbuBassamDeviceName() : 'هذا الجهاز';
     saveOperations([operation, ...loadOperations().filter((item) => item.id !== operation.id)]);
     renderOperations();
     void push;
@@ -273,7 +287,7 @@
     if (!$('opsList')) return;
     const operations = filteredOperations();
     $('opsList').innerHTML = operations.length
-      ? operations.map((item) => `<div class="op-card"><div class="op-icon">${icons[item.type] || '•'}</div><div><div class="op-title">${safe(item.title || labels[item.type] || 'عملية')}</div><div class="op-meta">${new Date(item.printedAt || item.uploadedAt || Date.now()).toLocaleString('ar-IQ')}${item.section ? `<br>القسم: ${safe(item.section)}` : ''}${item.fileName ? `<br>الملف: ${safe(item.fileName)}` : ''}${item.details ? `<br>${safe(item.details)}` : ''}<br>الجهاز: ${safe(item.deviceName || 'أكرم')}</div></div></div>`).join('')
+      ? operations.map((item) => `<div class="op-card"><div class="op-icon">${icons[item.type] || '•'}</div><div><div class="op-title">${safe(item.title || labels[item.type] || 'عملية')}</div><div class="op-meta">${new Date(item.printedAt || item.uploadedAt || Date.now()).toLocaleString('ar-IQ')}${item.section ? `<br>القسم: ${safe(item.section)}` : ''}${item.fileName ? `<br>الملف: ${safe(item.fileName)}` : ''}${item.details ? `<br>${safe(item.details)}` : ''}<br>الجهاز: ${safe(item.deviceName || 'هذا الجهاز')}</div></div></div>`).join('')
       : '<div class="ops-empty">لا توجد عمليات مطابقة.</div>';
   }
 
@@ -323,7 +337,7 @@
     const quote = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const content = format === 'csv'
       ? `التاريخ,النوع,العنوان,القسم,الملف,التفاصيل,الجهاز\n${operations.map((item) => [item.printedAt || item.uploadedAt, item.type, item.title || labels[item.type], item.section, item.fileName, item.details, item.deviceName].map(quote).join(',')).join('\n')}`
-      : operations.map((item) => `${item.printedAt || item.uploadedAt} | ${item.title || labels[item.type]} | ${item.section || '—'} | ${item.fileName || '—'} | ${item.details || ''} | ${item.deviceName || 'أكرم'}`).join('\n');
+      : operations.map((item) => `${item.printedAt || item.uploadedAt} | ${item.title || labels[item.type]} | ${item.section || '—'} | ${item.fileName || '—'} | ${item.details || ''} | ${item.deviceName || 'هذا الجهاز'}`).join('\n');
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8';
     const data = `data:${mime};base64,${btoa(unescape(encodeURIComponent(content)))}`;
     if (window.Android?.saveBase64) Android.saveBase64(`Abu_Bassam_Operations_${Date.now()}.${format}`, mime, data);
