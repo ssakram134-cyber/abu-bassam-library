@@ -37,6 +37,7 @@ need(appSettings,'id="abuArchiveAutoSync"','automatic archive control must be vi
 need(appSettings,'function archiveAutoSync(value)','automatic archive control must have real behavior');
 need(appSettings,'function setAutoSyncState(value)','archive and sync toggles must share one canonical state');
 need(appSettings,'DocumentVault?.setAutoSync','automatic archive setting must drive the document vault');
+need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
 for(const marker of [
   "nativeSecurity('privacyMode'",'abuPrivacyCapture','navigator.storage?.estimate',
