@@ -69,8 +69,9 @@ function fromOperation(op={}){
 }
 function markRead(id){const list=load(),n=list.find(x=>x.id===id);if(n)n.read=true;save(list);updateBadge();render()}
 function markAll(){const list=load().map(x=>({...x,read:true}));save(list);updateBadge();render()}
-function removeOne(id){save(load().filter(x=>x.id!==id));updateBadge();render()}
-function clearRead(){save(load().filter(x=>!x.read));updateBadge();render()}
+function canDeleteCritical(){return isOwner()||window.AbuBassamPermissions?.can?.('notificationsDeleteCritical')===true}
+function removeOne(id){const list=load(),n=list.find(x=>String(x.id)===String(id));if(n?.severity==='critical'){if(!canDeleteCritical())return alert('حذف الإشعارات الحرجة غير مسموح لهذا الفرع.');if(!confirm('هذا إشعار حرج. سيُحذف من هذا الجهاز فقط، بينما يبقى سجل التدقيق محفوظًا للأدمن. هل تريد المتابعة؟'))return}save(list.filter(x=>String(x.id)!==String(id)));updateBadge();render()}
+function clearRead(){const list=load(),critical=list.filter(x=>x.read&&x.severity==='critical');if(!critical.length){save(list.filter(x=>!x.read));updateBadge();render();return}const preserveCritical=()=>{save(list.filter(x=>!x.read||x.severity==='critical'));updateBadge();render()};if(!canDeleteCritical()){preserveCritical();alert('تم حذف الإشعارات المقروءة العادية، وبقيت الإشعارات الحرجة لأن صلاحية حذفها غير متاحة.');return}if(!confirm(`يوجد ${critical.length} إشعار حرج مقروء. حذف المقروء سيزيله محليًا، بينما يبقى سجل التدقيق محفوظًا للأدمن. هل تريد المتابعة؟`)){preserveCritical();return}save(list.filter(x=>!x.read));updateBadge();render()}
 function unreadCount(){return load().filter(x=>!x.read).length}
 function updateBadge(){const n=unreadCount(),badge=$('abuNotificationBadge');if(!badge)return;badge.textContent=n>99?'99+':String(n);badge.style.display=n?'grid':'none';const btn=$('abuNotificationBell');if(btn)btn.setAttribute('aria-label',n?`الإشعارات، ${n} غير مقروء`:'الإشعارات')}
 
