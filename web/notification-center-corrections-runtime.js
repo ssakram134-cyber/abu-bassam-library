@@ -31,7 +31,7 @@ function patchCenter(){const c=window.AbuBassamNotifications;if(!c||c.__abuCorre
  if(list0)c.list=function(){cleanStore();return list0().map(cleanOne)};
  if(open0)c.open=function(){cleanStore();const out=open0();setTimeout(fixUi,0);return out};
  if(refresh0)c.refresh=function(){cleanStore();const out=refresh0();setTimeout(()=>{cleanStore();fixUi()},150);return out};
- if(remove0)c.remove=function(id){const n=(read(STORE,[])||[]).find(x=>String(x.id)===String(id));if(n?.severity==='critical'&&!confirm('هذا إشعار حرج. سيُحذف من هذا الجهاز فقط، بينما يبقى سجل التدقيق محفوظًا للأدمن. هل تريد المتابعة؟'))return;const out=remove0(id);cleanStore();return out};
+ if(remove0)c.remove=function(id){const out=remove0(id);cleanStore();return out};
  if(mark0)c.markAll=function(){const out=mark0();cleanStore();return out};
  if(clear0)c.clearRead=function(){const out=clear0();cleanStore();return out};
  return true}
