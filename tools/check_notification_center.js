@@ -12,7 +12,7 @@ const loader=read('web/productivity-tools-runtime.js');
 const startupLoader=read('web/device-name-runtime.js');
 const migration=read('supabase/migrations/202609240002_notification_audit_center.sql');
 const privacyMigration=read('supabase/migrations/202609240003_operation_log_privacy_boundary.sql');
-const redactionMigration=read('supabase/migrations/202609240012_notification_audit_server_redaction.sql');
+const redactionMigration=read('supabase/migrations/20261005211736_abu_bassam_strict_customer_audit_redaction.sql');
 for(const src of [runtime,corrections,bridge,privacy,secondaryPrivacy,excel,startupLoader])new Function(src);
 need(loader,'operation-log-privacy-runtime.js','operation privacy runtime is not loaded');
 need(loader,'notification-center-runtime.js','notification runtime is not loaded');
@@ -49,5 +49,7 @@ need(runtime,'abu_bassam_owner_activity_report','owner-only report RPC');need(ru
 for(const token of ['__ABU_NOTIFICATION_EXCEL_V2__','jszip.min.js','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.xlsx','sheet1.xml','workbook.xml','Android.saveBase64',"role?.()==='owner'",'abuReportExcel'])need(excel,token,`XLSX export ${token}`);
 for(const token of ['__ABU_NOTIFICATION_CENTER_CORRECTIONS_V2__','validOps.has(opId)','sameOperation(a,b)','isPhantomOperation','seen.has(n.id)','[هاتف محجوب]','[بريد محجوب]','[تفاصيل زبون محجوبة]','هذا إشعار حرج','تقارير الأجهزة الفرعية','String(scope[id]||\'\').trim()!==d.id'])need(corrections,token,`notification corrections ${token}`);
 need(migration,'revoke all on public.abu_bassam_device_activity from anon,authenticated','direct table access revoked');need(migration,'from PUBLIC,anon','security-definer PUBLIC/anon execution revoked');need(migration,"v_actor.role<>'owner'",'server owner verification');need(migration,'DEVICE_NOT_AUTHORIZED','device secret verification');need(migration,'abu_bassam_owner_activity_devices','owner device report RPC');
-need(privacyMigration,"kind <> 'operation'",'legacy operation rows excluded by RLS');for(const token of ["coalesce(v_device.secret_hash,'')=''",'v_device.secret_hash<>v_hash','[تفاصيل زبون محجوبة]','[هاتف محجوب]','[بريد محجوب]','[رقم محجوب]','revoke all on function public.abu_bassam_record_device_activity'])need(redactionMigration,token,`server audit redaction ${token}`);
+need(privacyMigration,"kind <> 'operation'",'legacy operation rows excluded by RLS');for(const token of ["coalesce(v_device.secret_hash,'')=''",'v_device.secret_hash<>v_hash','[تفاصيل زبون محجوبة]','[هاتف محجوب]','[بريد محجوب]','[رقم محجوب]',"v_title:='عملية مستمسكات'","v_section:='مستمسكات الزبائن'",'revoke all on function public.abu_bassam_record_device_activity'])need(redactionMigration,token,`server audit redaction ${token}`);
+need(corrections,"out.title='عملية مستمسكات';out.section='مستمسكات الزبائن'",'client notification customer labels must be fully redacted');
+need(privacy,"out.title=scrubText(labels[src.type]||'عملية مستمسكات');out.section='مستمسكات الزبائن'",'operation log customer labels must not preserve customer names');
 console.log('notification center checks passed: exact device privacy, redaction, owner reports, CSV/TXT/PDF, and real XLSX export');
