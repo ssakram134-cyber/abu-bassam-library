@@ -31,6 +31,7 @@ need(indexHtml,'function systemThemeValue()','live system theme resolver');
 need(indexHtml,"addEventListener?.('change'","system theme change listener");
 need(appSettings,'لم يتم إنشاء جهاز افتراضي','base settings device list must fail honestly');
 no(appSettings,"list=[{name:'أكرم'","base settings must not fabricate a device");
+no(appSettings,"SYNC_POLICY_KEY,WA_KEY].forEach(key=>localStorage.removeItem(key))",'base settings reset must preserve sync and WhatsApp');
 need(appSettings,'id="abuWaQuickShare"','WhatsApp enabled setting must expose a real share action');
 need(appSettings,'function applyWhatsAppSetting()','WhatsApp toggle must affect the share UI');
 need(appSettings,"return window.DocumentVault.backup('share')",'WhatsApp share action must open Android share flow through a real backup');
