@@ -49,7 +49,7 @@ need(appSettings,"if(wa.enabled===false)return alert",'WhatsApp share action mus
 need(appSettings,'async function backup(mode)','settings backup must await the real backup result');
 need(appSettings,"ok?'تم إنشاء النسخة الاحتياطية ✓':'لم تُنشأ نسخة احتياطية.'",'settings backup status must reflect the real result');
 need(appSettings,'async function sync()','settings sync must aggregate actual sync results');
-need(appSettings,"results.some(Boolean)",'settings sync must derive status from completed jobs');
+need(appSettings,'const vaultResult=hasVault?await Promise.resolve(DocumentVault.syncNow()).catch(()=>false):null','settings sync must track vault result explicitly');need(appSettings,'const settingsResult=hasSettings?await Promise.resolve(AbuBassamOps.sync()).catch(()=>false):null','settings sync must track settings result explicitly');need(appSettings,"if(window.AbuBassamDevices?.heartbeat)Promise.resolve(AbuBassamDevices.heartbeat()).catch(()=>false)",'device heartbeat must be auxiliary only');need(appSettings,"اكتملت مزامنة الإعدادات، لكن أرشيف الملفات لم يكتمل.",'settings sync must distinguish partial completion');
 need(appSettings,'async function google()','Google share must await backup/share preparation');
 need(appSettings,"if(!ok){if(state)state.textContent='لم تبدأ مشاركة Google.';return false}",'Google share must not claim success when backup/share did not start');
 need(appSettings,'id="abuArchiveAutoSync"','automatic archive control must be visible in settings');
