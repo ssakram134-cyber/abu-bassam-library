@@ -61,6 +61,28 @@ need(appSettings,'function archiveAutoSync(value)','automatic archive control mu
 need(appSettings,'function setAutoSyncState(value)','archive and sync toggles must share one canonical state');
 need(appSettings,'DocumentVault?.setAutoSync','automatic archive setting must drive the document vault');
 for(const marker of [
+  "function requirePermission(key,label='')",
+  "function requireAny(keys,label='')",
+  "function theme(key){if(!requirePermission('settingsThemes'))",
+  "function fonts(){if(!requireAny(['settingsFonts','settingsCardFonts']",
+  "async function backup(mode){if(!requirePermission('backupCreate'))",
+  "if(mode==='share'&&!requirePermission('backupShare'))",
+  "async function sync(){if(!requirePermission('syncManual'))",
+  "function cloudLogin(){if(!requirePermission('cloudSettings'))",
+  "function autoSync(value){if(!requirePermission('syncAutomatic'))",
+  "function archiveAutoSync(value){if(!requirePermission('syncAutomatic'))",
+  "function syncPolicy(){if(!requirePermission('syncSettings'))",
+  "nextWifi!==!!previous.wifiOnly&&!requirePermission('syncWifiOnly')",
+  "function saveWhatsApp(){if(!requirePermission('settingsWhatsApp'))",
+  "async function shareWhatsApp(){if(!requirePermission('whatsappBackup'))",
+  "async function google(){if(!requirePermission('googleShare'))",
+  "function printSettings(){if(!requirePermission('settingsPrinting'))",
+  "function systemSettings(){if(!requirePermission('settingsPermissions'))",
+  "async function storage(){if(!requirePermission('settingsStorage'))",
+  "function cleanCache(){if(!requirePermission('settingsStorage'))",
+  "function resetDefaults(){if(!requirePermission('settingsReset'))"
+])need(appSettings,marker,'source-level settings permission '+marker);
+for(const marker of [
   "requirePermission('printerProfiles')",
   "requirePermission('printerDpi')",
   "requirePermission('printerBorderless')",
@@ -85,6 +107,7 @@ if(/SyncPolicy|WhatsApp|WA_KEY|AUTO_SYNC/i.test(reset))errors.push('settings res
 const vaultHardening=read(path.join(web,'document-vault-hardening-runtime.js'));
 need(vaultHardening,"return true}catch(e){alert('تعذر إنشاء النسخة:",'plain vault backup must report success and failure');
 need(vaultHardening,"if(!confirm('النسخة ZIP العادية غير مشفرة",'plain vault backup must allow explicit cancellation');
+need(vaultHardening,"mode==='share'&&!allowed('backupShare')",'vault backup sharing must require backupShare at source');
 const vault=read(path.join(web,'document-vault-runtime.js'));
 for(const marker of ['function wifiVerified()',"return type==='wifi'",'policy.wifiOnly&&!wifiVerified()','const current=localStorage.getItem(SYNC_POLICY_KEY)'])need(vault,marker,'canonical Wi-Fi-only sync policy');
 no(vault,'knownNonWifi()','obsolete fail-open Wi-Fi detection');
