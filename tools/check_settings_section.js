@@ -30,6 +30,10 @@ need(typography,'if(!save()){if(exists>=0)custom[exists]=previous;else custom.po
 for(const marker of ['appScalePreset(85)','appScalePreset(100)','appScalePreset(120)','appScalePreset(140)','صغير','عادي','كبير جدًا'])need(typography,marker,'UI text size preset '+marker);
 need(typography,"const DEFAULT_ROLE_GROUPS={name:{label:'الاسم',roles:['name']},title:{label:'العناوين',roles:['title','institution']},secondary:{label:'المعلومات الثانوية',roles:['secondary','info','details']},footer:{label:'الشريط السفلي',roles:['footer']}}",'badge default role groups');
 for(const marker of ['Regular','Medium','Bold Italic','Sharp','function roleDefault(group,field,value)'])need(typography,marker,'per-role badge typography '+marker);
+need(typography,"window.AbuBassamPermissions?.can?.(key)===true",'font settings must fail closed for secondary devices');
+need(typography,"['appFont','appScale'].includes(field)?'settingsFonts':'settingsCardFonts'",'app and badge font settings must use separate permissions');
+need(typography,"canAnySetting(['settingsFonts','settingsCardFonts'])",'font library access must require at least one font permission');
+need(typography,"document.querySelectorAll('#abuRoleDefaults select,#abuRoleDefaults input').forEach(el=>el.disabled=!cardAllowed)",'badge default controls must disable without settingsCardFonts');
 need(typography,'vnd\\.ms-opentype','Android OTF MIME type must remain supported');
 no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
 need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
