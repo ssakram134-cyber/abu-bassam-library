@@ -46,6 +46,12 @@ need(appSettings,'id="abuWaQuickShare"','WhatsApp enabled setting must expose a 
 need(appSettings,'function applyWhatsAppSetting()','WhatsApp toggle must affect the share UI');
 need(appSettings,"return window.DocumentVault.backup('share')",'WhatsApp share action must open Android share flow through a real backup');
 need(appSettings,"if(wa.enabled===false)return alert",'WhatsApp share action must honor disabled setting');
+need(appSettings,'async function backup(mode)','settings backup must await the real backup result');
+need(appSettings,"ok?'تم إنشاء النسخة الاحتياطية ✓':'لم تُنشأ نسخة احتياطية.'",'settings backup status must reflect the real result');
+need(appSettings,'async function sync()','settings sync must aggregate actual sync results');
+need(appSettings,"results.some(Boolean)",'settings sync must derive status from completed jobs');
+need(appSettings,'async function google()','Google share must await backup/share preparation');
+need(appSettings,"if(!ok){if(state)state.textContent='لم تبدأ مشاركة Google.';return false}",'Google share must not claim success when backup/share did not start');
 need(appSettings,'id="abuArchiveAutoSync"','automatic archive control must be visible in settings');
 need(appSettings,'function archiveAutoSync(value)','automatic archive control must have real behavior');
 need(appSettings,'function setAutoSyncState(value)','archive and sync toggles must share one canonical state');
