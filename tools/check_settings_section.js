@@ -44,7 +44,7 @@ no(appSettings,"list=[{name:'أكرم'","base settings must not fabricate a devi
 no(appSettings,"SYNC_POLICY_KEY,WA_KEY].forEach(key=>localStorage.removeItem(key))",'base settings reset must preserve sync and WhatsApp');
 need(appSettings,'id="abuWaQuickShare"','WhatsApp enabled setting must expose a real share action');
 need(appSettings,'function applyWhatsAppSetting()','WhatsApp toggle must affect the share UI');
-need(appSettings,"return window.DocumentVault.backup('share')",'WhatsApp share action must open Android share flow through a real backup');
+need(appSettings,'async function shareWhatsApp()','WhatsApp share must await the real backup result');need(appSettings,"const ok=await window.DocumentVault.backup('share');if(!ok)return false",'WhatsApp share must stop when backup/share is cancelled or fails');need(appSettings,"log('مشاركة نسخة عبر WhatsApp','تم فتح شاشة مشاركة Android');return true",'WhatsApp share must log only after a successful share handoff');
 need(appSettings,"if(wa.enabled===false)return alert",'WhatsApp share action must honor disabled setting');
 need(appSettings,'async function backup(mode)','settings backup must await the real backup result');
 need(appSettings,"ok?'تم إنشاء النسخة الاحتياطية ✓':'لم تُنشأ نسخة احتياطية.'",'settings backup status must reflect the real result');
