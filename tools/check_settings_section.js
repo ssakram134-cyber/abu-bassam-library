@@ -7,10 +7,21 @@ const errors=[];
 const read=p=>fs.readFileSync(p,'utf8');
 const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
-for(const file of ['settings-corrections-runtime.js','settings-enhancements-runtime.js','device-name-runtime.js','document-vault-runtime.js']){
+for(const file of ['app-settings-runtime.js','settings-corrections-runtime.js','settings-enhancements-runtime.js','typography-runtime.js','device-name-runtime.js','document-vault-runtime.js']){
   const src=read(path.join(web,file));
   try{new vm.Script(src,{filename:file})}catch(e){errors.push(`${file} syntax: ${e.message}`)}
 }
+const appSettings=read(path.join(web,'app-settings-runtime.js'));
+const typography=read(path.join(web,'typography-runtime.js'));
+const indexHtml=read(path.join(web,'index.html'));
+need(typography,'src:url("fonts/Cairo-Regular.ttf")','bundled Cairo must use appassets-relative path');
+need(typography,'src:url("fonts/Tajawal-Regular.ttf")','bundled Tajawal must use appassets-relative path');
+no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
+need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
+need(indexHtml,'function systemThemeValue()','live system theme resolver');
+need(indexHtml,"addEventListener?.('change'","system theme change listener");
+need(appSettings,'لم يتم إنشاء جهاز افتراضي','base settings device list must fail honestly');
+no(appSettings,"list=[{name:'أكرم'","base settings must not fabricate a device");
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
 for(const marker of [
   "nativeSecurity('privacyMode'",'abuPrivacyCapture','navigator.storage?.estimate',
