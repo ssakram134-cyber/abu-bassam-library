@@ -45,6 +45,8 @@ need(secondaryPrivacy,'abuBassamOperationDeviceScopeV1','notification privacy mu
 need(secondaryPrivacy,'abuBassamAuditQueueV1','secondary audit queue must be privacy filtered');
 need(secondaryPrivacy,'ownQueue','foreign queued audit events must be purged before upload');
 need(runtime,'abuNotificationBell','bell button');need(runtime,'abuNotificationBadge','unread badge');need(runtime,'markAll','mark all read');need(runtime,'clearRead','clear read notifications');
+need(runtime,"function markAll(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsMarkRead'))",'bulk mark-read must require notificationsManage and notificationsMarkRead');
+need(runtime,"function clearRead(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsDelete'))",'bulk clear-read must require notificationsManage and notificationsDelete');
 for(const marker of [
   "function canViewNotification(n)",
   "notificationsMaintenance",
