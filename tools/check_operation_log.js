@@ -4,10 +4,12 @@ const vm=require('vm');
 const root=path.resolve(__dirname,'..');
 const runtimePath=path.join(root,'web','operation-log-corrections-runtime.js');
 const scrubPath=path.join(root,'web','operation-log-storage-migration-runtime.js');
+const basePath=path.join(root,'web','secure-sync-runtime.js');
 const loaderPath=path.join(root,'web','device-name-runtime.js');
 const migrationPath=path.join(root,'supabase','migrations','202609240011_strict_activity_device_secret.sql');
 const runtime=fs.readFileSync(runtimePath,'utf8');
 const scrub=fs.readFileSync(scrubPath,'utf8');
+const base=fs.readFileSync(basePath,'utf8');
 const loader=fs.readFileSync(loaderPath,'utf8');
 const migration=fs.readFileSync(migrationPath,'utf8');
 const errors=[];
@@ -15,6 +17,7 @@ const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: 
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
 try{new vm.Script(runtime,{filename:'operation-log-corrections-runtime.js'})}catch(e){errors.push(`operation log syntax: ${e.message}`)}
 try{new vm.Script(scrub,{filename:'operation-log-storage-migration-runtime.js'})}catch(e){errors.push(`operation scrub syntax: ${e.message}`)}
+try{new vm.Script(base,{filename:'secure-sync-runtime.js'})}catch(e){errors.push(`base operation syntax: ${e.message}`)}
 for(const marker of [
   '__ABU_OPERATION_LOG_CORRECTIONS_V2__',
   'abu_bassam_owner_activity_devices',
@@ -40,6 +43,9 @@ for(const marker of [
 no(runtime,'setInterval(patch,2500)','permanent operation patch polling must not return');
 need(runtime,"document.addEventListener('abu-runtime-loaded'",'operation patch must react to runtime load events');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
+for(const marker of ['[هاتف محجوب]','[بريد محجوب]','[رقم محجوب]',"result.title = 'عملية مستمسكات'","result.section = 'مستمسكات الزبائن'"])need(base,marker,'base operation privacy');
+no(base,"window.AbuBassamDeviceName() : 'أكرم'",'base operation log must not fabricate the device name');
+no(base,"item.deviceName || 'أكرم'",'base operation display/export must not fabricate the device name');
 for(const marker of ['__ABU_OPERATION_LOG_STORAGE_MIGRATION_V1__','api.scrub(item)',"localStorage.removeItem('abuBassamOpsV3')","localStorage.removeItem('abuBassamOpsV2')"])need(scrub,marker,'operation storage scrub');
 for(const marker of ['operation-log-corrections-runtime.js','loadOperationLogCorrections()','operation-log-storage-migration-runtime.js','loadOperationLogStorageMigration'])need(loader,marker,'operation log loader');
 for(const marker of [
