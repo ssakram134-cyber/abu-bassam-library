@@ -24,6 +24,9 @@ need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limite
 need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
 need(typography,"format==='otf'?sig==='OTTO'",'restored custom fonts must verify the font signature');
 need(typography,'normalizeCustomFont({name,data,format:ext})','interactive font imports must pass the same validator as restored fonts');
+for(const marker of ['appScalePreset(85)','appScalePreset(100)','appScalePreset(120)','appScalePreset(140)','صغير','عادي','كبير جدًا'])need(typography,marker,'UI text size preset '+marker);
+need(typography,"const DEFAULT_ROLE_GROUPS={name:{label:'الاسم',roles:['name']},title:{label:'العناوين',roles:['title','institution']},secondary:{label:'المعلومات الثانوية',roles:['secondary','info','details']},footer:{label:'الشريط السفلي',roles:['footer']}}",'badge default role groups');
+for(const marker of ['Regular','Medium','Bold Italic','Sharp','function roleDefault(group,field,value)'])need(typography,marker,'per-role badge typography '+marker);
 need(typography,'vnd\\.ms-opentype','Android OTF MIME type must remain supported');
 no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
 need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
