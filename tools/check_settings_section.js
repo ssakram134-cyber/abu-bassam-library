@@ -7,7 +7,7 @@ const errors=[];
 const read=p=>fs.readFileSync(p,'utf8');
 const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
-for(const file of ['app-settings-runtime.js','settings-corrections-runtime.js','settings-enhancements-runtime.js','typography-runtime.js','device-name-runtime.js','document-vault-runtime.js']){
+for(const file of ['app-settings-runtime.js','settings-corrections-runtime.js','settings-enhancements-runtime.js','typography-runtime.js','device-name-runtime.js','document-vault-runtime.js','document-vault-hardening-runtime.js']){
   const src=read(path.join(web,file));
   try{new vm.Script(src,{filename:file})}catch(e){errors.push(`${file} syntax: ${e.message}`)}
 }
@@ -78,6 +78,9 @@ for(const marker of [
 ])need(fix,marker,'settings corrections');
 const reset=(fix.match(/const RESET_KEYS=\[([^\]]*)\]/)||[])[1]||'';
 if(/SyncPolicy|WhatsApp|WA_KEY|AUTO_SYNC/i.test(reset))errors.push('settings reset: must not clear sync or WhatsApp settings');
+const vaultHardening=read(path.join(web,'document-vault-hardening-runtime.js'));
+need(vaultHardening,"return true}catch(e){alert('تعذر إنشاء النسخة:",'plain vault backup must report success and failure');
+need(vaultHardening,"if(!confirm('النسخة ZIP العادية غير مشفرة",'plain vault backup must allow explicit cancellation');
 const vault=read(path.join(web,'document-vault-runtime.js'));
 for(const marker of ['function wifiVerified()',"return type==='wifi'",'policy.wifiOnly&&!wifiVerified()','const current=localStorage.getItem(SYNC_POLICY_KEY)'])need(vault,marker,'canonical Wi-Fi-only sync policy');
 no(vault,'knownNonWifi()','obsolete fail-open Wi-Fi detection');
