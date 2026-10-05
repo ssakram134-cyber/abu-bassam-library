@@ -14,7 +14,7 @@ const CORE_FONTS=[
 const DEFAULTS={appFont:'Cairo',appScale:100,badgeFont:'Cairo',badgeScale:100,footerLocked:true,defaultStyles:{},typeStyles:{},recentColors:['#000000','#ffffff','#c9a15b','#075b4d','#063b75','#d71920'],favoriteColors:['#000000','#ffffff','#c9a15b','#075b4d']};
 const BASE_STYLE={font:'',size:100,color:'',weight:'700',italic:false,sharp:false,underline:false,strike:false,align:'center',letter:0,line:1.25,autoFit:true,minSize:55};
 let state=load(KEY,DEFAULTS),custom=load(CUSTOM_KEY,[]),selected=null,undo=[],redo=[];
-state=Object.assign({},DEFAULTS,state||{});state.defaultStyles=state.defaultStyles||{};state.typeStyles=state.typeStyles||{};state.recentColors=Array.isArray(state.recentColors)?state.recentColors:DEFAULTS.recentColors.slice();state.favoriteColors=Array.isArray(state.favoriteColors)?state.favoriteColors:DEFAULTS.favoriteColors.slice();custom=Array.isArray(custom)?custom:[];
+state=Object.assign({},DEFAULTS,state||{});state.defaultStyles=state.defaultStyles||{};state.typeStyles=state.typeStyles||{};state.recentColors=Array.isArray(state.recentColors)?state.recentColors:DEFAULTS.recentColors.slice();state.favoriteColors=Array.isArray(state.favoriteColors)?state.favoriteColors:DEFAULTS.favoriteColors.slice();
 
 function $(id){return document.getElementById(id)}
 function load(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||JSON.parse(JSON.stringify(fallback))}catch(e){return JSON.parse(JSON.stringify(fallback))}}
@@ -23,6 +23,15 @@ function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;
 function clone(value){return JSON.parse(JSON.stringify(value))}
 function cap(value,min,max){return Math.max(min,Math.min(max,Number(value)||0))}
 function safeFont(value){return String(value||'Cairo').replace(/["'<>;{}]/g,'').trim()||'Cairo'}
+function normalizeCustomFont(font){
+  if(!font||typeof font!=='object')return null;
+  const name=safeFont(font.name),format=String(font.format||'').toLowerCase(),data=String(font.data||'');
+  if(!name||EMBEDDED_FONTS.has(name.toLowerCase())||!['ttf','otf'].includes(format))return null;
+  if(data.length>3*1024*1024||!/^data:(?:font\/(?:ttf|otf|sfnt)|application\/(?:x-font-ttf|x-font-opentype|font-sfnt|octet-stream));base64,[A-Za-z0-9+/=]+$/i.test(data))return null;
+  try{const raw=atob(data.slice(data.indexOf(',')+1,data.indexOf(',')+9)),b=[...raw].map(x=>x.charCodeAt(0)),sig=raw.slice(0,4),valid=format==='otf'?sig==='OTTO':(b[0]===0&&b[1]===1&&b[2]===0&&b[3]===0)||sig==='ttcf';if(!valid)return null}catch(_){return null}
+  return{name,data,format}
+}
+custom=(Array.isArray(custom)?custom:[]).map(normalizeCustomFont).filter(Boolean);
 function fontFamily(value){let name=safeFont(value);return `"${name}","Cairo","Tajawal",Tahoma,Arial,sans-serif`}
 function allFonts(){let result=CORE_FONTS.slice();custom.forEach(font=>result.push([font.name,font.name+' (مضاف)']));return result}
 function fontOptions(value){return allFonts().map(item=>`<option value="${esc(item[0])}" ${item[0]===value?'selected':''}>${esc(item[1])}</option>`).join('')}
@@ -74,7 +83,7 @@ function resetAll(skipConfirm=false){if(!skipConfirm&&!confirm('استعادة �
 async function importFont(file){if(!file)return;try{let ext=(file.name.split('.').pop()||'').toLowerCase();if(!['ttf','otf'].includes(ext))throw new Error('الملف يجب أن يكون TTF أو OTF');if(file.size>2*1024*1024)throw new Error('حجم الخط أكبر من 2 MB');let buffer=await file.slice(0,4).arrayBuffer(),bytes=new Uint8Array(buffer),signature=String.fromCharCode(...bytes),valid=ext==='otf'?signature==='OTTO':(bytes[0]===0&&bytes[1]===1&&bytes[2]===0&&bytes[3]===0)||signature==='ttcf';if(!valid)throw new Error('ملف الخط تالف أو غير مدعوم');let name=safeFont(file.name.replace(/\.(ttf|otf)$/i,''));if(EMBEDDED_FONTS.has(name.toLowerCase()))throw new Error('هذا اسم خط مدمج ومحمي. غيّر اسم ملف الخط المضاف.');let exists=custom.findIndex(font=>font.name.toLowerCase()===name.toLowerCase());if(exists>=0&&!confirm('يوجد خط بالاسم نفسه. هل تريد استبداله؟'))return;let data=await new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)}),font={name,data,format:ext};if(window.FontFace){let face=new FontFace(name,`url(${data})`);await face.load();document.fonts.add(face)}if(exists>=0)custom[exists]=font;else custom.push(font);save();applyApp();renderGlobal();alert('تمت إضافة الخط بنجاح ✓')}catch(e){alert(e.message||'تعذر إضافة الخط')}}
 function deleteFont(index){let font=custom[index];if(!font||!confirm('حذف الخط المضاف «'+font.name+'»؟'))return;custom.splice(index,1);if(state.appFont===font.name)state.appFont='Cairo';if(state.badgeFont===font.name)state.badgeFont='Cairo';save();applyApp();notify();renderGlobal()}
 function exportData(){return{settings:clone(state),customFonts:clone(custom)}}
-function importData(data){if(!data)return;state=Object.assign({},DEFAULTS,data.settings||{});custom=Array.isArray(data.customFonts)?data.customFonts:[];save();applyApp();notify()}
+function importData(data){if(!data||typeof data!=='object')return;state=Object.assign({},DEFAULTS,data.settings&&typeof data.settings==='object'?data.settings:{});custom=(Array.isArray(data.customFonts)?data.customFonts:[]).map(normalizeCustomFont).filter(Boolean);save();applyApp();notify()}
 
 function build(){addCss();document.body.insertAdjacentHTML('beforeend',modalHtml());applyApp();document.addEventListener('click',event=>{let target=event.target.closest&&event.target.closest('.cs-editable-text');if(!target||!target.closest('#csCardPair'))return;event.preventDefault();event.stopPropagation();let card=target.closest('.cs-print-card');openEditor(card?.dataset.type||window.CardsStudio?.currentType?.()||'personal',target.dataset.textRole,target.dataset.textLabel)})}
 window.AbuBassamTypography={attrs,css,resolved,printCss,applyAutoFit,openEditor,closeEditor,scopeChanged,set,toggle,nudge,color,favoriteColor,resetRole,resetBadge,undo:undoAction,redo:redoAction,openSettings,closeSettings,global:globalSetting,resetAll,importFont,deleteFont,exportData,importData,fonts:allFonts,state:()=>clone(state),version:5};
