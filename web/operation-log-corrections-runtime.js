@@ -35,7 +35,7 @@ function scrubText(value){return String(value??'')
 function safeOperation(input={}){
  const src=input&&typeof input==='object'?input:{};const out={...src};const d=device(),context=`${src.section||''} ${src.title||''}`;
  out.title=scrubText(src.title||labels[src.type]||'عملية');out.section=scrubText(src.section||'');out.deviceName=scrubText(src.deviceName||d.name||'هذا الجهاز');
- if(sensitiveSection(context)){out.details=src.details?'[تفاصيل زبون محجوبة]':'';out.fileName=src.fileName?'[اسم ملف محجوب]':'';out.title=out.title.replace(/[:\-–—]\s*.+$/,'').trim()||'عملية مستمسكات'}
+ if(sensitiveSection(context)){out.details=src.details?'[تفاصيل زبون محجوبة]':'';out.fileName=src.fileName?'[اسم ملف محجوب]':'';out.title=scrubText(labels[src.type]||'عملية مستمسكات');out.section='مستمسكات الزبائن'}
  else{if(src.details!==undefined)out.details=scrubText(src.details);if(src.fileName!==undefined)out.fileName=scrubText(src.fileName)}
  return out
 }
