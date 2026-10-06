@@ -21,6 +21,7 @@ need(studio,'printCardDirect','CR80 output guard');
 need(freeLayout,'تحرير الباج','explicit card edit mode');
 need(freeLayout,'abuBassamCardEditModeV1','card edit mode persistence');
 need(a4,"DIRS=['nw','n','ne','e','se','s','sw','w']",'eight resize handles');
+need(a4,"page.classList.contains('duplex-page'))return [...page.querySelectorAll(':scope > .cut')]",'duplex A4 cards must be selectable in the editor');
 need(a4,'function rotate','rotation handle');
 need(standalone,'safeTextTarget','standalone text safety');
 need(standalone,'abuBassamStandaloneCardLayoutV2','standalone editor persistence');
