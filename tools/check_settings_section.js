@@ -125,8 +125,7 @@ for(const marker of [
   'لا يوجد تسجيل دخول مباشر إلى Google','connectionClass()','wifiOnly()',
 'abuBassamActivePrinterProfileV1',
   'transform:translate(${x}mm,${y}mm)','p.borderless?0',
-  'e.applyPrinter=applyPrinterSafe'
-])need(fix,marker,'settings corrections');
+  ])need(fix,marker,'settings corrections');
 for(const marker of [
   "function requirePermission(key)",
   "async function setPrivacy(enabled,quiet=false){if(!quiet&&!requirePermission('securityPrivacyMode'))return false",
