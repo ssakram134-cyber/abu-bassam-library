@@ -2,6 +2,8 @@
 'use strict';
 
 const qrcode = require('../web/qrcode.js');
+if (!qrcode.stringToBytesFuncs || !qrcode.stringToBytesFuncs['UTF-8']) throw new Error('QR UTF-8 encoder is unavailable.');
+qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
 
 const MAX_PAYLOAD_BYTES = 1000;
 const VALID_LEVELS = new Set(['L', 'M', 'Q', 'H']);
