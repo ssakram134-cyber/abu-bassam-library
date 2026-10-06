@@ -33,6 +33,10 @@ reject(studio,"NOTE:خط النقل",'obsolete child transport-line payload retu
 need(studio,"URL:https://wa.me/",'child QR must expose guardian WhatsApp contact');
 need(studio,"vcardText",'vCard payload values must be escaped');
 need(studio,"qrcode.stringToBytesFuncs['UTF-8']",'card QR generation must force UTF-8');
+need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
+need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
+need(studio,'restoreResetBackup','card reset backup must be recoverable');
+need(studio,"requireCard('backupRestore')",'card reset restore must be permission-gated');
 const matrix=read('tools/qr_matrix.js');
 need(matrix,"qrcode.stringToBytesFuncs['UTF-8']",'QR matrix helper must force UTF-8');
 reject(previews,"رقم خط النقل",'preview tool must not restore obsolete child transport-line field');
