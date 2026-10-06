@@ -125,7 +125,7 @@ need(appSettings,"function syncPolicy(){if(!requirePermission('settingsSync')||!
 need(appSettings,"devices();if(canPermission('settingsStorage'))storage();refreshDeviceInfo()",'opening settings must not trigger denied storage access');
 need(appSettings,"const SETTINGS_BACKUP_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamTypographyV5','abuBassamCustomFontsV5']",'base safety backup must use an explicit settings allowlist');
 need(appSettings,'for(const key of SETTINGS_BACKUP_KEYS)','base safety backup must not sweep all localStorage');
-need(appSettings,'value.length>3*1024*1024','base settings backup must retain supported custom-font payloads');
+need(appSettings,'if(value===null)continue','base safety backup must include every present resettable value regardless of size');
 for(const token of [
   "function telegramPermission(key)",
   "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
@@ -158,7 +158,7 @@ for(const marker of [
   "window.printDirectly=function(){if(!requirePermission('printGeneral'))return false"
 ])need(fix,marker,'settings correction permission preservation '+marker);
 need(fix,'for(const key of RESET_KEYS)','correction safety backup must contain reset settings only');
-need(fix,'raw.length>3*1024*1024','correction settings backup must retain supported custom-font payloads');
+need(fix,'if(raw===null)continue','correction safety backup must include every present resettable value regardless of size');
 need(fix,'const previous=new Map(RESET_KEYS.map(k=>[k,localStorage.getItem(k)]))','settings reset must snapshot values before mutation');
 need(fix,"if(typographyResult===false)throw new Error('تعذر حفظ إعدادات الخطوط الافتراضية')",'settings reset must fail if typography persistence fails');
 need(fix,'previous.forEach((value,key)=>','failed settings reset must restore the previous local values');
