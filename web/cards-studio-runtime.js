@@ -303,7 +303,7 @@ function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.h
 function pickPhoto(){if(!requireCard('cardsImportImage'))return;$('csPhotoInput').click()}
 function cameraPhoto(){if(!requireCard('cardsImportImage'))return;if(!requestNative('cardPhoto'))$('csPhotoCameraInput').click()}
 function removePhoto(){if(!requireCard('cardsEditImage'))return;state.photo='';renderForm();renderPreview()}
-function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransform={zoom:1,x:0,y:0,rotate:0};renderForm();renderPreview()}
+function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};renderForm();renderPreview()}
 function photoControl(){if(!canCard('cardsEditImage'))return;state.photoTransform={...state.photoTransform,zoom:Number($('csPhotoZoom').value),x:Number($('csPhotoX').value),y:Number($('csPhotoY').value),rotate:Number($('csPhotoRotate').value)};renderPreview()}
 function flipPhoto(axis){if(!requireCard('cardsEditImage'))return;if(axis==='x')state.photoTransform.flipX=!state.photoTransform.flipX;else if(axis==='y')state.photoTransform.flipY=!state.photoTransform.flipY;renderPreview()}
 function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPhotoTools');if(!tools)return alert('هذا النوع من الكروت لا يحتاج صورة');tools.scrollIntoView({behavior:'smooth',block:'center'})}
