@@ -158,6 +158,8 @@ no(vault,'knownNonWifi()','obsolete fail-open Wi-Fi detection');
 const enh=read(path.join(web,'settings-enhancements-runtime.js'));
 need(enh,'abu_bassam_owner_device_count','device count RPC');
 need(enh,'AbuBassamDeviceRegistry?.count','device registry count');
+need(enh,"input.disabled=!isOwner",'secondary users must not edit the device-limit input');
+need(enh,"#abuDeviceLimitSettings .abu-device-stepper button",'device-limit step controls must be owner-only');
 no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const loader=read(path.join(web,'device-name-runtime.js'));
 for(const marker of ['settings-corrections-runtime.js','loadSettingsCorrections()','await loadSettingsCorrections();'])need(loader,marker,'settings loader');
