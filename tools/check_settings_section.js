@@ -141,6 +141,7 @@ for(const marker of [
 need(fix,'for(const key of RESET_KEYS)','correction safety backup must contain reset settings only');
 need(fix,'raw.length>3*1024*1024','correction settings backup must retain supported custom-font payloads');
 no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
+no(fix,'function googleShare()','dead correction-layer Google share code must stay removed');
 no(fix,'s.storage=storageStats','settings corrections must not expose unguarded storage stats');
 no(fix,'e.applyPrinter=applyPrinterSafe','settings corrections must not replace guarded printer apply directly');
 const reset=(fix.match(/const RESET_KEYS=\[([^\]]*)\]/)||[])[1]||'';
