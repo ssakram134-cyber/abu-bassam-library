@@ -31,6 +31,13 @@ need(typography,'if(resetAuthorized)custom=[]','authorized full reset must actua
 need(typography,'if(!save()){state=previousState;custom=previousCustom;applyApp();renderGlobal();return false}','typography reset must roll back and report persistence failure');
 need(typography,'const previousState=clone(state),previousCustom=custom.slice()','typography reset must snapshot in-memory state');
 need(typography,'state=previousState;custom=previousCustom;applyApp();renderGlobal();return false','failed typography reset must roll back in-memory state');
+need(typography,'function recordUndo(item)','undo history must be recorded only after a successful edit');
+need(typography,"if(!applyRaw(currentScope(),selected.type,selected.role,raw)){renderEditor();return false}recordUndo(before)",'text edits must not enter undo history when persistence fails');
+need(typography,"if(!save()){if(had)state.typeStyles[type][role]=previous;else delete state.typeStyles[type][role];return false}",'type-level typography edits must roll back failed saves');
+need(typography,"if(!save()){state[field]=previous;applyApp();renderGlobal();return false}",'global font settings must roll back failed saves');
+need(typography,"if(!save()){state.defaultStyles=previous;renderGlobal();return false}",'role defaults must roll back failed saves');
+need(typography,"if(!save()){state.favoriteColors=previous;return false}",'favorite colors must roll back failed saves');
+need(typography,"if(!applyRaw(item.scope,item.type,item.role,item.value))return false",'undo and redo must not move history when persistence fails');
 need(typography,"function deleteFont(index){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'deleting a shared custom font must require both font scopes');
 need(typography,"function importData(data){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'importing shared typography settings must require both font scopes');
 need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
