@@ -126,6 +126,11 @@ need(appSettings,"devices();if(canPermission('settingsStorage'))storage();refres
 need(appSettings,"const SETTINGS_BACKUP_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamTypographyV5','abuBassamCustomFontsV5']",'base safety backup must use an explicit settings allowlist');
 need(appSettings,'for(const key of SETTINGS_BACKUP_KEYS)','base safety backup must not sweep all localStorage');
 need(appSettings,'if(value===null)continue','base safety backup must include every present resettable value regardless of size');
+need(appSettings,"function saveSettingsBackup(){try{",'base settings backup must report creation failure');
+need(appSettings,"if(!saveSettingsBackup()){alert('تعذر إنشاء نسخة الأمان؛ لم يتم تغيير الإعدادات.');return false}",'base reset must stop before mutation when safety backup fails');
+need(appSettings,'const previous=new Map(SETTINGS_BACKUP_KEYS.map(key=>[key,localStorage.getItem(key)]))','base reset must snapshot resettable values before mutation');
+need(appSettings,"function resetThemeForSettingsReset(){if(!requirePermission('settingsReset'))return false",'theme reset must be authorized by settingsReset itself');
+need(appSettings,"base=current?.__abuOriginal||current",'authorized reset must reach the underlying theme applier without requiring settingsThemes');
 for(const token of [
   "function telegramPermission(key)",
   "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
@@ -162,6 +167,8 @@ need(fix,'if(raw===null)continue','correction safety backup must include every p
 need(fix,'const previous=new Map(RESET_KEYS.map(k=>[k,localStorage.getItem(k)]))','settings reset must snapshot values before mutation');
 need(fix,"if(typographyResult===false)throw new Error('تعذر حفظ إعدادات الخطوط الافتراضية')",'settings reset must fail if typography persistence fails');
 need(fix,'previous.forEach((value,key)=>','failed settings reset must restore the previous local values');
+need(fix,'window.AbuBassamSettings?.resetThemeForSettingsReset?.()','correction reset must use the settings-reset-authorized theme path');
+no(fix,"window.applyTheme?.('default')",'correction reset must not be blocked by settingsThemes');
 need(fix,"return true}",'successful settings reset must report success');
 no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
 no(fix,'function googleShare()','dead correction-layer Google share code must stay removed');
