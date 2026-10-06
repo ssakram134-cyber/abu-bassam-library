@@ -51,6 +51,12 @@ need(childModels,"abu-cards-rendered",'child templates must use explicit card re
 need(plusModels,"abu-runtime-loaded",'extended card models must use runtime load events');
 need(studio,"editor.openPrint(html,commit)",'A4 print history must wait for editor confirmation');
 need(studio,"editor.openPdf(name,html,commit)",'A4 PDF history must wait for editor confirmation');
+reject(studio,"}commit();if(window.Android&&Android.printHtml)",'CR80 print history must not be committed before dispatch');
+need(studio,"Android.printHtml(html);commit();return result",'CR80 print history must commit only after native dispatch');
+reject(studio,"}commit();if(window.Android&&Android.savePdfHtml)",'CR80 PDF history must not be committed before dispatch');
+need(studio,"Android.savePdfHtml(name,html);commit();return result",'CR80 PDF history must commit only after native dispatch');
+reject(studio,"recordHistory('حفظ '+labels.join(' و')+' في المعرض');if(window.Android&&Android.savePagesToGallery)",'gallery history must not be committed before output dispatch');
+need(studio,"'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage",'gallery output must dispatch before history is recorded');
 need(a4,"onCommit:typeof onCommit==='function'?onCommit:null",'A4 editor must retain a commit callback');
 need(a4,"committed(j)",'A4 editor must record only after output dispatch');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
