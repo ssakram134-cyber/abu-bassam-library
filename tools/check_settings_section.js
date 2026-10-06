@@ -104,6 +104,8 @@ need(appSettings,"function autoSync(value){if(!requirePermission('settingsSync')
 need(appSettings,"function archiveAutoSync(value){if(!requirePermission('settingsArchive')||!requirePermission('syncAutomatic')",'archive auto-sync must require settingsArchive and syncAutomatic');
 need(appSettings,"function syncPolicy(){if(!requirePermission('settingsSync')||!requirePermission('syncSettings')",'sync policy must require settingsSync and syncSettings');
 need(appSettings,"devices();if(canPermission('settingsStorage'))storage();refreshDeviceInfo()",'opening settings must not trigger denied storage access');
+need(appSettings,"const SETTINGS_BACKUP_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamTypographyV5','abuBassamCustomFontsV5']",'base safety backup must use an explicit settings allowlist');
+need(appSettings,'for(const key of SETTINGS_BACKUP_KEYS)','base safety backup must not sweep all localStorage');
 for(const token of [
   "function telegramPermission(key)",
   "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
@@ -136,6 +138,7 @@ for(const marker of [
   "if(ok!==true)return false;applyPrinterSafe(show);return true",
   "window.printDirectly=function(){if(!requirePermission('printGeneral'))return false"
 ])need(fix,marker,'settings correction permission preservation '+marker);
+need(fix,'for(const key of RESET_KEYS)','correction safety backup must contain reset settings only');
 no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
 no(fix,'s.storage=storageStats','settings corrections must not expose unguarded storage stats');
 no(fix,'e.applyPrinter=applyPrinterSafe','settings corrections must not replace guarded printer apply directly');
