@@ -40,6 +40,10 @@ for(const [name,src] of [['base card models',baseModels],['extended card models'
 need(baseModels,"abu-cards-rendered",'base card models must use explicit card render events');
 need(childModels,"abu-cards-rendered",'child templates must use explicit card render events');
 need(plusModels,"abu-runtime-loaded",'extended card models must use runtime load events');
+need(studio,"editor.openPrint(html,commit)",'A4 print history must wait for editor confirmation');
+need(studio,"editor.openPdf(name,html,commit)",'A4 PDF history must wait for editor confirmation');
+need(a4,"onCommit:typeof onCommit==='function'?onCommit:null",'A4 editor must retain a commit callback');
+need(a4,"committed(j)",'A4 editor must record only after output dispatch');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
