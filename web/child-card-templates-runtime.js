@@ -240,8 +240,8 @@ function init(){
   installStyle();
   const tryPatch=()=>{patchCardsStudio();patchTypography();refresh();if(window.CardsStudio&&window.AbuBassamTypography)document.removeEventListener('abu-runtime-loaded',tryPatch)};
   const onRendered=event=>{if((event.detail?.type||window.CardsStudio?.currentType?.())==='child'){markCards();if(!document.getElementById('abuChildTemplatePicker'))installPicker()}};
-  tryPatch();
   document.addEventListener('abu-runtime-loaded',tryPatch);
+  tryPatch();
   document.addEventListener('abu-cards-rendered',onRendered);
 }
 
