@@ -62,10 +62,10 @@ for(const token of ["['all','الكل']","['unread','غير المقروء']","[
 need(runtime,'abu_bassam_owner_activity_report','owner-only report RPC');need(runtime,'abu_bassam_record_device_activity','verified activity RPC');need(runtime,"exportAdmin('csv')",'CSV report export');need(runtime,"exportAdmin('txt')",'TXT report export');need(runtime,"exportAdmin('pdf')",'PDF report export');
 for(const token of ['__ABU_NOTIFICATION_EXCEL_V2__','jszip.min.js','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.xlsx','sheet1.xml','workbook.xml','Android.saveBase64',"role?.()==='owner'",'abuReportExcel'])need(excel,token,`XLSX export ${token}`);
 for(const token of ['__ABU_NOTIFICATION_CENTER_CORRECTIONS_V2__','validOps.has(opId)','sameOperation(a,b)','isPhantomOperation','seen.has(n.id)','[هاتف محجوب]','[بريد محجوب]','[تفاصيل زبون محجوبة]','تقارير الأجهزة الفرعية','String(scope[id]||\'\').trim()!==d.id'])need(corrections,token,`notification corrections ${token}`);
-no(corrections,"},5000)",'notification corrections must not keep a permanent five-second timer');
+forbid(corrections,"},5000)",'notification corrections must not keep a permanent five-second timer');
 need(corrections,"document.addEventListener('abu-runtime-loaded'",'notification corrections runtime-load event');
 need(corrections,"document.addEventListener('abu-bassam-auth-changed'",'notification corrections auth-change event');
-no(secondaryPrivacy,"},1500)",'secondary notification privacy must not keep a permanent timer');
+forbid(secondaryPrivacy,"},1500)",'secondary notification privacy must not keep a permanent timer');
 need(secondaryPrivacy,"document.addEventListener('abu-runtime-loaded'",'secondary notification runtime-load event');
 need(secondaryPrivacy,"document.addEventListener('abu-bassam-auth-changed'",'secondary notification auth-change event');
 need(migration,'revoke all on public.abu_bassam_device_activity from anon,authenticated','direct table access revoked');need(migration,'from PUBLIC,anon','security-definer PUBLIC/anon execution revoked');need(migration,"v_actor.role<>'owner'",'server owner verification');need(migration,'DEVICE_NOT_AUTHORIZED','device secret verification');need(migration,'abu_bassam_owner_activity_devices','owner device report RPC');
