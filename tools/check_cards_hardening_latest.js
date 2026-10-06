@@ -42,6 +42,10 @@ reject(studio,"رقم خط النقل",'obsolete child transport-line field retu
 reject(studio,"d.line",'obsolete child transport-line data reference returned');
 reject(studio,"NOTE:خط النقل",'obsolete child transport-line payload returned');
 need(studio,"URL:https://wa.me/",'child QR must expose guardian WhatsApp contact');
+need(studio,"child:{name:'',age:'',address:",'child badge must retain an explicit age field');
+need(studio,"field('العمر (بالسنوات)','age','number')",'child badge form must expose age input');
+need(studio,"'العمر: '+(d.age||'')",'child QR payload must include age');
+need(studio,"${row('العمر',d.age?String(d.age)+' سنوات':'')}",'child badge back must display age');
 need(studio,"vcardText",'vCard payload values must be escaped');
 need(studio,"qrcode.stringToBytesFuncs['UTF-8']",'card QR generation must force UTF-8');
 const baseModels=read('web/card-models-runtime.js'),plusModels=read('web/card-models-plus-runtime.js'),childModels=read('web/child-card-templates-runtime.js');
