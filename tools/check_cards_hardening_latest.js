@@ -35,6 +35,11 @@ reject(studio,"NOTE:خط النقل",'obsolete child transport-line payload retu
 need(studio,"URL:https://wa.me/",'child QR must expose guardian WhatsApp contact');
 need(studio,"vcardText",'vCard payload values must be escaped');
 need(studio,"qrcode.stringToBytesFuncs['UTF-8']",'card QR generation must force UTF-8');
+const baseModels=read('web/card-models-runtime.js'),plusModels=read('web/card-models-plus-runtime.js'),childModels=read('web/child-card-templates-runtime.js');
+for(const [name,src] of [['base card models',baseModels],['extended card models',plusModels],['child templates',childModels]]){reject(src,'new MutationObserver',name+' must not install a global DOM observer');reject(src,'setInterval(',name+' must not poll continuously for runtime readiness')}
+need(baseModels,"abu-cards-rendered",'base card models must use explicit card render events');
+need(childModels,"abu-cards-rendered",'child templates must use explicit card render events');
+need(plusModels,"abu-runtime-loaded",'extended card models must use runtime load events');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
