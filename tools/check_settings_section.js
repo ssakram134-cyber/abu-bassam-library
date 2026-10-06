@@ -95,15 +95,18 @@ for(const marker of [
 ])need(appSettings,marker,'source-level settings permission '+marker);
 need(appSettings,"button.onclick=()=>window.AbuBassamSettings?.open?.()",'settings gear must dispatch through the current public guarded API');
 for(const marker of [
-  "requirePermission('printerProfiles')",
   "requirePermission('printerDpi')",
   "requirePermission('printerBorderless')",
   "requirePermission('printerCalibration')",
-  "requirePermissions(['printerProfiles','printerAdd'])",
-  "requirePermissions(['printerProfiles','printerDelete'])",
-  "requirePermissions(['printerProfiles','printerSetDefault'])",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerAdd'])",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerDelete'])",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerSetDefault'])",
   "requirePermissions(['settingsPrinting','printerProfiles'])"
 ])need(enhancements,marker,'granular printer permission '+marker);
+need(enhancements,"function savePrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer profile save must require top-level printing and profile permissions');
+need(enhancements,"function newPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerAdd']))return false",'printer creation must require top-level and granular permissions');
+need(enhancements,"function deletePrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerDelete']))return false",'printer deletion must require top-level and granular permissions');
+need(enhancements,"function setDefaultPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerSetDefault']))return false",'default-printer mutation must require top-level and granular permissions');
 need(enhancements,"function applyPrinter(show=true){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer apply must expose denied result to later wrappers');
 need(enhancements,"return true}", 'guarded printer apply must expose a successful result');
 need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
