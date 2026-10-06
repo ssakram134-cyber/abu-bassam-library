@@ -29,6 +29,8 @@ need(typography,"if(!requireEditScope(item.scope))return false",'typography undo
 need(typography,"const resetAuthorized=skipConfirm&&canSetting('settingsReset')",'authorized settings reset must not leave typography half-reset');
 need(typography,'if(resetAuthorized)custom=[]','authorized full reset must actually clear user-added fonts');
 need(typography,'if(!save())return false','typography reset must report persistence failure');
+need(typography,'const previousState=clone(state),previousCustom=custom.slice()','typography reset must snapshot in-memory state');
+need(typography,'state=previousState;custom=previousCustom;applyApp();renderGlobal();return false','failed typography reset must roll back in-memory state');
 need(typography,"function deleteFont(index){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'deleting a shared custom font must require both font scopes');
 need(typography,"function importData(data){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'importing shared typography settings must require both font scopes');
 need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
@@ -145,6 +147,10 @@ for(const marker of [
 ])need(fix,marker,'settings correction permission preservation '+marker);
 need(fix,'for(const key of RESET_KEYS)','correction safety backup must contain reset settings only');
 need(fix,'raw.length>3*1024*1024','correction settings backup must retain supported custom-font payloads');
+need(fix,'const previous=new Map(RESET_KEYS.map(k=>[k,localStorage.getItem(k)]))','settings reset must snapshot values before mutation');
+need(fix,"if(typographyResult===false)throw new Error('تعذر حفظ إعدادات الخطوط الافتراضية')",'settings reset must fail if typography persistence fails');
+need(fix,'previous.forEach((value,key)=>','failed settings reset must restore the previous local values');
+need(fix,"return true}",'successful settings reset must report success');
 no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
 no(fix,'function googleShare()','dead correction-layer Google share code must stay removed');
 no(fix,'s.storage=storageStats','settings corrections must not expose unguarded storage stats');
