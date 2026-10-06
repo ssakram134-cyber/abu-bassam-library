@@ -31,6 +31,7 @@ need(studio,"CardsStudio.flipPhoto('x')",'photo tools must expose horizontal fli
 need(studio,"CardsStudio.flipPhoto('y')",'photo tools must expose vertical flip');
 need(studio,'photoTransformCss','photo preview and print must share flip/rotation transform');
 need(studio,'flipPhoto,focusCrop','photo flip must be part of CardsStudio API');
+reject(studio,"photoTransform={zoom:1,x:0,y:0,rotate:0};",'all photo transform resets must initialize flip state');
 reject(freeLayout,"el.dataset.abuLayoutRole==='photo'||el.dataset.abuLayoutRole==='qr'",'photo frame aspect ratio must not be locked');
 need(freeLayout,"lock=el.dataset.abuLayoutRole==='qr'||el.dataset.abuLayoutRole==='callqr'",'QR frames must retain aspect ratio while photo crop stays free');
 need(studio,"/^\\d{8,15}$/.test(digits)?digits:''",'WhatsApp QR must reject obviously invalid short numbers');
