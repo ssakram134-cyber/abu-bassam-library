@@ -107,6 +107,8 @@ need(enhancements,"function savePrinter(){if(!requirePermissions(['settingsPrint
 need(enhancements,"function newPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerAdd']))return false",'printer creation must require top-level and granular permissions');
 need(enhancements,"function deletePrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerDelete']))return false",'printer deletion must require top-level and granular permissions');
 need(enhancements,"function setDefaultPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerSetDefault']))return false",'default-printer mutation must require top-level and granular permissions');
+need(enhancements,"function applyPrinterPermissionUi()",'printer controls must mirror granular permissions');
+for(const marker of ["canPermission('printerDpi')","canPermission('printerBorderless')","canPermission('printerCalibration')","canPermission('printerSetDefault')","canPermission('printerAdd')","canPermission('printerDelete')",'abuPrinterApply','abuPrinterSave','abuPrinterDefault','abuPrinterAdd','abuPrinterDelete'])need(enhancements,marker,'printer permission UI '+marker);
 need(enhancements,"function applyPrinter(show=true){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer apply must expose denied result to later wrappers');
 need(enhancements,"return true}", 'guarded printer apply must expose a successful result');
 need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
