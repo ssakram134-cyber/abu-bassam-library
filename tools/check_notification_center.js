@@ -47,6 +47,7 @@ need(secondaryPrivacy,'ownQueue','foreign queued audit events must be purged bef
 need(runtime,'abuNotificationBell','bell button');need(runtime,'abuNotificationBadge','unread badge');need(runtime,'markAll','mark all read');need(runtime,'clearRead','clear read notifications');
 need(runtime,"function markAll(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsMarkRead'))",'bulk mark-read must require notificationsManage and notificationsMarkRead');
 need(runtime,"function clearRead(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsDelete'))",'bulk clear-read must require notificationsManage and notificationsDelete');
+need(runtime,"setInterval(()=>{if(document.visibilityState==='hidden')return;hookOperations();flushAuditQueue();if(isOwner())pullOwnerActivity(true)},120000)",'periodic notification sync must pause while the app is hidden');
 for(const marker of [
   "function canViewNotification(n)",
   "notificationsMaintenance",
