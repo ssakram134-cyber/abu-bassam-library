@@ -40,6 +40,8 @@ for(const marker of [
   'normalizeLocal(op={}){const d=device(),safe=safeOperation(op)',
   "deviceName||d.name||'هذا الجهاز'"
 ])need(runtime,marker,'operation log');
+need(runtime,"if(/^[\\t\\r\\n ]*[=+\\-@]/.test(s)||/^[\\t\\r\\n]/.test(s))s=\"'\"+s",'CSV exports must neutralize spreadsheet formulas');
+need(runtime,"const header='\\ufeffالتاريخ,الجهاز,الحالة",'CSV exports must include a UTF-8 BOM for Arabic Excel compatibility');
 for(const marker of [
   "requirePermission('logsViewOwn')",
   "format==='pdf'?'logsPdf':format==='print'?'logsPrint':'logsExport'",
