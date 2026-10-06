@@ -88,6 +88,7 @@ for(const marker of [
   "function cleanCache(){if(!requirePermission('settingsStorage'))",
   "function resetDefaults(){if(!requirePermission('settingsReset'))"
 ])need(appSettings,marker,'source-level settings permission '+marker);
+need(appSettings,"button.onclick=()=>window.AbuBassamSettings?.open?.()",'settings gear must dispatch through the current public guarded API');
 for(const marker of [
   "requirePermission('printerProfiles')",
   "requirePermission('printerDpi')",
