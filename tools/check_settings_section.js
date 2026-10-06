@@ -27,6 +27,8 @@ need(typography,"function scopeChanged(){if(!requireEditScope())",'changing typo
 need(typography,"function resetBadge(){if(!requireSetting('cardsEditText'))return false",'badge typography reset must require cardsEditText');
 need(typography,"if(!requireEditScope(item.scope))return false",'typography undo/redo must recheck the stored scope');
 need(typography,"const resetAuthorized=skipConfirm&&canSetting('settingsReset')",'authorized settings reset must not leave typography half-reset');
+need(typography,'if(resetAuthorized)custom=[]','authorized full reset must actually clear user-added fonts');
+need(typography,'if(!save())return false','typography reset must report persistence failure');
 need(typography,"function deleteFont(index){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'deleting a shared custom font must require both font scopes');
 need(typography,"function importData(data){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'importing shared typography settings must require both font scopes');
 need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
