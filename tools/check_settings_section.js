@@ -26,6 +26,7 @@ need(typography,"function set(field,value){if(!selected||!requireEditScope())ret
 need(typography,"function scopeChanged(){if(!requireEditScope())",'changing typography scope must enforce permission');
 need(typography,"function resetBadge(){if(!requireSetting('cardsEditText'))return false",'badge typography reset must require cardsEditText');
 need(typography,"if(!requireEditScope(item.scope))return false",'typography undo/redo must recheck the stored scope');
+need(typography,"const resetAuthorized=skipConfirm&&canSetting('settingsReset')",'authorized settings reset must not leave typography half-reset');
 need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
 need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limited to TTF/OTF');
 need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
@@ -96,6 +97,8 @@ for(const marker of [
   "requirePermissions(['printerProfiles','printerSetDefault'])",
   "requirePermissions(['settingsPrinting','printerProfiles'])"
 ])need(enhancements,marker,'granular printer permission '+marker);
+need(enhancements,"function applyPrinter(show=true){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer apply must expose denied result to later wrappers');
+need(enhancements,"return true}", 'guarded printer apply must expose a successful result');
 need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
 need(appSettings,"function autoSync(value){if(!requirePermission('settingsSync')||!requirePermission('syncAutomatic')",'automatic sync must require settingsSync and syncAutomatic');
 need(appSettings,"function archiveAutoSync(value){if(!requirePermission('settingsArchive')||!requirePermission('syncAutomatic')",'archive auto-sync must require settingsArchive and syncAutomatic');
@@ -110,6 +113,9 @@ for(const token of [
   "function testTelegram()"
 ])need(indexHtml,token,'Telegram permission '+token);
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
+const adminPermissions=read(path.join(web,'admin-permissions-runtime.js'));
+need(adminPermissions,"[/خصوصية|Screenshot/,['securityPrivacyMode']]",'privacy settings UI must use securityPrivacyMode');
+need(adminPermissions,"[/أذونات/,['settingsPermissions']]",'system-permissions UI must keep settingsPermissions separate');
 for(const marker of [
   "nativeSecurity('privacyMode'",'abuPrivacyCapture','navigator.storage?.estimate',
   'لم يتم إنشاء جهاز افتراضي','device_id||device.id','RESET_KEYS=',
@@ -118,6 +124,21 @@ for(const marker of [
   'transform:translate(${x}mm,${y}mm)','p.borderless?0',
   'e.applyPrinter=applyPrinterSafe'
 ])need(fix,marker,'settings corrections');
+for(const marker of [
+  "function requirePermission(key)",
+  "async function setPrivacy(enabled,quiet=false){if(!quiet&&!requirePermission('securityPrivacyMode'))return false",
+  "input.disabled=!allowed('securityPrivacyMode')",
+  "function resetDefaultsSafe(){if(!requirePermission('settingsReset'))return false",
+  "s.storage=async function(){if(!requirePermission('settingsStorage'))return false",
+  "s.privacyMode=enabled=>setPrivacy(enabled,false)",
+  "if(allowed('settingsStorage'))storageStats()",
+  "apply0=e.applyPrinter?.bind(e)",
+  "if(ok!==true)return false;applyPrinterSafe(show);return true",
+  "window.printDirectly=function(){if(!requirePermission('printGeneral'))return false"
+])need(fix,marker,'settings correction permission preservation '+marker);
+no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
+no(fix,'s.storage=storageStats','settings corrections must not expose unguarded storage stats');
+no(fix,'e.applyPrinter=applyPrinterSafe','settings corrections must not replace guarded printer apply directly');
 const reset=(fix.match(/const RESET_KEYS=\[([^\]]*)\]/)||[])[1]||'';
 if(/SyncPolicy|WhatsApp|WA_KEY|AUTO_SYNC/i.test(reset))errors.push('settings reset: must not clear sync or WhatsApp settings');
 const vaultHardening=read(path.join(web,'document-vault-hardening-runtime.js'));
