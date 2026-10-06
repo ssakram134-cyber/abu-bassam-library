@@ -20,6 +20,12 @@ need(typography,'src:url("fonts/Tajawal-Regular.ttf")','bundled Tajawal must use
 need(typography,"const EMBEDDED_FONTS=new Set(['cairo','tajawal'])",'bundled font families must be protected');
 need(typography,"if(EMBEDDED_FONTS.has(name.toLowerCase()))throw new Error",'custom fonts must not override bundled Cairo/Tajawal');
 need(typography,'function normalizeCustomFont(font)','restored custom fonts must use a validation gate');
+need(typography,"function editPermission(scope=currentScope()){return scope==='current'?'cardsEditText':'settingsCardFonts'}",'card typography scopes must map to granular permissions');
+need(typography,"function openEditor(type,role,label){if(!requireSetting('cardsEditText'))return false",'per-card typography editor must require cardsEditText');
+need(typography,"function set(field,value){if(!selected||!requireEditScope())return false",'typography mutations must recheck the active scope');
+need(typography,"function scopeChanged(){if(!requireEditScope())",'changing typography scope must enforce permission');
+need(typography,"function resetBadge(){if(!requireSetting('cardsEditText'))return false",'badge typography reset must require cardsEditText');
+need(typography,"if(!requireEditScope(item.scope))return false",'typography undo/redo must recheck the stored scope');
 need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
 need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limited to TTF/OTF');
 need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
