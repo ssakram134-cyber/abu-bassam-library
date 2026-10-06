@@ -14,8 +14,10 @@ const ration=read('web/ration-card.html');
 const mawkib=read('web/mawkib-cards.html');
 const thanks=read('web/thanks-letter.html');
 const student=read('web/student-thanks-cards.html');
+const freeLayout=read('web/card-free-layout-runtime.js');
+const a4=read('web/a4-card-sheet-editor-v2-runtime.js');
 const previews=read('tools/render_card_previews.py');
-for(const [name,src] of Object.entries({studio,design,layouts,recovery,preload,ration,mawkib,thanks,student})){
+for(const [name,src] of Object.entries({studio,design,layouts,recovery,preload,ration,mawkib,thanks,student,freeLayout,a4})){
   if(name!=='preload'&&name!=='ration'&&name!=='mawkib'&&name!=='thanks'&&name!=='student')new Function(src)
 }
 need(studio,"function requireOutputPermission()",'output-specific permissions must be canonical');
