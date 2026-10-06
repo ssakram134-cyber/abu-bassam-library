@@ -26,6 +26,8 @@ need(studio,"cardsExportImage','imageExport','exportOutsideApp",'image export pe
 need(studio,"cardsEditText",'text editing permission is missing');
 need(studio,"cardsImportImage",'image import permission is missing');
 need(studio,"scanBarcodeGallery",'gallery barcode action must be canonical');
+need(studio,"input.setAttribute('capture','environment')",'camera barcode fallback must restore rear-camera capture after gallery use');
+need(studio,"/^\\d{8,15}$/.test(digits)?digits:''",'WhatsApp QR must reject obviously invalid short numbers');
 need(studio,"student-thanks-cards.html",'student thanks tool must be canonical');
 reject(studio,"رقم خط النقل",'obsolete child transport-line field returned');
 reject(studio,"d.line",'obsolete child transport-line data reference returned');
