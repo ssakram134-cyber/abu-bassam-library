@@ -63,6 +63,7 @@ need(appSettings,'DocumentVault?.setAutoSync','automatic archive setting must dr
 for(const marker of [
   "function requirePermission(key,label='')",
   "function requireAny(keys,label='')",
+  "function open(){if(!requirePermission('settingsView'))return false",
   "function theme(key){if(!requirePermission('settingsThemes'))",
   "function fonts(){if(!requireAny(['settingsFonts','settingsCardFonts']",
   "async function backup(mode){if(!requirePermission('backupCreate'))",
@@ -93,6 +94,7 @@ need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling auto
 need(appSettings,"function autoSync(value){if(!requirePermission('settingsSync')||!requirePermission('syncAutomatic')",'automatic sync must require settingsSync and syncAutomatic');
 need(appSettings,"function archiveAutoSync(value){if(!requirePermission('settingsArchive')||!requirePermission('syncAutomatic')",'archive auto-sync must require settingsArchive and syncAutomatic');
 need(appSettings,"function syncPolicy(){if(!requirePermission('settingsSync')||!requirePermission('syncSettings')",'sync policy must require settingsSync and syncSettings');
+need(appSettings,"devices();if(canPermission('settingsStorage'))storage();refreshDeviceInfo()",'opening settings must not trigger denied storage access');
 for(const token of [
   "function telegramPermission(key)",
   "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
