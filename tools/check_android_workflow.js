@@ -31,6 +31,15 @@ for(const marker of [
   'uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0',
   'node-version: 24',
   'uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1',
+  'uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4',
+  "packages: 'platform-tools'",
+  'name: Ensure pinned Android NDK',
+  'NDK_VERSION: 27.1.12297006',
+  'for attempt in 1 2 3; do',
+  'sdkmanager --install "ndk;$NDK_VERSION" --channel=0',
+  'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+  'rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"',
+
   'java-version: 17',
   'verify-signature: true',
   'npm ci --no-audit --no-fund',
@@ -90,6 +99,17 @@ for(const marker of [
   'rm -f "$RUNNER_TEMP/abu-bassam-release-key.p12"',
   'Upload production APK artifacts'
 ]) need(productionWorkflow,marker,'Android production workflow missing safeguard: '+marker);
+
+for(const marker of [
+  'uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4',
+  "packages: 'platform-tools'",
+  'name: Ensure pinned Android NDK',
+  'NDK_VERSION: 27.1.12297006',
+  'for attempt in 1 2 3; do',
+  'sdkmanager --install "ndk;$NDK_VERSION" --channel=0',
+  'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+  'rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"'
+]) need(productionWorkflow,marker,'production build must pin Android SDK setup and NDK retry: '+marker);
 
 for(const marker of [
   'pull_request:','push:','contents: write','git push','npm run build:apk:release',
