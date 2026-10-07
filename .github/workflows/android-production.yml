@@ -37,6 +37,40 @@ jobs:
           java-version: 17
           verify-signature: true
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'platform-tools'
+
+      - name: Ensure pinned Android NDK
+        shell: bash
+        env:
+          NDK_VERSION: 27.1.12297006
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$SDK_ROOT"
+          NDK_DIR="$SDK_ROOT/ndk/$NDK_VERSION"
+          CLANG="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          if test -x "$CLANG"; then
+            echo "NDK $NDK_VERSION already installed and valid."
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            echo "Installing NDK $NDK_VERSION (attempt $attempt/3)..."
+            rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"
+            if sdkmanager --install "ndk;$NDK_VERSION" --channel=0; then
+              if test -x "$CLANG"; then
+                echo "NDK $NDK_VERSION installed successfully."
+                exit 0
+              fi
+            fi
+            rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to install a valid NDK $NDK_VERSION after 3 attempts." >&2
+          exit 1
+
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
