@@ -57,7 +57,28 @@ const ANDROID_BRIDGE = `
     try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
     catch (error) {}
   }
+  var outputPending = Object.create(null), outputSequence = 0;
+  function requestOutput(type, payload) {
+    return new Promise(function (resolve, reject) {
+      var requestId = 'out-' + Date.now() + '-' + (++outputSequence);
+      var timer = setTimeout(function () {
+        delete outputPending[requestId];
+        reject(new Error('OUTPUT_TIMEOUT'));
+      }, 300000);
+      outputPending[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      send(type, Object.assign({ requestId: requestId }, payload || {}));
+    });
+  }
+  window.AbuBassamNativeOutputResult = function (result) {
+    var requestId = String(result && result.requestId || ''), pending = outputPending[requestId];
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    delete outputPending[requestId];
+    if (result && result.ok) pending.resolve(result.value);
+    else pending.reject(new Error(String(result && result.error || 'OUTPUT_FAILED')));
+  };
   window.Android = {
+    requestOutput: function (type, payload) { return requestOutput(type, payload); },
     saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
     saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
@@ -141,6 +162,10 @@ function App() {
   }, []);
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
+  }, [inject]);
+  const replyOutput = useCallback((requestId, ok, value, error) => {
+    if (!requestId) return;
+    inject('AbuBassamNativeOutputResult', { requestId: String(requestId), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
@@ -244,14 +269,14 @@ function App() {
     } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
   }, []);
 
-  const savePagesToGallery = useCallback(async ({ prefix, pages, mime }) => {
+  const savePagesToGallery = useCallback(async ({ prefix, pages, mime, requestId }) => {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صور للحفظ');
       if (imagePages.length > 20) throw new Error('عدد الصور أكبر من الحد المسموح');
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       let saved = 0, failed = 0;
       for (let index = 0; index < imagePages.length; index += 1) {
         try {
@@ -275,9 +300,13 @@ function App() {
         } catch (_) { failed += 1; }
       }
       if (!saved) throw new Error('تعذر حفظ الصور المحددة');
+      replyOutput(requestId, true, { saved, failed });
       Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
-    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر حفظ الصفحات', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
   const printPages = useCallback(async ({ pages, paper }) => {
     try {
@@ -290,26 +319,42 @@ function App() {
     } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
   }, []);
 
-  const printHtml = useCallback(async ({ html }) => {
-    try { if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة'); await Print.printAsync({ html: String(html) }); }
-    catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, []);
+  const printHtml = useCallback(async ({ html, requestId }) => {
+    try {
+      if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة');
+      await Print.printAsync({ html: String(html) });
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const savePdfHtml = useCallback(async ({ name, html }) => {
+  const savePdfHtml = useCallback(async ({ name, html, requestId }) => {
+    let result = null;
     try {
       if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
-      const result = await Print.printToFileAsync({ html: String(html), base64: true });
+      result = await Print.printToFileAsync({ html: String(html), base64: true });
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) {
+        if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+        replyOutput(requestId, false, null, 'CANCELLED');
+        return;
+      }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      replyOutput(requestId, true, true);
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      if (result?.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر حفظ PDF', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
     const parsed = splitDataUrl(data), finalName = safeName(name), uri = `${FileSystem.cacheDirectory}abu_bassam_${Date.now()}_${finalName}`;
