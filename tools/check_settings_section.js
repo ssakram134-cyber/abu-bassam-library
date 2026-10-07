@@ -196,7 +196,12 @@ need(enh,"if(section)section.hidden=!isOwner;if(!isOwner){currentCount=0;return 
 need(enh,"#abuDeviceLimitSettings .abu-device-stepper button",'device-limit step controls must remain inside the owner-only section');
 no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const loader=read(path.join(web,'device-name-runtime.js'));
+const deviceReconcile=read(path.join(web,'device-reconcile-runtime.js'));
 for(const marker of ['settings-corrections-runtime.js','loadSettingsCorrections()','await loadSettingsCorrections();'])need(loader,marker,'settings loader');
+
+need(appSettings,"display=firstCopy?'نسختي الأولى باسم (أكرم)':name",'settings must label the owner device as the requested first copy');
+need(appSettings,"original=firstCopy&&name!==display?'اسم الجهاز: '+name+' • ':''",'settings must preserve the real device name as metadata');
+need(deviceReconcile,"shown=isOwner?'نسختي الأولى باسم (أكرم)':name",'device manager must use the same first-copy owner label');
 no(loader,'wifi-sync-guard-runtime.js','obsolete Wi-Fi guard loader');
 no(loader,'loadWifiSyncGuard','obsolete Wi-Fi guard loader function');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
