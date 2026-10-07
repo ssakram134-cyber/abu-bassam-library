@@ -70,6 +70,12 @@ need(appSettings,'id="abuWaQuickShare"','WhatsApp enabled setting must expose a 
 need(appSettings,'function applyWhatsAppSetting()','WhatsApp toggle must affect the share UI');
 need(appSettings,'async function shareWhatsApp()','WhatsApp share must await the real backup result');need(appSettings,"const ok=await window.DocumentVault.backup('share');if(!ok)return false",'WhatsApp share must stop when backup/share is cancelled or fails');need(appSettings,"log('مشاركة نسخة عبر WhatsApp','تم فتح شاشة مشاركة Android');return true",'WhatsApp share must log only after a successful share handoff');
 need(appSettings,"if(wa.enabled===false){alert('فعّل مشاركة WhatsApp من الإعدادات أولًا.');return false}",'WhatsApp share action must honor disabled setting');
+need(appSettings,'function normalizePhoneDigits(value)','settings WhatsApp must normalize Arabic/Persian digits');
+need(appSettings,'function iraqiWhatsAppNumber(value)','settings WhatsApp must validate Iraqi number shapes');
+need(appSettings,"if(/^009647\\d{9}$/.test(digits))return digits.slice(2)",'settings WhatsApp must accept Iraqi 00964 format');
+need(appSettings,"if(!international){alert('أدخل رقمًا عراقيًا صحيحًا من 11 رقمًا يبدأ بـ 07.');return false}",'settings WhatsApp must reject malformed local numbers');
+need(appSettings,"let phone='0'+international.slice(3)",'settings WhatsApp must persist canonical Iraqi local form');
+
 need(appSettings,'async function backup(mode)','settings backup must await the real backup result');
 need(appSettings,"ok?'تم إنشاء النسخة الاحتياطية ✓':'لم تُنشأ نسخة احتياطية.'",'settings backup status must reflect the real result');
 need(appSettings,'async function sync()','settings sync must aggregate actual sync results');
