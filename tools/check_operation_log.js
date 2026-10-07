@@ -55,6 +55,7 @@ for(const marker of [
   "function applyPermissionUi()"
 ])need(runtime,marker,'granular operation permission');
 no(runtime,'setInterval(patch,2500)','permanent operation patch polling must not return');
+no(runtime,'setInterval(','operation log must not poll for base runtime readiness');no(runtime,'new MutationObserver','operation log must not watch the whole DOM');need(runtime,'function ensurePatched()','operation log must use idempotent lifecycle patching');need(runtime,"document.addEventListener('abu-settings-ready'",'operation patch must react to settings lifecycle');
 need(runtime,"document.addEventListener('abu-runtime-loaded'",'operation patch must react to runtime load events');
 for(const marker of ["upsert('operation'","removeKind('operation')","deviceName||'أكرم'"])no(runtime,marker,'operation log privacy');
 for(const marker of ['[هاتف محجوب]','[بريد محجوب]','[رقم محجوب]',"result.title = 'عملية مستمسكات'","result.section = 'مستمسكات الزبائن'"])need(base,marker,'base operation privacy');
