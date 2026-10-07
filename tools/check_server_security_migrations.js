@@ -138,6 +138,11 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const dataApiDefaults=read('supabase/migrations/20261007180851_fail_closed_data_api_default_privileges.sql');
+need(dataApiDefaults,'revoke truncate, references, trigger','client roles must never retain RLS-bypassing or structural table privileges');
+need(dataApiDefaults,'on all tables in schema public','dangerous table privilege cleanup must cover the full public schema');
+for(const kind of ['tables','sequences','functions']) need(dataApiDefaults,`revoke all on ${kind} from anon, authenticated`,`future public ${kind} must fail closed for API roles`);
+
 const definerReharden=read('supabase/migrations/20261007180419_reharden_all_authenticated_definer_search_paths.sql');
 need(definerReharden,"p.prosecdef",'definer reharden migration must target SECURITY DEFINER functions');
 need(definerReharden,"has_function_privilege('authenticated',p.oid,'EXECUTE')",'definer reharden migration must cover authenticated-callable functions');
