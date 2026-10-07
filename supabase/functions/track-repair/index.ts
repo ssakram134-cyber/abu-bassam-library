@@ -1,5 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
 
 const statusLabels: Record<string, string> = {
   received: 'تم الاستلام', waiting: 'بانتظار المتابعة', inspection: 'قيد الفحص', awaiting_approval: 'بانتظار موافقة الزبون',
