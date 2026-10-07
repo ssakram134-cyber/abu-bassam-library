@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const notificationCompat=read('supabase/migrations/20261007181713_delegate_legacy_notification_refresh_to_v2.sql');
+need(notificationCompat,'security invoker','legacy notification refresh must not regain definer privileges');
+need(notificationCompat,'set search_path to pg_catalog','legacy notification refresh must keep hardened search_path');
+need(notificationCompat,'return public.refresh_in_app_notifications_v2();','legacy notification refresh must delegate to the authorized v2 implementation');
+need(notificationCompat,'from public, anon','legacy notification refresh must remain unavailable anonymously');
+
 const anonDataClosed=read('supabase/migrations/20261007181256_remove_anonymous_public_schema_data_privileges.sql');
 need(anonDataClosed,'revoke all privileges','anonymous public data migration must revoke privileges');
 need(anonDataClosed,'on all tables in schema public','anonymous users must not retain direct public table access');
