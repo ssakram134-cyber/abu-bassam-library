@@ -11,7 +11,8 @@ need('native/android/AbuBassamWebViewPackage.java',['new AbuBassamWebViewManager
 need('scripts/prepare-android-assets.mjs',['installHardenedWebView','add(AbuBassamWebViewPackage())']);
 
 need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY']);
-forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);
+forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'","setInterval("]);
+need('web/secure-sync-runtime.js',['abu-runtime-loaded','abu-settings-ready',"document.visibilityState==='visible'"]);
 
 need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity']);
 forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
