@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const legacyRolePolicies=read('supabase/migrations/20261007181143_require_app_role_for_legacy_authenticated_policies.sql');
+need(legacyRolePolicies,"cmd='ALL'",'legacy authenticated policy hardening must target ALL policies');
+need(legacyRolePolicies,"roles = array['authenticated']::name[]",'legacy policy hardening must target authenticated-only policies');
+need(legacyRolePolicies,'public.current_app_role() is not null','legacy policies must require an assigned application role');
+forbid(legacyRolePolicies,"using ((select auth.uid()) is not null)",'legacy policy hardening must not preserve authentication-only authorization');
+
 const dataApiDefaults=read('supabase/migrations/20261007180851_fail_closed_data_api_default_privileges.sql');
 need(dataApiDefaults,'revoke truncate, references, trigger','client roles must never retain RLS-bypassing or structural table privileges');
 need(dataApiDefaults,'on all tables in schema public','dangerous table privilege cleanup must cover the full public schema');
