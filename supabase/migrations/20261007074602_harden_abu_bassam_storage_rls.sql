@@ -1,7 +1,7 @@
 -- Supabase live migration: 20261007074602_harden_abu_bassam_storage_rls
--- Prevents permissive-policy OR composition from bypassing user ownership or
--- leaking access into other buckets. Direct access is only for the current
--- user's non-vault paths in abu-bassam-private.
+-- Consolidates ownership, bucket scope, and vault-path exclusions into one
+-- explicit policy per operation. This preserves the intended restrictive model
+-- while making the effective access rule auditable in a single predicate.
 
 drop policy if exists abu_bassam_storage_select_own on storage.objects;
 drop policy if exists abu_bassam_storage_insert_own on storage.objects;
