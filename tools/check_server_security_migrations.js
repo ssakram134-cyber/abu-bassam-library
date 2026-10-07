@@ -82,4 +82,45 @@ if(count(storageHard,"bucket_id = 'abu-bassam-private'")<4)throw new Error('serv
 if(count(storageHard,"(storage.foldername(name))[1] = (select auth.uid())::text")<4)throw new Error('server security migration check failed: every direct storage operation must bind the first path segment to auth.uid()');
 need(storageHard,"array['vault'::text,'branch-vault'::text,'backup-vault'::text]",'vault storage paths must remain Edge/RPC-only');
 
-console.log('server security migration checks passed: device secrets, device-limit ownership, secure-sync row isolation, restricted sync kinds, hardened SECURITY DEFINER paths, and storage bucket/path isolation are regression-guarded.');
+
+
+const repairEventsHard=read('supabase/migrations/20261007165448_harden_repair_events_and_internal_rpcs.sql');
+need(repairEventsHard,'create policy repair_events_role_select','repair events must be read-only to authorized app roles');
+need(repairEventsHard,'revoke all on table public.repair_events from anon, authenticated','repair events direct writes must remain closed');
+need(repairEventsHard,'create policy purchase_payment_requests_no_direct_access','purchase payment request table must fail closed for clients');
+need(repairEventsHard,'revoke execute on function public.migrate_legacy_dismantling_device(uuid) from public, anon, authenticated','legacy dismantling migration must remain service-only');
+
+const publicTrackingHard=read('supabase/migrations/20261007170001_sanitize_public_repair_tracking_rpc.sql');
+need(publicTrackingHard,'null::text as customer_name','public tracking must redact customer name');
+need(publicTrackingHard,'null::text as primary_fault','public tracking must redact fault details');
+need(publicTrackingHard,'null::numeric as total_cost','public tracking must redact total cost');
+need(publicTrackingHard,'null::numeric as deposit','public tracking must redact deposit');
+need(publicTrackingHard,'grant execute on function public.get_public_repair_tracking(uuid) to anon, service_role','public tracking must preserve token-based anonymous access');
+
+const dismantlingPolicyHard=read('supabase/migrations/20261007170201_split_dismantling_read_write_policies.sql');
+need(dismantlingPolicyHard,'create policy dismantled_parts_read','dismantled parts read policy must be separate');
+need(dismantlingPolicyHard,'create policy dismantled_parts_delete_management','dismantled parts delete policy must be management-only');
+need(dismantlingPolicyHard,'create policy dismantling_devices_read','dismantling devices read policy must be separate');
+need(dismantlingPolicyHard,'create policy dismantling_devices_delete_management','dismantling devices delete policy must be management-only');
+if(count(dismantlingPolicyHard,"using (public.has_app_role(array['owner','manager']))")<4)throw new Error('server security migration check failed: dismantling write/delete paths must be owner/manager only');
+
+const legacyWrapperHard=read('supabase/migrations/20261007170306_make_legacy_rpc_wrappers_invoker.sql');
+for(const sig of [
+  'public.add_repair_part(uuid,uuid,integer,text)',
+  'public.pay_purchase_order(uuid,numeric)',
+  'public.remove_repair_part(uuid)',
+  'public.return_purchase_item(uuid,integer)',
+]) need(legacyWrapperHard,`alter function ${sig} security invoker`,`${sig} compatibility wrapper must remain SECURITY INVOKER`);
+
+const anonymousSurfaceHard=read('supabase/migrations/20261007170725_close_anonymous_internal_function_surface.sql');
+for(const sig of [
+  'public.enforce_atomic_debt_payment_ledger()',
+  'public.guard_repair_status_transition()',
+  'public.set_compatibility_catalog_updated_at()',
+  'public.stamp_repair_status_times()',
+  'public.sync_dismantled_part_aliases()',
+  'public.sync_repair_warranty_record()',
+]) need(anonymousSurfaceHard,`revoke execute on function ${sig} from public, anon, authenticated`,`${sig} must not be directly client callable`);
+need(anonymousSurfaceHard,'revoke execute on function public.refresh_in_app_notifications() from public, anon','legacy notification refresh must not be anonymously callable');
+
+console.log('server security migration checks passed: device secrets, ownership/RLS isolation, private storage, repair-event write lockdown, public-tracking redaction, dismantling least privilege, invoker compatibility wrappers, and anonymous RPC minimization are regression-guarded.');
