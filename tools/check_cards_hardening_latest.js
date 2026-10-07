@@ -65,6 +65,15 @@ need(a4,"onCommit:typeof onCommit==='function'?onCommit:null",'A4 editor must re
 need(a4,"committed(j)",'A4 editor must record only after output dispatch');
 need(a4,"Object.assign(el.style,{position:'absolute',margin:'0'})",'A4 editor must preserve moved card positioning in final output');
 need(a4,"Object.assign(p.style,{position:'relative',display:'block',padding:'0',overflow:'hidden',boxShadow:'none'})",'A4 output page must retain the editor coordinate system');
+reject(studio,"5*h+4*gap+2*my>297",'duplex layout must not hard-code five rows');
+need(studio,"duplexRows=Math.floor((297-2*my+gap)/(h+gap))",'duplex rows must be derived from current card height and margins');
+need(studio,"capacity=duplexRows*2",'duplex page capacity must follow the dynamic row count');
+need(studio,"Array(capacity).fill(null)",'duplex alignment must preserve empty physical slots');
+need(studio,"backSlots.push(slots[row*2+1],slots[row*2])",'horizontal duplex must mirror columns including empty slots');
+need(studio,"for(let row=duplexRows-1;row>=0;row--)backSlots.push(slots[row*2],slots[row*2+1])",'vertical duplex must mirror the full physical row grid');
+need(studio,"duplex-empty{visibility:hidden!important}",'duplex spacer slots must remain invisible while preserving alignment');
+need(a4,":scope > .cut:not(.duplex-empty)",'A4 editor must ignore duplex spacer slots');
+need(studio,"rows=Math.max(1,Math.floor((297-2*my+gap)/(h+gap)))",'A4 page estimate must use the current card row capacity');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
