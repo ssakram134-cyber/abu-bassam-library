@@ -63,6 +63,8 @@ reject(studio,"recordHistory('حفظ '+labels.join(' و')+' في المعرض');
 need(studio,"'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage",'gallery output must dispatch before history is recorded');
 need(a4,"onCommit:typeof onCommit==='function'?onCommit:null",'A4 editor must retain a commit callback');
 need(a4,"committed(j)",'A4 editor must record only after output dispatch');
+need(a4,"Object.assign(el.style,{position:'absolute',margin:'0'})",'A4 editor must preserve moved card positioning in final output');
+need(a4,"Object.assign(p.style,{position:'relative',display:'block',padding:'0',overflow:'hidden',boxShadow:'none'})",'A4 output page must retain the editor coordinate system');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
