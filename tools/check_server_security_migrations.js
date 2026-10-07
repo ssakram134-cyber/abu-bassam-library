@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const firstDeviceLabel=read('supabase/migrations/20261007172803_fix_first_device_default_label.sql');
+need(firstDeviceLabel,"v_role:=case when v_count=0 then 'owner' else 'secondary' end",'first registered device must remain owner');
+need(firstDeviceLabel,"case when v_count=0 then 'نسختي الأولى باسم (أكرم)' else 'جهاز المكتبة' end",'first registered device must keep the requested default label');
+need(firstDeviceLabel,"if v_count>=v_limit then raise exception 'DEVICE_LIMIT_REACHED'",'device registration must enforce the configured device cap');
+need(firstDeviceLabel,"coalesce(v_row.secret_hash,'')='' or v_row.secret_hash<>v_hash",'existing device registration must require the stored secret');
+
 const publicTrackingEdge=read('supabase/functions/track-repair/index.ts');
 need(publicTrackingEdge,"waiting: 'بانتظار المتابعة'",'public tracking must localize waiting status');
 need(publicTrackingEdge,"waiting_parts: 'بانتظار قطعة'",'public tracking must localize waiting_parts status');
