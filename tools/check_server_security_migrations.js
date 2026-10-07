@@ -4,6 +4,16 @@ function need(src,token,label){if(!src.includes(token))throw new Error(`server s
 function forbid(src,token,label){if(src.includes(token))throw new Error(`server security migration check failed: ${label}`)}
 function count(src,token){return src.split(token).length-1}
 
+const restoredVaultPaging=read('supabase/migrations/20261002005258_fix_branch_vault_fail_closed_and_paging.sql');
+need(restoredVaultPaging,'public._abu_bassam_vault_authorized','restored branch-vault migration source must remain versioned');
+need(restoredVaultPaging,'VAULT_VIEW_NOT_ALLOWED','restored branch-vault migration must remain fail closed');
+need(restoredVaultPaging,'p_offset integer default 0','restored branch-vault migration must preserve paging');
+
+const restoredGranular=read('supabase/migrations/20261002005405_fix_granular_permissions_fail_closed.sql');
+need(restoredGranular,'public._abu_bassam_device_permission','restored granular permission migration source must remain versioned');
+need(restoredGranular,"return false;\nexception when others then",'granular permission helper must remain fail closed');
+need(restoredGranular,'from public,anon,authenticated','internal permission helper must remain client-inaccessible');
+
 const limit=read('supabase/migrations/202609270004_strict_device_limit_owner_secret.sql');
 const all=read('supabase/migrations/202609270005_strict_device_secret_checks_all_paths.sql');
 need(limit,"coalesce(trim(p_actor_device_id),'') = ''",'device-limit actor id must be required');
