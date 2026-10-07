@@ -1,7 +1,8 @@
 -- Supabase live migration: 20261007074108_harden_abu_bassam_rls_and_definer_paths
--- Closes a permissive-policy OR bypass on secure sync, blocks direct access to
--- operation/device/vault kinds, hardens SECURITY DEFINER search paths, and
--- converts the read-only device-limit RPC to SECURITY INVOKER.
+-- Consolidates ownership and restricted-kind predicates into one explicit policy
+-- per operation so protection does not depend on split permissive/restrictive
+-- policy composition. Also hardens SECURITY DEFINER search paths and converts
+-- the read-only device-limit RPC to SECURITY INVOKER.
 
 drop policy if exists abu_bassam_secure_select_own on public.abu_bassam_sync_secure;
 drop policy if exists abu_bassam_secure_insert_own on public.abu_bassam_sync_secure;
