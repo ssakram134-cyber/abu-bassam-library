@@ -3,7 +3,7 @@
 if(window.__ABU_BACKUP_CENTER_V1__)return;window.__ABU_BACKUP_CENTER_V1__=true;
 const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/backup-center',BUCKET='abu-bassam-private',DB='AbuBassamDocumentVaultV4',STORE='items',APP=String(window.__ABU_APP_META__?.version||''),SK='abu_bassam_device_secret_v1';
 const AUTO='abuBassamBackupAutoV1',CAD='abuBassamBackupCadenceV1',KEEP='abuBassamBackupRetentionV1',LAST='abuBassamBackupLastSuccessV1',LASTFP='abuBassamBackupLastFingerprintV1',LASTERR='abuBassamBackupLastErrorV1',RETRY='abuBassamBackupRetryAfterV1';
-const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,modalBuilt=false;
+const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,modalBuilt=false,autoTimer=null;
 function stateScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function scopedKey(key){return key+':'+stateScope()}
 function stateGet(key){const scoped=scopedKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
@@ -42,6 +42,7 @@ async function refreshList(){paint();try{const all=role()==='owner'&&$('abuBacku
 function open(){build();paint();$('abuBackupModal').classList.add('on');refreshList()}function close(){$('abuBackupModal')?.classList.remove('on')}
 function inject(){const h=document.querySelector('#vaultCenter .v-actions');if(!h||$('abuBackupCenterBtn'))return;const b=document.createElement('button');b.id='abuBackupCenterBtn';b.textContent='☁️ النسخ التلقائي';b.onclick=open;h.appendChild(b)}
 async function autoCheck(){if(busy||!due())return;try{await backupNow('automatic',false)}catch(_){} }
-function boot(){if(stateGet(AUTO)===null)stateSet(AUTO,'1');if(stateGet(CAD)===null)stateSet(CAD,'daily');if(stateGet(KEEP)===null)stateSet(KEEP,'7');inject();setTimeout(autoCheck,7000);setInterval(autoCheck,15*60*1000);window.addEventListener('online',()=>setTimeout(autoCheck,1500));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(autoCheck,1200)});document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(autoCheck,2000))}
+function scheduleAutoCheck(delay=15*60*1000){clearTimeout(autoTimer);autoTimer=null;if(document.visibilityState==='hidden')return;autoTimer=setTimeout(async()=>{autoTimer=null;await autoCheck();scheduleAutoCheck()},Math.max(1000,delay))}
+function boot(){if(stateGet(AUTO)===null)stateSet(AUTO,'1');if(stateGet(CAD)===null)stateSet(CAD,'daily');if(stateGet(KEEP)===null)stateSet(KEEP,'7');inject();scheduleAutoCheck(7000);window.addEventListener('online',()=>scheduleAutoCheck(1500));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(autoTimer);autoTimer=null}else scheduleAutoCheck(1200)});document.addEventListener('abu-bassam-auth-changed',()=>scheduleAutoCheck(2000))}
 window.AbuBackupCenter={open,close,backupNow,refreshList,restoreCloud,deleteCloud,due};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
