@@ -94,6 +94,16 @@ need(studio,"pairRows=Math.floor((297-2*my+gap)/(h+gap))",'A4 pair layout must c
 need(studio,"if(rowWidth>210||pairRows<1)throw new Error('قياس الكارت أو الهوامش لا يتسع على ورقة A4')",'A4 pair layout must reject vertical or horizontal overflow');
 reject(studio,"Math.max(1,Math.min(5,Math.floor((297-2*my+gap)/(h+gap))))",'A4 pair layout must not force an overflowing row');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
+need(studio,'id="csBackupInput"','card backup must expose a real JSON import input');
+need(studio,'function importBackupFile(file)','card backup must support importing an exported JSON file');
+need(studio,'function applyBackupSnapshot(data)','card backup restore must use one canonical restore path');
+need(studio,'workspace={type:state.type,photo:state.photo,photoTransform:clone(state.photoTransform)','card backup must include active badge workspace and photo geometry');
+need(studio,'queue:scrubModels(state.queue)','card backup must include the print queue without secrets');
+need(studio,'function historyQueueSnapshot()','print history must store compact queue snapshots');
+need(studio,'function historyCount(item)','print history must retain copy counts without expanding duplicate models');
+reject(studio,'let models=expandedJobs().slice(0,MAX_CARDS).map','print history must not duplicate the same photo once per printed copy');
+need(studio,'if(Array.isArray(item.queue))state.queue=scrubModels(item.queue)','print history restore must support compact queue snapshots');
+need(studio,"else state.queue=(item.models||[]).map(model=>({model:clone(model),copies:1}))",'print history restore must remain compatible with legacy expanded history');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
 need(studio,"requireCard('backupRestore')",'card reset restore must be permission-gated');
