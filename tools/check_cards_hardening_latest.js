@@ -83,7 +83,10 @@ need(studio,"backSlots.push(slots[row*2+1],slots[row*2])",'horizontal duplex mus
 need(studio,"for(let row=duplexRows-1;row>=0;row--)backSlots.push(slots[row*2],slots[row*2+1])",'vertical duplex must mirror the full physical row grid');
 need(studio,"duplex-empty{visibility:hidden!important}",'duplex spacer slots must remain invisible while preserving alignment');
 need(a4,":scope > .cut:not(.duplex-empty)",'A4 editor must ignore duplex spacer slots');
-need(studio,"rows=Math.max(1,Math.floor((297-2*my+gap)/(h+gap)))",'A4 page estimate must use the current card row capacity');
+need(studio,"rawRows=Math.floor((297-2*my+gap)/(h+gap)),rows=Math.max(1,rawRows)",'A4 page estimate must use the current card row capacity');
+need(studio,"pairRows=Math.floor((297-2*my+gap)/(h+gap))",'A4 pair layout must calculate real vertical capacity');
+need(studio,"if(rowWidth>210||pairRows<1)throw new Error('قياس الكارت أو الهوامش لا يتسع على ورقة A4')",'A4 pair layout must reject vertical or horizontal overflow');
+reject(studio,"Math.max(1,Math.min(5,Math.floor((297-2*my+gap)/(h+gap))))",'A4 pair layout must not force an overflowing row');
 need(studio,"RESET_BACKUP_KEY='abuBassamCardsResetBackupV1'",'card reset must keep a verified local backup');
 need(studio,"localStorage.getItem(RESET_BACKUP_KEY)!==json",'card reset backup must be verified before deletion');
 need(studio,'restoreResetBackup','card reset backup must be recoverable');
