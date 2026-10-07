@@ -123,4 +123,15 @@ for(const sig of [
 ]) need(anonymousSurfaceHard,`revoke execute on function ${sig} from public, anon, authenticated`,`${sig} must not be directly client callable`);
 need(anonymousSurfaceHard,'revoke execute on function public.refresh_in_app_notifications() from public, anon','legacy notification refresh must not be anonymously callable');
 
-console.log('server security migration checks passed: device secrets, ownership/RLS isolation, private storage, repair-event write lockdown, public-tracking redaction, dismantling least privilege, invoker compatibility wrappers, and anonymous RPC minimization are regression-guarded.');
+const integrityHard=read('supabase/migrations/20261007172053_add_financial_inventory_integrity_constraints.sql');
+for(const token of [
+  'customers_total_debt_nonnegative',
+  'repairs_money_and_warranty_nonnegative',
+  'spare_parts_inventory_nonnegative',
+  'purchase_order_items_received_not_over_quantity',
+  'purchase_orders_money_nonnegative',
+]) need(integrityHard,token,`database integrity constraint ${token} must remain present`);
+need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
+need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
+
+console.log('server security migration checks passed: device secrets, ownership/RLS isolation, private storage, repair-event write lockdown, public-tracking redaction, dismantling least privilege, invoker compatibility wrappers, anonymous RPC minimization, and financial/inventory integrity constraints are regression-guarded.');
