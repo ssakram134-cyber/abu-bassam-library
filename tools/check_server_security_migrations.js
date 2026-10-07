@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const anonDataClosed=read('supabase/migrations/20261007181256_remove_anonymous_public_schema_data_privileges.sql');
+need(anonDataClosed,'revoke all privileges','anonymous public data migration must revoke privileges');
+need(anonDataClosed,'on all tables in schema public','anonymous users must not retain direct public table access');
+need(anonDataClosed,'on all sequences in schema public','anonymous users must not retain public sequence access');
+if(count(anonDataClosed,'from anon')<2)throw new Error('server security migration check failed: anonymous table and sequence privileges must both remain revoked');
+
 const legacyRolePolicies=read('supabase/migrations/20261007181143_require_app_role_for_legacy_authenticated_policies.sql');
 need(legacyRolePolicies,"cmd='ALL'",'legacy authenticated policy hardening must target ALL policies');
 need(legacyRolePolicies,"roles = array['authenticated']::name[]",'legacy policy hardening must target authenticated-only policies');
