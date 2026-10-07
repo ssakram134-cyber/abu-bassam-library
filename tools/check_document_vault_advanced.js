@@ -26,6 +26,7 @@ need(advanced,'avaSaturation','saturation control');
 need(advanced,'function homography','true projective homography');
 need(advanced,'MAX_SOURCE_PIXELS','source memory guard');
 need(advanced,'MAX_OUTPUT_PIXELS','output memory guard');
+need(vault,"abu-vault-rendered",'vault grid must emit explicit render lifecycle');need(advanced,"abu-vault-rendered",'advanced vault must follow explicit render lifecycle');if(advanced.includes('new MutationObserver'))throw new Error('document vault advanced check failed: advanced vault must not observe the grid DOM');
 need(advanced,"syncState='pending'",'edited image must re-enter sync queue');
 need(offline,"createWorker('ara+eng'",'Arabic and English OCR');
 need(offline,"workerPath:'vendor/tesseract/worker.min.js'",'local OCR worker');
