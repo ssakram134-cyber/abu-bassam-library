@@ -32,6 +32,11 @@ need(studio,"input.setAttribute('capture','environment')",'camera barcode fallba
 need(studio,"CardsStudio.flipPhoto('x')",'photo tools must expose horizontal flip');
 need(studio,"CardsStudio.flipPhoto('y')",'photo tools must expose vertical flip');
 need(studio,'photoTransformCss','photo preview and print must share flip/rotation transform');
+need(studio,"async function resizeImage(file,maxDimension=2200,quality=.92)",'badge photos must use bounded image resizing');
+need(studio,"if(max<=limit)return src",'badge images smaller than the bound must avoid needless recompression');
+need(studio,"context.imageSmoothingQuality='high'",'badge image downscaling must retain print quality');
+need(studio,"state.photo=await resizeImage(file,2200,.92)",'badge photo import must cap camera/gallery memory');
+need(studio,"state.brand.logo=await resizeImage(file,1200,.9)",'brand logo import must cap memory separately');
 need(studio,'flipPhoto,focusCrop','photo flip must be part of CardsStudio API');
 reject(studio,"photoTransform={zoom:1,x:0,y:0,rotate:0};",'all photo transform resets must initialize flip state');
 reject(freeLayout,"el.dataset.abuLayoutRole==='photo'||el.dataset.abuLayoutRole==='qr'",'photo frame aspect ratio must not be locked');
