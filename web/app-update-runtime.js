@@ -48,7 +48,7 @@ function buildCard(){
   $('abuUpdateCheck').onclick=()=>check();return true
 }
 function maybeAutoCheck(){try{const last=Date.parse(localStorage.getItem(LAST_CHECK_KEY)||0)||0;if(Date.now()-last<12*60*60*1000)return;if(navigator.onLine&&session()?.access_token)check({silent:true})}catch(_){}}
-function boot(){let n=0,t=setInterval(()=>{n++;if(buildCard()||n>100)clearInterval(t)},100);setTimeout(maybeAutoCheck,2500);document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(maybeAutoCheck,500));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){buildCard();setTimeout(maybeAutoCheck,300)}})}
+function boot(){buildCard();document.addEventListener('abu-settings-ready',buildCard);document.addEventListener('abu-runtime-loaded',buildCard);setTimeout(maybeAutoCheck,2500);document.addEventListener('abu-bassam-auth-changed',()=>{buildCard();setTimeout(maybeAutoCheck,500)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){buildCard();setTimeout(maybeAutoCheck,300)}})}
 window.AbuBassamAppUpdate={check,version:APP_VERSION,build:BUILD_NUMBER,result:()=>state.result};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
