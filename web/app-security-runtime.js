@@ -31,6 +31,7 @@ let busy=false;
 let lastBackgroundAt=0;
 let exitArmedAt=0;
 let appearanceStamp='';
+let maintenanceTimer=null;
 let deviceInfo={name:'Android',model:'Android',os:'Android',androidVersion:'',appVersion:APP_VERSION};
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -166,12 +167,15 @@ window.AbuBassamNativeBackPress=function(){back(true)};
 async function logout(){if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;try{await cloud()?.client?.auth?.signOut?.({scope:'local'})}catch(e){}currentDevice=null;unlocked=false;showGate('تم تسجيل الخروج.');log('تسجيل خروج')}
 function lockNow(){lock('تم قفل التطبيق يدويًا')}
 
+function scheduleMaintenance(delay=60000){clearTimeout(maintenanceTimer);maintenanceTimer=null;if(document.visibilityState==='hidden')return;maintenanceTimer=setTimeout(()=>void maintenanceTick(),Math.max(1000,delay))}
+async function maintenanceTick(){maintenanceTimer=null;if(document.visibilityState==='hidden')return;try{if(unlocked)await touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')await Promise.resolve(pushAppearance());else await Promise.resolve(pullAppearanceIfNeeded())}}catch(e){}finally{scheduleMaintenance()}}
+function installMaintenance(){scheduleMaintenance();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(maintenanceTimer);maintenanceTimer=null}else scheduleMaintenance(1000)})}
 async function boot(){
   buildUi();guardClicks();injectSecurityCard();wrapAppearance();await fetchDeviceInfo();if(!localStorage.getItem(LOCK_MINUTES_KEY))localStorage.setItem(LOCK_MINUTES_KEY,'5');
   const trust=localTrust();if(offlineAllowed())$('abuOfflineBtn').style.display='block';
   try{await cloud()?.ready?.()}catch(e){}
   const bio=await getBiometricEnabled().catch(()=>false);if(bio&&((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed())){setTimeout(unlockWithBiometric,180)}else showGate('أدخل بيانات الدخول لفتح التطبيق.');
-  setInterval(()=>{if(unlocked)touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')pushAppearance();else pullAppearanceIfNeeded()}},60000)
+  installMaintenance()
 }
 
 window.AbuBassamSecurity={
