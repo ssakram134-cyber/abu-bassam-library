@@ -138,6 +138,13 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const definerReharden=read('supabase/migrations/20261007180419_reharden_all_authenticated_definer_search_paths.sql');
+need(definerReharden,"p.prosecdef",'definer reharden migration must target SECURITY DEFINER functions');
+need(definerReharden,"has_function_privilege('authenticated',p.oid,'EXECUTE')",'definer reharden migration must cover authenticated-callable functions');
+need(definerReharden,"like '%search_path=%public%'",'definer reharden migration must detect mutable public search paths');
+need(definerReharden,"alter function %s set search_path to pg_catalog, extensions",'definer reharden migration must pin search_path');
+need(definerReharden,"revoke execute on function %s from public, anon",'definer reharden migration must keep anonymous execution closed');
+
 const ownerRoleGuard=read('supabase/migrations/20261007173256_harden_last_owner_role_guard.sql');
 need(ownerRoleGuard,"where role='owner'","last-owner guard must count active owners");
 need(ownerRoleGuard,"and (p_role <> 'owner' or not coalesce(p_active,true))",'last-owner guard must cover both demotion and deactivation');
