@@ -242,32 +242,40 @@ function App() {
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
+  const saveBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      replyOutput(requestId, true, true);
       Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر الحفظ', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const saveToGallery = useCallback(async ({ name, mime, data }) => {
+  const saveToGallery = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime;
       if (!String(finalMime).startsWith('image/')) throw new Error('هذا الملف ليس صورة');
       const finalName = safeName(name || `Abu_Bassam_${Date.now()}.png`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      replyOutput(requestId, true, true);
       Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
-    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
   const savePagesToGallery = useCallback(async ({ prefix, pages, mime, requestId }) => {
     try {
@@ -308,7 +316,7 @@ function App() {
     }
   }, [replyOutput]);
 
-  const printPages = useCallback(async ({ pages, paper }) => {
+  const printPages = useCallback(async ({ pages, paper, requestId }) => {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
@@ -316,8 +324,12 @@ function App() {
       const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, []);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
   const printHtml = useCallback(async ({ html, requestId }) => {
     try {
@@ -362,18 +374,24 @@ function App() {
     return { uri, name: finalName, type: mime || parsed.mime };
   }, []);
 
-  const printBase64 = useCallback(async ({ name, mime, data }) => {
+  const printBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const finalMime = String(mime || 'application/octet-stream');
       if (finalMime.startsWith('image/')) {
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
-        await Print.printAsync({ html }); return;
+        await Print.printAsync({ html });
+        replyOutput(requestId, true, true);
+        return;
       }
       if (finalMime !== 'application/pdf') throw new Error('الطباعة المباشرة من الملف تدعم PDF أو الصور فقط. احفظ الملف أو افتحه بالتطبيق المناسب.');
       const file = await writeTemporaryFile(name, finalMime, data);
       try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, [writeTemporaryFile]);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput, writeTemporaryFile]);
 
   const openExternal = useCallback(async ({ url }) => {
     try {
@@ -384,14 +402,18 @@ function App() {
     } catch (error) { Alert.alert('تعذر فتح الرابط', String(error?.message || error)); }
   }, []);
 
-  const shareBase64 = useCallback(async ({ name, mime, data }) => {
+  const shareBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error('المشاركة غير متاحة على هذا الجهاز');
       const file = await writeTemporaryFile(name, mime, data);
       try { await Sharing.shareAsync(file.uri, { mimeType: file.type, dialogTitle: 'حفظ أو مشاركة الملف' }); }
       finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت المشاركة', String(error?.message || error)); }
-  }, [writeTemporaryFile]);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت المشاركة', String(error?.message || error));
+    }
+  }, [replyOutput, writeTemporaryFile]);
 
   const openAppSettings = useCallback(async () => {
     try { await Linking.openSettings(); }
