@@ -411,9 +411,9 @@
     localStorage.removeItem('abuBassamSessionV2');
     localStorage.removeItem('abuBassamLocalModeV1');
     ready().catch(() => updateStatus('تعذر التحقق من جلسة المزامنة'));
-    setInterval(() => {
-      wrapActions();
-    }, 120000);
+    document.addEventListener('abu-runtime-loaded',wrapActions);
+    document.addEventListener('abu-settings-ready',wrapActions);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wrapActions()});
   }
 
   function registerVaultAdapter(adapter) {
