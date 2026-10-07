@@ -95,7 +95,7 @@ need(publicTrackingHard,'null::text as customer_name','public tracking must reda
 need(publicTrackingHard,'null::text as primary_fault','public tracking must redact fault details');
 need(publicTrackingHard,'null::numeric as total_cost','public tracking must redact total cost');
 need(publicTrackingHard,'null::numeric as deposit','public tracking must redact deposit');
-need(publicTrackingHard,'grant execute on function public.get_public_repair_tracking(uuid) to anon, service_role','public tracking must preserve token-based anonymous access');
+need(publicTrackingHard,'null::numeric as deposit','public tracking sanitization migration must redact deposit before direct RPC retirement');
 
 const dismantlingPolicyHard=read('supabase/migrations/20261007170201_split_dismantling_read_write_policies.sql');
 need(dismantlingPolicyHard,'create policy dismantled_parts_read','dismantled parts read policy must be separate');
@@ -122,6 +122,10 @@ for(const sig of [
   'public.sync_repair_warranty_record()',
 ]) need(anonymousSurfaceHard,`revoke execute on function ${sig} from public, anon, authenticated`,`${sig} must not be directly client callable`);
 need(anonymousSurfaceHard,'revoke execute on function public.refresh_in_app_notifications() from public, anon','legacy notification refresh must not be anonymously callable');
+
+const retirePublicTracking=read('supabase/migrations/20261007172202_retire_direct_public_tracking_rpc.sql');
+need(retirePublicTracking,'revoke all on function public.get_public_repair_tracking(uuid) from public, anon, authenticated','legacy public tracking RPC must not remain client-callable');
+need(retirePublicTracking,'grant execute on function public.get_public_repair_tracking(uuid) to service_role','legacy public tracking RPC must remain service-maintainable');
 
 const integrityHard=read('supabase/migrations/20261007172053_add_financial_inventory_integrity_constraints.sql');
 for(const token of [
