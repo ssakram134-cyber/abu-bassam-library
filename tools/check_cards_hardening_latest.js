@@ -98,7 +98,8 @@ need(studio,'id="csBackupInput"','card backup must expose a real JSON import inp
 need(studio,'function importBackupFile(file)','card backup must support importing an exported JSON file');
 need(studio,'function applyBackupSnapshot(data)','card backup restore must use one canonical restore path');
 need(studio,'workspace={type:state.type,photo:state.photo,photoTransform:clone(state.photoTransform)','card backup must include active badge workspace and photo geometry');
-need(studio,'queue:scrubModels(state.queue)','card backup must include the print queue without secrets');
+need(studio,'queue=scrubModels(state.queue)','card backup must sanitize the print queue before export');
+need(studio,'workspace={type:state.type,photo:state.photo,photoTransform:clone(state.photoTransform)','card backup workspace must retain the sanitized queue with active layout state');
 need(studio,'function historyQueueSnapshot()','print history must store compact queue snapshots');
 need(studio,'function historyCount(item)','print history must retain copy counts without expanding duplicate models');
 reject(studio,'let models=expandedJobs().slice(0,MAX_CARDS).map','print history must not duplicate the same photo once per printed copy');
