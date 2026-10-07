@@ -138,4 +138,13 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const publicTrackingEdge=read('supabase/functions/track-repair/index.ts');
+need(publicTrackingEdge,"waiting: 'بانتظار المتابعة'",'public tracking must localize waiting status');
+need(publicTrackingEdge,"waiting_parts: 'بانتظار قطعة'",'public tracking must localize waiting_parts status');
+need(publicTrackingEdge,"completed: 'تم إكمال الصيانة'",'public tracking must localize completed status');
+need(publicTrackingEdge,".select('repair_number,brand,model,status,expected_delivery,received_date,created_at,updated_at')",'public tracking query must stay on the minimal safe repair field set');
+for(const sensitive of ['customer_name','primary_fault','total_cost','deposit','lock_code','imei']) forbid(publicTrackingEdge,sensitive,`public tracking Edge Function must not expose ${sensitive}`);
+need(publicTrackingEdge,"Cache-Control': 'no-store'",'public tracking responses must not be cached');
+need(publicTrackingEdge,"tracking_token', token",'public tracking must stay scoped to the opaque tracking token');
+
 console.log('server security migration checks passed: device secrets, ownership/RLS isolation, private storage, repair-event write lockdown, public-tracking redaction, dismantling least privilege, invoker compatibility wrappers, anonymous RPC minimization, and financial/inventory integrity constraints are regression-guarded.');
