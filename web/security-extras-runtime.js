@@ -152,7 +152,7 @@ async function render(){
   const privacy=$('abuPrivacyMode');if(privacy)privacy.checked=privacyEnabled();const info=$('abuSnapshotInfo');if(info)info.textContent='آخر نقطة أمان: '+snapshotInfo();
   const owner=isOwner();document.querySelectorAll('#abuSecurityExtrasSettings button:not([onclick*="logout"])').forEach(button=>{if(!owner){if(button.dataset.abuSecurityExtrasOwnerGuard!=='1'){button.dataset.abuSecurityExtrasOwnerGuard='1';button.dataset.abuSecurityExtrasPrevDisabled=button.disabled?'1':'0';button.dataset.abuSecurityExtrasPrevOpacity=button.style.opacity||''}button.disabled=true;button.style.opacity='.45'}else if(button.dataset.abuSecurityExtrasOwnerGuard==='1'){button.disabled=button.dataset.abuSecurityExtrasPrevDisabled==='1';button.style.opacity=button.dataset.abuSecurityExtrasPrevOpacity||'';delete button.dataset.abuSecurityExtrasOwnerGuard;delete button.dataset.abuSecurityExtrasPrevDisabled;delete button.dataset.abuSecurityExtrasPrevOpacity}})
 }
-function inject(){render();new MutationObserver(()=>{if(document.querySelector('#abuSettingsModal .abu-settings-body')&&!$('abuSecurityExtrasSettings'))render()}).observe(document.body,{childList:true,subtree:true})}
+function inject(){void render();document.addEventListener('abu-settings-ready',()=>void render());document.addEventListener('abu-bassam-auth-changed',()=>void render())}
 
 function dangerousTarget(target){
   if(!target)return'';const onclick=String(target.getAttribute?.('onclick')||'');
@@ -161,11 +161,10 @@ function dangerousTarget(target){
 }
 function guardDanger(){document.addEventListener('click',async event=>{const target=event.target?.closest?.('button,[role="button"]');if(!target||target===bypassTarget)return;const reason=dangerousTarget(target);if(!reason)return;if(!isOwner())return;event.preventDefault();event.stopImmediatePropagation();if(await verifyDangerPin(reason)){bypassTarget=target;try{target.click()}finally{setTimeout(()=>{bypassTarget=null},0)}}},true)}
 
-function installTypographyApplyShim(){
-  const timer=setInterval(()=>{const t=window.AbuBassamTypography;if(!t)return;if(typeof t.applyApp!=='function')t.applyApp=()=>{let state={};try{state=JSON.parse(localStorage.getItem('abuBassamTypographyV5')||'{}')}catch(e){}if(state.appFont)t.global('appFont',state.appFont);if(state.appScale)t.global('appScale',state.appScale)};clearInterval(timer)},400);
-  setTimeout(()=>clearInterval(timer),15000)
-}
-function startSnapshots(){createSnapshot(false);clearInterval(snapshotTimer);snapshotTimer=setInterval(()=>{if(document.visibilityState!=='hidden')createSnapshot(false)},10*60*1000);window.addEventListener('pagehide',()=>createSnapshot(false));document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden')createSnapshot(false)})}
+function ensureTypographyApplyShim(){const t=window.AbuBassamTypography;if(!t)return false;if(typeof t.applyApp!=='function')t.applyApp=()=>{let state={};try{state=JSON.parse(localStorage.getItem('abuBassamTypographyV5')||'{}')}catch(e){}if(state.appFont)t.global('appFont',state.appFont);if(state.appScale)t.global('appScale',state.appScale)};return true}
+function installTypographyApplyShim(){ensureTypographyApplyShim();document.addEventListener('abu-runtime-loaded',ensureTypographyApplyShim);document.addEventListener('abu-settings-ready',ensureTypographyApplyShim)}
+function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTimer=null;if(document.visibilityState!=='hidden')createSnapshot(false);scheduleSnapshot()},10*60*1000)}
+function startSnapshots(){createSnapshot(false);scheduleSnapshot();window.addEventListener('pagehide',()=>{clearTimeout(snapshotTimer);snapshotTimer=null;createSnapshot(false)});document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden'){clearTimeout(snapshotTimer);snapshotTimer=null;createSnapshot(false)}else scheduleSnapshot()})}
 
 async function boot(){privacyCover();inject();guardDanger();installTypographyApplyShim();startSnapshots();await applyPrivacy(privacyEnabled());render()}
 window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,passwordWeakness,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render};
