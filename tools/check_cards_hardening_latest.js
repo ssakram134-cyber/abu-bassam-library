@@ -37,6 +37,11 @@ reject(studio,"photoTransform={zoom:1,x:0,y:0,rotate:0};",'all photo transform r
 reject(freeLayout,"el.dataset.abuLayoutRole==='photo'||el.dataset.abuLayoutRole==='qr'",'photo frame aspect ratio must not be locked');
 need(freeLayout,"lock=el.dataset.abuLayoutRole==='qr'||el.dataset.abuLayoutRole==='callqr'",'QR frames must retain aspect ratio while photo crop stays free');
 need(studio,"/^\\d{8,15}$/.test(digits)?digits:''",'WhatsApp QR must reject obviously invalid short numbers');
+need(studio,"function normalizeDigits(value)",'phone QR must normalize Arabic and Persian digits');
+need(studio,"replace(/[٠-٩]/g",'Arabic-Indic phone digits must be supported');
+need(studio,"replace(/[۰-۹]/g",'Persian phone digits must be supported');
+need(studio,"if(d.kind==='phone')return'tel:'+phoneDigits(content)",'generic phone QR must use normalized digits');
+need(studio,"qrSvg('tel:'+phoneDigits(emergency))",'child emergency call QR must normalize phone digits');
 need(studio,"student-thanks-cards.html",'student thanks tool must be canonical');
 reject(studio,"رقم خط النقل",'obsolete child transport-line field returned');
 reject(studio,"d.line",'obsolete child transport-line data reference returned');
