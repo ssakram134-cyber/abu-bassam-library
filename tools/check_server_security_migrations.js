@@ -52,7 +52,7 @@ for(const old of [
   'abu_bassam_sync_no_direct_vault_update',
   'abu_bassam_sync_no_direct_vault_delete',
 ]){
-  need(syncHard,`drop policy if exists ${old}`,`remove permissive OR policy ${old}`);
+  need(syncHard,`drop policy if exists ${old}`,`retire split secure-sync restriction ${old}`);
 }
 if(count(syncHard,'(select auth.uid()) = user_id')<4)throw new Error('server security migration check failed: every direct secure-sync operation must bind rows to auth.uid()');
 need(syncHard,"kind <> all (array['operation'::text,'device'::text,'vault'::text])",'direct secure-sync must exclude operation/device/vault');
@@ -75,9 +75,9 @@ for(const old of [
   'abu_bassam_storage_no_direct_vault_update',
   'abu_bassam_storage_no_direct_vault_delete',
 ]){
-  need(storageHard,`drop policy if exists ${old}`,`remove cross-bucket OR policy ${old}`);
+  need(storageHard,`drop policy if exists ${old}`,`retire split storage vault restriction ${old}`);
 }
-forbid(storageHard,"bucket_id <> 'abu-bassam-private'",'storage hardening must never grant access by being outside the library bucket');
+forbid(storageHard,"bucket_id <> 'abu-bassam-private'",'consolidated storage policy must never grant access merely by being outside the library bucket');
 if(count(storageHard,"bucket_id = 'abu-bassam-private'")<4)throw new Error('server security migration check failed: every direct storage operation must stay inside abu-bassam-private');
 if(count(storageHard,"(storage.foldername(name))[1] = (select auth.uid())::text")<4)throw new Error('server security migration check failed: every direct storage operation must bind the first path segment to auth.uid()');
 need(storageHard,"array['vault'::text,'branch-vault'::text,'backup-vault'::text]",'vault storage paths must remain Edge/RPC-only');
