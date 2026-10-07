@@ -25,6 +25,7 @@ for(const m of ['release-signing-certificate.sha256','signed-production-release-
 if(pkg.scripts?.['publish:update']!=='node scripts/publish-app-update.mjs')throw new Error('app update check failed: package publish:update command missing');
 forbid(runtime,'github.com','GitHub download URL in client');
 forbid(runtime,'ghp_','GitHub personal access token');
+forbid(runtime,'setInterval(','app update UI must use lifecycle events instead of polling');need(runtime,'abu-settings-ready','app update card must react to settings lifecycle');need(runtime,'abu-runtime-loaded','app update card must react to runtime lifecycle');
 forbid(edge,'verify_jwt = false','unauthenticated update gateway');
 forbid(publisher,'console.log(serviceKey)','publisher must never print service role key');
 console.log('app update checks passed: authenticated metadata gateway, integrity metadata required before download, service-role-only publication, verified APK existence, pinned production signing certificate continuity and downgrade prevention, production-build/hash/certificate checks before upload, post-upload size/SHA-256 verification, private Storage, signed short-lived URL, and no GitHub token in the APK source.');
