@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const ownerRoleGuard=read('supabase/migrations/20261007173256_harden_last_owner_role_guard.sql');
+need(ownerRoleGuard,"where role='owner'","last-owner guard must count active owners");
+need(ownerRoleGuard,"and (p_role <> 'owner' or not coalesce(p_active,true))",'last-owner guard must cover both demotion and deactivation');
+need(ownerRoleGuard,"raise exception 'لا يمكن تعطيل أو إزالة آخر مالك للنظام'",'last active owner must never be removable');
+need(ownerRoleGuard,'set search_path to pg_catalog','role-management SECURITY DEFINER functions must use a hardened search_path');
+
 const firstDeviceLabel=read('supabase/migrations/20261007172803_fix_first_device_default_label.sql');
 need(firstDeviceLabel,"v_role:=case when v_count=0 then 'owner' else 'secondary' end",'first registered device must remain owner');
 need(firstDeviceLabel,"case when v_count=0 then 'نسختي الأولى باسم (أكرم)' else 'جهاز المكتبة' end",'first registered device must keep the requested default label');
