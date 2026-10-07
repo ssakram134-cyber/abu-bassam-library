@@ -138,6 +138,12 @@ for(const token of [
 need(integrityHard,'coalesce(reserved_quantity,0) <= coalesce(quantity,0)','reserved spare-part quantity must not exceed stock');
 need(integrityHard,'coalesce(received_quantity,0) <= coalesce(quantity,0)','received purchase quantity must not exceed ordered quantity');
 
+const customerCompat=read('supabase/migrations/20261007181851_delegate_legacy_customer_rpcs_to_v2.sql');
+for(const legacy of ['abu_bassam_customer_document_access','abu_bassam_customer_list']) need(customerCompat,`public.${legacy}`,`legacy customer RPC ${legacy} must remain versioned`);
+need(customerCompat,'security invoker','legacy customer RPCs must not duplicate SECURITY DEFINER privilege');
+need(customerCompat,'public.abu_bassam_customer_document_access_v2','legacy document access must delegate to v2');
+need(customerCompat,'public.abu_bassam_customer_list_v2','legacy customer list must delegate to v2');
+
 const notificationCompat=read('supabase/migrations/20261007181713_delegate_legacy_notification_refresh_to_v2.sql');
 need(notificationCompat,'security invoker','legacy notification refresh must not regain definer privileges');
 need(notificationCompat,'set search_path to pg_catalog','legacy notification refresh must keep hardened search_path');
