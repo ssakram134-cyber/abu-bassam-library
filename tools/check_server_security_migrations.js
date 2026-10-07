@@ -201,6 +201,8 @@ need(publicTrackingEdge,"waiting: 'بانتظار المتابعة'",'public tra
 need(publicTrackingEdge,"waiting_parts: 'بانتظار قطعة'",'public tracking must localize waiting_parts status');
 need(publicTrackingEdge,"completed: 'تم إكمال الصيانة'",'public tracking must localize completed status');
 need(publicTrackingEdge,".select('repair_number,brand,model,status,expected_delivery,received_date,created_at,updated_at')",'public tracking query must stay on the minimal safe repair field set');
+need(publicTrackingEdge,"Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')",'public tracking Edge Function must use server-side service role after anonymous Data API access is revoked');
+forbid(publicTrackingEdge,"Deno.env.get('SUPABASE_ANON_KEY')",'public tracking Edge Function must not depend on anonymous table grants');
 for(const sensitive of ['customer_name','primary_fault','total_cost','deposit','lock_code','imei']) forbid(publicTrackingEdge,sensitive,`public tracking Edge Function must not expose ${sensitive}`);
 need(publicTrackingEdge,"Cache-Control': 'no-store'",'public tracking responses must not be cached');
 need(publicTrackingEdge,"tracking_token', token",'public tracking must stay scoped to the opaque tracking token');
