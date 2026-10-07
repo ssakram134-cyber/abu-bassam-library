@@ -19,5 +19,6 @@ for(const marker of ['installHardenedWebView','AbuBassamWebViewManager.java','Ab
 need(src,'const STARTUP_WATCHDOG_MS = 12000;','canonical startup watchdog');
 need(src,"message.type === 'webBootReady'",'canonical web boot handshake');
 for(const marker of ["requestOutput: function (type, payload)","window.AbuBassamNativeOutputResult","const replyOutput = useCallback","replyOutput(requestId, false, null, 'CANCELLED')","replyOutput(requestId, true, { saved, failed })","replyOutput(requestId, true, true)"])need(src,marker,'native output acknowledgement channel');
+for(const marker of ["async ({ name, mime, data, requestId })","async ({ pages, paper, requestId })","async ({ name, html, requestId })"])need(src,marker,'native file/print handlers must accept output request ids');
 if(fs.existsSync('scripts/patch-startup-stability.mjs'))throw new Error('native link security check failed: obsolete startup patch returned');
 console.log('native link security checks passed: local app assets use a restricted HTTPS origin, file-scheme access is disabled, external navigation is HTTPS-only, and renderer recovery is wired.');
