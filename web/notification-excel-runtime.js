@@ -31,7 +31,7 @@ async function exportExcel(){
   try{const base64=await makeWorkbook(reportRows,from,to),mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',name=`Abu_Bassam_Branch_Report_${Date.now()}.xlsx`,data=`data:${mime};base64,${base64}`;if(window.Android?.saveBase64){Android.saveBase64(name,mime,data);return}const a=document.createElement('a');a.download=name;a.href=data;a.click()}catch(e){alert('تعذر إنشاء ملف Excel: '+String(e?.message||e))}
 }
 function install(){const actions=document.querySelector('#abuAdminContent .abu-report-actions');if(!actions||$('abuReportExcel'))return false;const b=document.createElement('button');b.id='abuReportExcel';b.type='button';b.textContent='Excel (.xlsx)';b.onclick=exportExcel;actions.appendChild(b);return true}
-function boot(){if(install())return;let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>120)clearInterval(timer)},250);new MutationObserver(()=>install()).observe(document.documentElement,{childList:true,subtree:true})}
+function boot(){install();document.addEventListener('abu-runtime-loaded',event=>{if(String(event.detail?.src||'')==='notification-center-runtime.js')install()});document.addEventListener('abu-bassam-auth-changed',install)}
 window.AbuBassamExcelReport={export:exportExcel,install};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
