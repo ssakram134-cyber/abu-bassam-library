@@ -505,7 +505,62 @@ async function testAdvancedRuntimeLoader(){
   need(source,"script.onerror=()=>{script.remove();console.warn(src+' failed to load')}","Arabic question retries after iframe script failure");
   need(source,"script.remove();console.warn('questions-en-fixes-runtime.js failed to load')","English question retries after iframe script failure");
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+// Embedded Tesseract must never hang after an OCR script load fails. Browser
+// source pickers must surface FileReader errors without unhandled rejections.
+async function testOfflineOcrRecovery(){
+  const source=read('document-vault-offline-ocr-runtime.js');
+  const start=source.indexOf('function loadLocalScript(){');
+  const end=source.indexOf('async function worker(){',start);
+  if(start<0||end<=start)throw new Error('OCR local script loader source missing');
+  const create=vm.runInNewContext(`(document,window,setTimeout,clearTimeout)=>{
+    let localScriptPromise=null;
+    ${source.slice(start,end)}
+    return loadLocalScript
+  }`);
+  const nodes=new Map(),scripts=[],timers=new Map();let number=0;
+  const doc={
+    getElementById:id=>nodes.get(id)||null,
+    createElement:()=>({remove(){nodes.delete(this.id)}}),
+    head:{appendChild(node){nodes.set(node.id,node);scripts.push(node)}}
+  };
+  const window={};
+  const load=create(doc,window,fn=>{const id=++number;timers.set(id,fn);return id},id=>timers.delete(id));
+  const a=load(),b=load();
+  if(a!==b||scripts.length!==1)throw new Error('simultaneous OCR startup duplicated its script');
+  scripts[0].onerror();
+  const rejected=await Promise.allSettled([a,b]);
+  if(rejected.some(v=>v.status!=='rejected')||nodes.size!==0)
+    throw new Error('failed OCR script stayed active or did not reject callers');
+  const again=load();
+  if(scripts.length!==2)throw new Error('failed OCR script did not retry');
+  window.Tesseract={createWorker(){}};
+  scripts[1].onload();
+  await again;
+  if(timers.size!==0)throw new Error('OCR load timeout was not cleared after success');
+  delete window.Tesseract;
+  const hung=load(),watchdog=[...timers.values()][0];
+  if(typeof watchdog!=='function')throw new Error('OCR local load lacked timeout');
+  watchdog();
+  let expired=false;
+  try{await hung}catch(e){expired=/انتهت مهلة/.test(String(e.message))}
+  if(!expired||nodes.size!==0)throw new Error('timed-out OCR script remained in DOM');
+  const inputStart=source.indexOf('async function inputChanged(ev){');
+  const inputEnd=source.indexOf('function bind(){',inputStart);
+  if(inputStart<0||inputEnd<=inputStart)throw new Error('OCR file input handler missing');
+  const handlerFactory=vm.runInNewContext(`(readFile,report)=>{
+    const fileToData=readFile,setProgress=report,recognize=()=>Promise.resolve();
+    ${source.slice(inputStart,inputEnd)}
+    return inputChanged
+  }`);
+  let notice='';
+  const inputHandler=handlerFactory(()=>Promise.reject(new Error('FILE_READ_FAILED')),v=>{notice=v});
+  const event={target:{files:[{}],value:'picked'}};
+  await inputHandler(event);
+  if(!notice.includes('FILE_READ_FAILED')||event.target.value!=='')
+    throw new Error('OCR image read failure left pending input or unhandled error');
+  need(source,"if(busy){setProgress('جاري قراءة صورة أخرى","do not overlap simultaneous OCR recognitions");
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
