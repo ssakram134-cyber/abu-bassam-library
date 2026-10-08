@@ -393,12 +393,12 @@ function testPhotoPreviewClearedWhenEmpty(){
   ];
   if(ranges.some(([a,b])=>a<0||b<=a))throw new Error('photo preview/render source not found');
   const source=ranges.map(([a,b])=>html.slice(a,b)).join('\n');
-  const factory=vm.runInNewContext(`(elements,photos,document,paper)=>{
+  const factory=vm.runInNewContext(`(elements,photos,document,paper,photoSize)=>{
     let uploadedImages=photos,pageCanvases=[{tag:'previous-private-photo'}],
       currentPage=2,selectedIndex=photos.length-1;
     const $=id=>elements[id],updateFooter=()=>{},updatePageNav=()=>{},
       refreshPeople=()=>{},showPage=()=>{},makePhotoCanvas=()=>({}),
-      getPaperSize=()=>paper,getPhotoSize=()=>({w:40,h:40}),mmToPx=x=>x;
+      getPaperSize=()=>paper,getPhotoSize=()=>photoSize,mmToPx=x=>x;
     ${source}
     return {removePerson,renderPaper,summary:()=>({
       pages:pageCanvases.length,currentPage,
@@ -407,16 +407,16 @@ function testPhotoPreviewClearedWhenEmpty(){
       info:elements['info-text'].textContent
     })}
   }`);
-  const create=(margin,paper={w:100,h:100})=>{
+  const create=(margin,paper={w:100,h:100},photoSize={w:40,h:40},count=2)=>{
     const elements={
       'preview-canvas':{style:{display:'block'},onclick:()=>{}},
       paperZoomOverlay:{classList:{remove(value){this.removed=value}}},
       'info-text':{textContent:'stale page'},
-      photoCount:{value:'2'},marginInput:{value:String(margin)},
+      photoCount:{value:String(count)},marginInput:{value:String(margin)},
       gapInput:{value:'2'},borderMode:{value:'none'}
     };
     const document={createElement:()=>({getContext:()=>({fillRect(){},drawImage(){}})})};
-    return factory(elements,[{}],document,paper)
+    return factory(elements,[{}],document,paper,photoSize)
   };
   const single=create(5);
   single.removePerson(0);
@@ -446,6 +446,15 @@ function testPhotoPreviewClearedWhenEmpty(){
   a4HighDpi.renderPaper();
   if(a4HighDpi.summary().pages!==1)
     throw new Error('valid A4 600 DPI pages were incorrectly rejected');
+  const hugeBatch=create(2,{w:4961,h:7016},{w:4800,h:6900},12);
+  hugeBatch.renderPaper();
+  const limited=hugeBatch.summary();
+  if(limited.pages!==0||!limited.hidden||!limited.info.includes('الدفعة كبيرة'))
+    throw new Error('unbounded cumulative photo pages may exhaust Android WebView memory');
+  const allowedBatch=create(2,{w:4961,h:7016},{w:4800,h:6900},2);
+  allowedBatch.renderPaper();
+  if(allowedBatch.summary().pages!==2)
+    throw new Error('two valid 600 DPI pages should fit the cumulative memory guard');
 }
 // The optional Questions / image-compressor module loader must not remain
 // blocked by a failed script tag, nor treat onload without runtime as success.
