@@ -16,15 +16,11 @@ const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
 const certDigest=read(path.join(root,'config','release-signing-certificate.sha256')).trim().toLowerCase();
 
 for(const marker of [
-  'name: Android checks and test build',
+  'name: Android build disabled - source repairs only',
   'workflow_dispatch:',
-  'push:',
-  'branches: [main]',
-  'pull_request:',
   'permissions:\n  contents: read',
   'group: android-test-${{ github.event.pull_request.number || github.ref }}',
   "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
-  "github.event_name != 'pull_request' || github.event.pull_request.user.login != 'github-actions[bot]' || !startsWith(github.head_ref, 'source-import-')",
   'runs-on: ubuntu-24.04',
   'uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1',
   'persist-credentials: false',
@@ -40,6 +36,7 @@ for(const marker of [
   'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
   'rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"',
 
+  'if: ${{ false }}',
   'java-version: 17',
   'verify-signature: true',
   'npm ci --no-audit --no-fund',
@@ -62,20 +59,19 @@ for(const marker of [
 
 for(const marker of [
   'contents: write','git push','secrets.','ANDROID_KEYSTORE_','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD',
-  'npm run build:apk:release','./gradlew','npm run android:prebuild','npm run check:web',
+  'npm run build:apk:release','./gradlew','npm run android:prebuild',
   'actions/checkout@v','actions/setup-node@v','actions/setup-java@v','actions/upload-artifact@v',
   'npm install --no-audit --no-fund'
 ]) reject(testWorkflow,marker,'Android test workflow contains production/duplicate/unsafe behavior: '+marker);
 
 for(const marker of [
-  'name: Android production release',
+  'name: Android production build disabled',
   'workflow_dispatch:',
   'permissions:\n  contents: read',
   'group: android-production-main',
   'cancel-in-progress: false',
   'EXPECTED_RELEASE_CERT_SHA256:',
   'build:',
-  "if: ${{ github.ref == 'refs/heads/main' }}",
   'Build and verify APK with no production secrets',
   'npm run build:apk:local',
   'Enforce non-production build input',
@@ -83,7 +79,6 @@ for(const marker of [
   'abu-bassam-production-input-${{ github.sha }}',
   'sign:',
   'needs: build',
-  "needs.build.result == 'success'",
   'permissions:\n      contents: read\n      actions: read',
   'Set up Java for apksigner',
   'uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1',
@@ -121,6 +116,17 @@ for(const marker of [
   'actions/checkout@v','actions/setup-node@v','actions/setup-java@v','actions/upload-artifact@v',
   'actions/download-artifact@v','npm install --no-audit --no-fund'
 ]) reject(productionWorkflow,marker,'Android production workflow contains obsolete/unsafe behavior: '+marker);
+
+
+// Both Android build jobs are intentionally disabled, including manual runs.
+if(/\n  (?:push|pull_request):/.test(testWorkflow))
+  throw new Error('Android test workflow must never start automatically');
+if(!/\n  build:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(testWorkflow))
+  throw new Error('Android test APK build job must remain disabled');
+if(!/\n  build:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(productionWorkflow))
+  throw new Error('production APK build job must remain disabled');
+if(!/\n  sign:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(productionWorkflow))
+  throw new Error('production signing job must remain disabled');
 
 if(!/^[0-9a-f]{64}$/.test(certDigest))throw new Error('release signing certificate digest must be exactly 64 hex characters');
 const certMatch=productionWorkflow.match(/EXPECTED_RELEASE_CERT_SHA256:\s*([0-9a-fA-F]{64})/);
@@ -202,4 +208,4 @@ if(fs.existsSync(path.join(root,'scripts','android-release-signing.gradle')))thr
 reject(local,'ensureReleaseSigningHook','local release signing must not inject a Gradle signing hook');
 reject(local,'apply from: file("../../scripts/android-release-signing.gradle")','local release signing must not use Gradle secret injection');
 
-console.log('Android workflow check passed: PR/push builds contain no production secrets, production APK construction and signing run on separate runners, the signing runner never checks out or executes project code, immutable Actions transfer only the verified APK artifact, and certificate pinning remains enforced.');
+console.log('Android workflow check passed: no automatic Android jobs, APK build and production signing disabled in Actions; local build safeguards remain documented.');
