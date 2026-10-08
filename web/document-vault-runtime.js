@@ -141,6 +141,25 @@ async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_REMOTE_RECEIVE_ABORTED'))
   })
 }
+async function dbDeleteIfUnchanged(snapshot){
+  // Deletion acknowledgements must not delete newer local changes.
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+    const req=store.get(snapshot.id);
+    let deleted=false;
+    req.onsuccess=()=>{
+      const current=req.result;
+      const same=snapshot.syncState==='pending'
+        ?uploadedSnapshotUnchanged(current,snapshot)
+        :remoteSnapshotStillCurrent(current,snapshot);
+      if(same){store.delete(snapshot.id);deleted=true}
+    };
+    tx.oncomplete=()=>resolve(deleted);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_DELETE_ACK_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_DELETE_ACK_ABORTED'))
+  })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 
 function addCss(){
@@ -376,11 +395,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       }
 
       if(item.deleted){
-        if(!row){await dbDelete(item.id);continue}
+        if(!row){await dbDeleteIfUnchanged(item);continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         await service.upsert('vault',item.id,data);
-        await dbDelete(item.id);
+        await dbDeleteIfUnchanged(item);
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -401,7 +420,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbDelete(id);continue}
+      if(data.deleted){if(here)await dbDeleteIfUnchanged(here);continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
