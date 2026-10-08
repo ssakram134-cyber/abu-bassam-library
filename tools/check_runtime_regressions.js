@@ -389,7 +389,7 @@ function testBarcodeScanDeduplication(){
   const body=native.slice(begin+'  const onBarcodeScanned = useCallback((result) => {'.length,end);
   const scanRef={current:false},events=[];
   const create=vm.runInNewContext(`(ref,events)=>{
-    const barcodeScanHandledRef=ref,barcodeLocked=false;
+    const barcodeScanHandledRef=ref,barcodeLocked=false,cameraSessionRef={current:0};
     const setBarcodeLocked=()=>{},setCameraMode=()=>{},setCameraReady=()=>{},
       setCameraBusy=()=>{},setTorch=()=>{},setCameraFacing=()=>{},setCameraFrameKind=()=>{};
     const inject=(name,payload)=>events.push([name,payload]);
