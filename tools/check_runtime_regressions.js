@@ -393,12 +393,12 @@ function testPhotoPreviewClearedWhenEmpty(){
   ];
   if(ranges.some(([a,b])=>a<0||b<=a))throw new Error('photo preview/render source not found');
   const source=ranges.map(([a,b])=>html.slice(a,b)).join('\n');
-  const factory=vm.runInNewContext(`(elements,photos,document)=>{
+  const factory=vm.runInNewContext(`(elements,photos,document,paper)=>{
     let uploadedImages=photos,pageCanvases=[{tag:'previous-private-photo'}],
       currentPage=2,selectedIndex=photos.length-1;
     const $=id=>elements[id],updateFooter=()=>{},updatePageNav=()=>{},
       refreshPeople=()=>{},showPage=()=>{},
-      getPaperSize=()=>({w:100,h:100}),getPhotoSize=()=>({w:40,h:40}),mmToPx=x=>x;
+      getPaperSize=()=>paper,getPhotoSize=()=>({w:40,h:40}),mmToPx=x=>x;
     ${source}
     return {removePerson,renderPaper,summary:()=>({
       pages:pageCanvases.length,currentPage,
@@ -407,7 +407,7 @@ function testPhotoPreviewClearedWhenEmpty(){
       info:elements['info-text'].textContent
     })}
   }`);
-  const create=margin=>{
+  const create=(margin,paper={w:100,h:100})=>{
     const elements={
       'preview-canvas':{style:{display:'block'},onclick:()=>{}},
       paperZoomOverlay:{classList:{remove(value){this.removed=value}}},
@@ -416,7 +416,7 @@ function testPhotoPreviewClearedWhenEmpty(){
       gapInput:{value:'2'},borderMode:{value:'none'}
     };
     const document={createElement:()=>({getContext:()=>({fillRect(){},drawImage(){}})})};
-    return factory(elements,[{}],document)
+    return factory(elements,[{}],document,paper)
   };
   const single=create(5);
   single.removePerson(0);
@@ -429,6 +429,17 @@ function testPhotoPreviewClearedWhenEmpty(){
   if(emptyLayout.pages!==0||!emptyLayout.hidden||!emptyLayout.zoomHidden||
       !emptyLayout.info.includes('تعذر ترتيب الصور'))
     throw new Error('unplaceable photos retained a previous printable image');
+  // Custom 100 cm paper at high DPI would exceed WebView canvas limits.
+  const giant=create(2,{w:24000,h:24000});
+  giant.renderPaper();
+  const refused=giant.summary();
+  if(refused.pages!==0||!refused.hidden||!refused.info.includes('دقة الورقة كبيرة'))
+    throw new Error('oversized bitmap allocation was not blocked before rendering');
+  // Standard A4 at 600 DPI is below the 40-million-pixel ceiling.
+  const a4HighDpi=create(2,{w:4961,h:7016});
+  a4HighDpi.renderPaper();
+  if(a4HighDpi.summary().pages!==1)
+    throw new Error('valid A4 600 DPI pages were incorrectly rejected');
 }
 // The optional Questions / image-compressor module loader must not remain
 // blocked by a failed script tag, nor treat onload without runtime as success.
