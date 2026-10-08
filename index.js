@@ -58,8 +58,11 @@ const ANDROID_BRIDGE = `
   window.__ABU_NATIVE_BRIDGE_INSTALLED_V1__ = true;
   window.__ABU_APP_META__ = ${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })};
   function send(type, payload) {
-    try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
-    catch (error) {}
+    try {
+      if (!window.ReactNativeWebView || typeof window.ReactNativeWebView.postMessage !== 'function') return false;
+      window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {})));
+      return true;
+    } catch (error) { return false; }
   }
   var outputPending = Object.create(null), outputSequence = 0;
   function requestOutput(type, payload) {
@@ -70,7 +73,11 @@ const ANDROID_BRIDGE = `
         reject(new Error('OUTPUT_TIMEOUT'));
       }, 300000);
       outputPending[requestId] = { resolve: resolve, reject: reject, timer: timer };
-      send(type, Object.assign({ requestId: requestId }, payload || {}));
+      if (!send(type, Object.assign({ requestId: requestId }, payload || {}))) {
+        clearTimeout(timer);
+        delete outputPending[requestId];
+        reject(new Error('ANDROID_BRIDGE_UNAVAILABLE'));
+      }
     });
   }
   window.AbuBassamNativeOutputResult = function (result) {
