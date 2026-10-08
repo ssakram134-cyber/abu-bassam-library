@@ -877,6 +877,28 @@ async function testVaultMetadataAndEditorRace(){
   if(state.busy)throw Error('editor busy layer remained active after a conflict');
 }
 
+async function testVaultDownloadRevisionConsistency(){
+  const src=read('branch-vault-runtime.js');
+  const a=src.indexOf('async function downloadVault(path){');
+  const b=src.indexOf('async function removeVault(',a);
+  if(a<0||b<=a)throw Error('vault signed download handler missing');
+  let planPath='user/branch-vault/phone/doc/rev2',downloads=0;
+  const expected='user/branch-vault/phone/doc/rev1';
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {allowed,pathToId,edge,fetch}=deps;'
+    +src.slice(a,b)+';return downloadVault}');
+  const download=factory({allowed:()=>true,pathToId:new Map([[expected,'doc']]),
+    edge:async()=>({path:planPath,url:'https://storage.example/signed'}),
+    fetch:async()=>{downloads++;return {ok:true,blob:async()=>({size:2})}}});
+  let mismatch=false;
+  try{await download(expected)}catch(error){mismatch=error.message==='VAULT_REMOTE_VERSION_CHANGED'}
+  if(!mismatch||downloads!==0)throw Error('revision drift downloaded bytes for an obsolete vault record');
+  planPath=expected;
+  const blob=await download(expected);
+  if(!blob||blob.size!==2||downloads!==1)
+    throw Error('matching vault version refused signed download');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1165,7 +1187,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
