@@ -560,7 +560,39 @@ async function testOfflineOcrRecovery(){
     throw new Error('OCR image read failure left pending input or unhandled error');
   need(source,"if(busy){setProgress('جاري قراءة صورة أخرى","do not overlap simultaneous OCR recognitions");
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+async function testReportExcelLoader(){
+  const src=read('notification-excel-runtime.js');
+  const start=src.indexOf('let zipLoadPending=null;');
+  const end=src.indexOf('async function makeWorkbook(',start);
+  if(start<0||end<=start)throw new Error('Excel JSZip loader not found');
+  const factory=vm.runInNewContext(`(document,window,setTimeout,clearTimeout)=>{
+    ${src.slice(start,end)}
+    return loadZip
+  }`);
+  const elements=[],nodes=new Map(),timers=new Map(),window={};let seq=0;
+  const document={
+    querySelector:()=>nodes.get('script')||null,
+    createElement:()=>({dataset:{},remove(){nodes.delete('script')}}),
+    head:{appendChild(node){nodes.set('script',node);elements.push(node)}}
+  };
+  const load=factory(document,window,fn=>{const id=++seq;timers.set(id,fn);return id},id=>timers.delete(id));
+  const one=load(),two=load();
+  if(one!==two||elements.length!==1)throw new Error('simultaneous Excel loader requests were not coalesced');
+  elements[0].onerror();
+  const results=await Promise.allSettled([one,two]);
+  if(results.some(x=>x.status!=='rejected')||nodes.size!==0)
+    throw new Error('failed Excel loader was not cleaned up');
+  const retry=load();window.JSZip=function Zip(){};
+  elements[1].onload();
+  if((await retry)!==window.JSZip)throw new Error('Excel retry did not load JSZip');
+  delete window.JSZip;
+  const hanging=load(),watchdog=[...timers.values()][0];
+  if(typeof watchdog!=='function')throw new Error('Excel loader has no timeout');
+  watchdog();
+  let expired=false;try{await hanging}catch(e){expired=/timeout/.test(String(e.message))}
+  if(!expired||nodes.size!==0)throw new Error('Excel load timeout retained the failed resource');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
