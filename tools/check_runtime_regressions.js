@@ -165,7 +165,7 @@ else {
 for(const marker of ['window.__ABU_APPROVED_UI_READY__=true;',"new CustomEvent('abu-bassam-approved-ui-ready')"])
   need(device,marker,'approved UI handshake must wait for all loaded guards');
 forbid(security,'setInterval(','app security must not keep a permanent background heartbeat');for(const marker of ['function scheduleMaintenance(delay=60000)','function maintenanceTick()','document.visibilityState===\'hidden\'','clearTimeout(maintenanceTimer)'])need(security,marker,'visibility-aware security maintenance');
-for(const marker of ['function setSecondaryOwnerOnly','abuSecurityOwnerGuard',"const denied=currentDevice?.role!=='owner'"])need(security,marker,'reversible owner-only security controls');
+for(const marker of ['function setSecondaryOwnerOnly','abuSecurityOwnerGuard',"const denied=(window.AbuBassamSecurity?.role?.()||currentDevice?.role)!=='owner'"])need(security,marker,'reversible owner-only security controls');
 for(const marker of ["'#abuA4EditorV2.show'","'#abuPosterAssemblyModal.show'","'#abuEnhanceModal.show'","'#abuPosterModal.show'","'#abuGeoModal.show'","'#abuRulerModal.show'","'#abuPresetModal.abu-open'","window.AbuA4CardSheetEditorV2?.close?.()","window.AbuPosterProject?.closePreview?.()","window.AbuPhotoAdvanced?.close?.(el.id)","window.AbuPhotoGeometry?.close?.(el.id)","window.AbuPrintPresets?.close?.()","'#abuPasswordResetModal.show'","window.AbuBassamPasswordRecovery?.close?.()","'#natZoom.show'","'#custView.on'","'#custPick.on'","'#custModal.on'","'#abuBackupModal.on'","'#abuVaultAdvancedModal.show'","'#abuRecoveryModal.show'","window.AbuFeatureRecovery?.close?.()","'#abuAccountModal.on'","'#abuNotificationSheet.show'","'#abuOpsV2.show'","window.AbuBassamOperationLogV2?.close?.()","window.Nat?.zoomClose?.()","window.AbuCustomerDocs?.closeTop?.()","window.AbuBackupCenter?.close?.()","window.AbuDocumentVaultAdvanced?.close?.()","window.AbuBassamAccount?.close?.()","window.AbuBassamNotifications?.close?.()"])need(security,marker,'top-layer back handling');
 const accountCenter=read('account-center-runtime.js');need(accountCenter,'open:()=>show(user()?\'profile\':\'home\'),close,login:','account center close export');
 
@@ -340,6 +340,71 @@ function testMissingSheetCannotBlockTouch(){
   api.closeSheets();
   if(backdrop.classList.contains('show')||valid.classList.contains('show'))throw new Error('sheet close did not release touch backdrop')
 }
+// Hardware back must recover even if a lazy-loaded dialog close handler has
+// vanished or throws. Clearing only an orphan backdrop consumes that back
+// press, rather than accidentally switching tabs or exiting the app.
+function testBackLayerFallback(){
+  const security=read('app-security-runtime.js');
+  const start=security.indexOf('function clearOrphanInteractionLayers(){');
+  const end=security.indexOf('function home(){',start);
+  if(start<0||end<=start)throw new Error('native back-layer handler missing');
+  const src=security.slice(start,end);
+  const create=vm.runInNewContext('(document,window,closeDevices,console)=>{const $=id=>document.getElementById(id);'
+    +src+';return {closeTopLayer,clearOrphanInteractionLayers}}');
+  function layer(...states){
+    const values=new Set(states);
+    return {id:'',classList:{
+      contains:value=>values.has(value),
+      add:value=>values.add(value),
+      remove:value=>values.delete(value)
+    }};
+  }
+  const back=layer('show'),items={sheetBackdrop:back},active={};
+  const document={
+    getElementById:id=>items[id]||null,
+    querySelector:selector=>{
+      if(selector==='.sheet.show')return active['.sheet.show']||null;
+      return active[selector]||null
+    }
+  };
+  let warnings=0;
+  const window={},api=create(document,window,()=>{}, {warn:()=>{warnings++}});
+  if(api.closeTopLayer()!==true||back.classList.contains('show'))
+    throw new Error('orphan backdrop did not consume back or unblock touch');
+  if(api.closeTopLayer()!==false)throw new Error('back was consumed without any open layer');
+  const missing=layer('show');missing.id='abuA4EditorV2';
+  active['#abuA4EditorV2.show']=missing;
+  if(!api.closeTopLayer()||missing.classList.contains('show'))
+    throw new Error('missing lazy dialog handler left its blocking layer visible');
+  delete active['#abuA4EditorV2.show'];
+  const alternate=layer('on');alternate.id='abuBackupModal';
+  active['#abuBackupModal.on']=alternate;
+  if(!api.closeTopLayer()||alternate.classList.contains('on'))
+    throw new Error('alternate on-state layer remained visible');
+  delete active['#abuBackupModal.on'];
+  const preset=layer('abu-open');preset.id='abuPresetModal';
+  active['#abuPresetModal.abu-open']=preset;
+  if(!api.closeTopLayer()||preset.classList.contains('abu-open'))
+    throw new Error('preset dialog alternate class was not dismissed');
+  delete active['#abuPresetModal.abu-open'];
+  const throwing=layer('show');throwing.id='abuSettingsModal';
+  active['#abuSettingsModal.show']=throwing;
+  window.AbuBassamSettings={close:()=>{throw new Error('UNAVAILABLE')}};
+  if(!api.closeTopLayer()||throwing.classList.contains('show')||warnings!==1)
+    throw new Error('throwing settings handler trapped the user behind a modal');
+  delete active['#abuSettingsModal.show'];
+  const sheet=layer('sheet','show');sheet.id='optionsSheet';
+  back.classList.add('show');
+  active['.sheet.show']=sheet;
+  window.closeSheets=()=>{
+    sheet.classList.remove('show');
+    back.classList.remove('show')
+  };
+  if(!api.closeTopLayer()||sheet.classList.contains('show')||back.classList.contains('show'))
+    throw new Error('ordinary sheet close failed to release backdrop');
+  delete active['.sheet.show'];
+}
+
 // File-reader failures must not strand a batch. Clearing images must
 // invalidate callbacks from previous file selections, even after load.
 function testImageImportLifecycle(){
@@ -751,7 +816,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
