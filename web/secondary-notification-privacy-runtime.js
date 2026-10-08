@@ -52,7 +52,7 @@ function boot(){
   const refresh=()=>{guardFromOperation();clean()};
   refresh();
   window.addEventListener('online',refresh);
-  document.addEventListener('abu-runtime-loaded',refresh);
+  document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='notification-center-runtime.js'||src==='app-security-runtime.js')refresh()});
   document.addEventListener('abu-bassam-auth-changed',refresh);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh()});
   window.addEventListener('storage',event=>{if(event.key===STORE||event.key===AUDIT_QUEUE||event.key===SCOPE_KEY)refresh()});
