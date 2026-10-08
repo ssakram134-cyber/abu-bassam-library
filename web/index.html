@@ -93,7 +93,9 @@ function onImageSelect(ev){
       reader.onabort=()=>finish(null);
       reader.onload=event=>{
         const dataUrl=String(event?.target?.result||'');
-        if(!dataUrl.startsWith('data:image/'))return finish(null);
+        // Some Android document providers return a generic MIME type for a
+        // valid picture. Let the Image decoder decide whether it is readable.
+        if(!dataUrl.startsWith('data:'))return finish(null);
         try{
           const img=new Image();
           img.onload=()=>finish({img,src:dataUrl,transform:{zoom:1,x:0,y:0,rot:0}});
