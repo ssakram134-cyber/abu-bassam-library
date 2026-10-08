@@ -70,6 +70,28 @@ async function dbPut(item){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_WRITE_ABORTED'))
   })
 }
+async function dbModifyItem(id,makeChange){
+  // A metadata edit must begin from the CURRENT database row, not state.items.
+  // Read, modify, version and write within one transaction to avoid lost edits.
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+    const request=store.get(id);
+    let updated=null;
+    request.onsuccess=()=>{
+      const row=request.result;
+      if(!row||row.deleted)return;
+      const changed=makeChange({...row});
+      if(!changed||changed.id!==id)return;
+      updated={...changed,updatedAt:new Date().toISOString(),
+        syncState:'pending',localEditToken:uuid()};
+      store.put(updated)
+    };
+    tx.oncomplete=()=>resolve(updated);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_EDIT_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_EDIT_ABORTED'))
+  })
+}
 function uploadedSnapshotUnchanged(current,snapshot){
   if(!current||current.syncState!=='pending')return false;
   if(String(current.localEditToken||'')!==String(snapshot.localEditToken||''))return false;
@@ -242,8 +264,8 @@ function setSort(sort){state.sort=sort;localStorage.setItem(SORT_KEY,sort);rende
 function setView(view){state.view=view==='list'?'list':'grid';localStorage.setItem(VIEW_KEY,state.view);render()}
 function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));alert('تم إنشاء المجلد «'+name+'» ✓')}
 function readFolders(){try{return [...new Set([...SYSTEM_FOLDERS,...JSON.parse(localStorage.getItem('abuBassamVaultFoldersV5')||'[]')])]}catch(e){return SYSTEM_FOLDERS.slice()}}
-async function moveItem(id){if(!requireVault('vaultMove'))return;let item=findItem(id);if(!item)return;let folders=readFolders(),answer=prompt('اكتب اسم المجلد الذي تريد نقل الملف إليه:\n'+(folders.length?'المجلدات: '+folders.join('، '):'يمكنك كتابة اسم مجلد جديد.'),item.folder||'');if(answer===null)return;answer=niceName(answer);if(answer&&!folders.includes(answer)){folders.push(answer);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}item.folder=answer;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh();logOperation('move','نقل ملف إلى مجلد',answer,item.name)}
-async function toggleFavorite(id){if(!requireVault('vaultFavorite'))return;let item=findItem(id);if(!item)return;item.favorite=!item.favorite;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh()}
+async function moveItem(id){if(!requireVault('vaultMove'))return;let item=findItem(id);if(!item)return;let folders=readFolders(),answer=prompt('اكتب اسم المجلد الذي تريد نقل الملف إليه:\n'+(folders.length?'المجلدات: '+folders.join('، '):'يمكنك كتابة اسم مجلد جديد.'),item.folder||'');if(answer===null)return;answer=niceName(answer);if(answer&&!folders.includes(answer)){folders.push(answer);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}const saved=await dbModifyItem(id,row=>({...row,folder:answer}));if(!saved)return;await refresh();logOperation('move','نقل ملف إلى مجلد',answer,saved.name)}
+async function toggleFavorite(id){if(!requireVault('vaultFavorite'))return;let item=findItem(id);if(!item)return;const saved=await dbModifyItem(id,row=>({...row,favorite:!row.favorite}));if(saved)await refresh()}
 function pickImages(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$('vImageInput').value='';$('vImageInput').click()}
 function pickFiles(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$('vFileInput').value='';$('vFileInput').click()}
 function pickCollection(folder){if(!requireVault('vaultAdd'))return;state.uploadFolder=SYSTEM_FOLDERS.includes(folder)?folder:'';$('vFileInput').value='';$('vFileInput').click()}
@@ -312,7 +334,7 @@ function saveGalleryActive(){if(activeId)saveGalleryItem(activeId)}
 function savePdfActive(){if(activeId)savePdfItem(activeId)}
 function printActive(){if(activeId)printItem(activeId)}
 async function renameItem(id){if(!requireVault('vaultRename'))return;
-  let item=findItem(id);if(!item)return;let old=item.name,name=prompt('اكتب الاسم الجديد مع الامتداد:',item.name);if(!name||!name.trim())return;item.name=niceName(name);item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh();logOperation('rename','إعادة تسمية ملف',old+' ← '+item.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
+  let item=findItem(id);if(!item)return;let old=item.name,name=prompt('اكتب الاسم الجديد مع الامتداد:',item.name);if(!name||!name.trim())return;const saved=await dbModifyItem(id,row=>({...row,name:niceName(name)}));if(!saved)return;await refresh();logOperation('rename','إعادة تسمية ملف',old+' ← '+saved.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
 }
 async function deleteItem(id){if(!requireVault('vaultDelete'))return;
   let item=findItem(id);if(!item||!confirm('حذف «'+item.name+'» من الأرشيف ومن الأجهزة المتزامنة؟'))return;
