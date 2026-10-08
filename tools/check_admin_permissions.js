@@ -71,4 +71,50 @@ const serverAdminKeys=[...serverAdminBlock.matchAll(/'([A-Za-z][A-Za-z0-9]+)'/g)
 const adminMissingOnServer=adminKeys.filter(key=>!serverAdminKeys.includes(key));
 const adminMissingInUi=serverAdminKeys.filter(key=>!adminKeys.includes(key));
 if(adminMissingOnServer.length||adminMissingInUi.length)throw new Error('admin permissions check failed: admin-only UI/server mismatch; missingOnServer='+adminMissingOnServer.join(',')+' missingInUi='+adminMissingInUi.join(','));
-console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions synchronized exactly with the server catalog + ${legacyKeys.length} legacy compatibility flags, ${adminKeys.length} synchronized admin-only protections, native SecureStore-only owner secrets, presets, server validation, customer document edge enforcement, and cross-section runtime guards`);
+async function testOwnerSessionFence(){
+  const start=runtime.indexOf('async function saveDevicePermissions(');
+  const end=runtime.indexOf('function style(){',start);
+  if(start<0||end<=start)throw new Error('owner permission save missing');
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {role,window,ownerSecret,normalize}=deps;'
+    +runtime.slice(start,end)+';return saveDevicePermissions}');
+  async function runCase(change){
+    let owner=true,gateOpen=true,connected=true,revealSecret=null,rpcCalls=0;
+    const app=factory({
+      role:()=>owner,
+      window:{
+        AbuBassamDevices:{ensure:()=>({id:'owner-phone'})},
+        AbuBassamSecurity:{isOnlineUnlocked:()=>gateOpen},
+        AbuBassamCloud:{
+          client:{rpc:async()=>{rpcCalls++;return {data:{ok:true},error:null}}},
+          isConnected:()=>connected
+        }
+      },
+      ownerSecret:()=>new Promise(resolve=>{revealSecret=resolve}),
+      normalize:value=>value
+    });
+    const pending=app('secondary-phone',{vaultView:true});
+    for(let i=0;i<8&&!revealSecret;i++)await Promise.resolve();
+    if(!revealSecret)throw Error('secure owner credential read did not start');
+    if(change==='role')owner=false;
+    if(change==='lock')gateOpen=false;
+    if(change==='offline')connected=false;
+    revealSecret('secret');
+    let success=false,code='';
+    try{await pending;success=true}catch(error){code=error.message}
+    if(change){
+      if(success||code!=='OWNER_SESSION_CHANGED'||rpcCalls)
+        throw Error('owner privilege mutation survived '+change)
+    }else if(!success||rpcCalls!==1){
+      throw Error('legitimate owner permission save blocked')
+    }
+  }
+  await runCase('role');
+  await runCase('lock');
+  await runCase('offline');
+  await runCase('');
+  need(runtime,"if(role()!=='owner'||window.AbuBassamSecurity?.isOnlineUnlocked?.()!==true)return;",
+    'asynchronous owner editor must close after lost authorization');
+}
+
+testOwnerSessionFence().then(()=>console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions synchronized exactly with the server catalog + ${legacyKeys.length} legacy compatibility flags, ${adminKeys.length} synchronized admin-only protections, native SecureStore-only owner secrets, presets, server validation, customer document edge enforcement, and cross-section runtime guards`)).catch(error=>{console.error('owner session fence: '+error.message);process.exitCode=1});
