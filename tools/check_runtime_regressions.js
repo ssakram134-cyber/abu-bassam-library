@@ -780,6 +780,47 @@ function testVaultPendingSyncSchedule(){
   if(due({mode:'daily',wifiOnly:false},false))throw Error('unchanged vault was synced ahead of daily schedule');
 }
 
+async function testVaultBatchImportLifecycle(){
+  const src=read('document-vault-runtime.js');
+  const b=src.indexOf('async function addFiles(fileList,category,input){');
+  const e=src.indexOf('function findItem(id){',b);
+  if(b<0||e<=b)throw Error('vault import handler missing');
+  const create=vm.runInNewContext('(deps)=>{'
+    +'const {state,MAX_ITEMS,setBusy,dbAll,addBlob,refresh,alert,logOperation,setSyncStatus,autoSync,navigator,setTimeout,syncNow}=deps;'
+    +src.slice(b,e)+';return addFiles}');
+  function app(used,write){
+    const state={busy:false,uploadFolder:'',items:[]},alerts=[];
+    let writes=0;
+    const fn=create({state,MAX_ITEMS:1000,setBusy:value=>{state.busy=value},
+      dbAll:async()=>Array.from({length:used},(_,id)=>({id,deleted:false})),
+      addBlob:async(...args)=>{writes++;if(write)await write(...args)},
+      refresh:async()=>{},alert:message=>alerts.push(message),
+      logOperation:()=>{},setSyncStatus:()=>{},autoSync:()=>false,
+      navigator:{onLine:false},setTimeout:()=>{},syncNow:()=>{}});
+    return{fn,state,alerts,writes:()=>writes}
+  }
+  const full=app(1000);
+  if(await full.fn([{name:'file'}],'file',{value:'x'})!==false||full.writes())
+    throw Error('vault accepted files beyond 1000');
+  const near=app(999);
+  if(await near.fn([{name:'a'},{name:'b'}],'file',{value:'x'})!==false||near.writes())
+    throw Error('vault partially wrote over-capacity batch');
+  let release=null;
+  const slow=app(0,()=>new Promise(resolve=>{release=resolve}));
+  const first=slow.fn([{name:'a'}],'file',{value:'x'});
+  for(let i=0;i<8&&!release;i++)await Promise.resolve();
+  if(!release||!slow.state.busy)throw Error('vault import did not lock immediately');
+  const repeat=await slow.fn([{name:'b'}],'file',{value:'x'});
+  release();
+  if(repeat!==false||await first!==true||slow.writes()!==1)
+    throw Error('overlapping imports wrote duplicates');
+  let n=0;
+  const partial=app(0,async()=>{if(++n===2)throw Error('DISK_FULL')});
+  if(await partial.fn([{name:'a'},{name:'b'}],'file',{value:'x'})!==false
+    ||!partial.alerts.some(message=>message.includes('1 من 2')))
+    throw Error('partially saved files were not disclosed');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1068,7 +1109,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
