@@ -78,21 +78,30 @@ forbid(customerDocs,'setInterval(','customer documents must not poll the DOM');
 forbid(customerDocs,'new MutationObserver','customer documents must not observe the full DOM');
 const notificationCenter=read('notification-center-runtime.js');
 need(notificationCenter,'function syncOperationBridge(notifyOwner=false)','notification center event bridge');
-need(notificationCenter,"document.addEventListener('abu-runtime-loaded',()=>syncOperationBridge(false))",'notification center runtime lifecycle');
+need(notificationCenter,"document.addEventListener('abu-bassam-auth-changed',()=>syncOperationBridge(false))",'notification center auth lifecycle');
 need(notificationCenter,'120000','notification center must keep only low-frequency visible refresh');
 if((notificationCenter.match(/setInterval\s*\(/g)||[]).length!==1)errors.push('notification-center-runtime.js: only the low-frequency 120s interval is allowed');
 forbid(notificationCenter,'},250)','notification center must not restore 250ms startup polling');
 forbid(notificationCenter,'15000','notification center must not restore startup polling timeout');
 
 const notificationCorrections=read('notification-center-corrections-runtime.js');
-for(const marker of ["document.addEventListener('abu-runtime-loaded',refreshGuards)","document.addEventListener('abu-bassam-auth-changed',refreshGuards)"])need(notificationCorrections,marker,'notification corrections lifecycle');
+for(const marker of ["document.addEventListener('abu-runtime-loaded',event=>","src==='notification-center-runtime.js'","document.addEventListener('abu-bassam-auth-changed',refreshGuards)"])need(notificationCorrections,marker,'notification corrections lifecycle');
 forbid(notificationCorrections,'setInterval(','notification corrections must not poll');
 forbid(notificationCorrections,'[300,800,1600,3500,7000]','notification corrections must not retry by timer ladder');
 
 const secondaryNotificationPrivacy=read('secondary-notification-privacy-runtime.js');
-for(const marker of ["document.addEventListener('abu-runtime-loaded',refresh)","document.addEventListener('abu-bassam-auth-changed',refresh)"])need(secondaryNotificationPrivacy,marker,'secondary notification privacy lifecycle');
+for(const marker of ["document.addEventListener('abu-runtime-loaded',event=>","src==='notification-center-runtime.js'","document.addEventListener('abu-bassam-auth-changed',refresh)"])need(secondaryNotificationPrivacy,marker,'secondary notification privacy lifecycle');
 forbid(secondaryNotificationPrivacy,'setInterval(','secondary notification privacy must not poll');
 forbid(secondaryNotificationPrivacy,'[100,300,900,1800,3500,7000]','secondary notification privacy must not retry by timer ladder');
+const notificationBridge=read('notification-ops-bridge-runtime.js');
+need(notificationBridge,'function refreshBridge(){install();loadSecondaryPrivacy();loadCorrections()}','notification bridge lifecycle refresh');
+forbid(notificationBridge,'setInterval(','notification bridge must not poll');
+forbid(notificationBridge,'7000','notification bridge must not use delayed startup retry');
+
+const operationPrivacy=read('operation-log-privacy-runtime.js');
+need(operationPrivacy,'function refreshPrivacy(){const installed=installClientBoundary();forceClean();','operation privacy lifecycle refresh');
+forbid(operationPrivacy,'setInterval(','operation privacy must not poll');
+forbid(operationPrivacy,'[250,800,1800,3500,7000]','operation privacy must not use retry ladder');
 
 const passwordRecovery=read('password-recovery-runtime.js');need(passwordRecovery,'close:()=>closeResetModal(false)','password reset native-back close');
 const securityExtras=read('security-extras-runtime.js');for(const marker of ['privacyHideTimer','clearTimeout(privacyHideTimer)','abuSecurityExtrasOwnerGuard','abu-settings-ready','abu-runtime-loaded','function scheduleSnapshot()','clearTimeout(snapshotTimer)'])need(securityExtras,marker,'security extras lifecycle restoration');forbid(securityExtras,'new MutationObserver','security extras must use settings lifecycle events');forbid(securityExtras,'setInterval(','security extras must not poll or keep a permanent interval');
