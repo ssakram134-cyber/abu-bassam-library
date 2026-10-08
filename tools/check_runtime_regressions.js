@@ -389,7 +389,7 @@ function testBarcodeScanDeduplication(){
   const body=native.slice(begin+'  const onBarcodeScanned = useCallback((result) => {'.length,end);
   const scanRef={current:false},events=[];
   const create=vm.runInNewContext(`(ref,events)=>{
-    const barcodeScanHandledRef=ref,barcodeLocked=false,cameraSessionRef={current:0};
+    const barcodeScanHandledRef=ref,barcodeLocked=false,cameraSessionRef={current:0},captureInFlightRef={current:false};
     const setBarcodeLocked=()=>{},setCameraMode=()=>{},setCameraReady=()=>{},
       setCameraBusy=()=>{},setTorch=()=>{},setCameraFacing=()=>{},setCameraFrameKind=()=>{};
     const inject=(name,payload)=>events.push([name,payload]);
@@ -414,8 +414,8 @@ async function testCameraCaptureCancelledAfterClose(){
   const end=native.indexOf('  }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);',start);
   if(start<0||end<=start)throw new Error('camera capture handler missing');
   const body=native.slice(start+'  const captureDocument = useCallback(async () => {'.length,end);
-  const make=vm.runInNewContext('(photo,ref,events)=>{'
-    +'const cameraSessionRef=ref,cameraRef={current:{takePictureAsync:()=>photo}},'
+  const make=vm.runInNewContext('(photo,ref,events,counters)=>{'
+    +'const cameraSessionRef=ref,captureInFlightRef={current:false},cameraRef={current:{takePictureAsync:()=>{counters.calls++;return photo}}},'
     +'cameraReady=true,cameraBusy=false,cameraMode="scan";'
     +'const setCameraBusy=()=>{},cameraError=()=>events.push("unexpected error");'
     +'const closeCamera=()=>{cameraSessionRef.current++};'
@@ -450,15 +450,15 @@ async function testCameraCaptureCancelledAfterClose(){
     throw new Error('normal camera permission failed to open scanner');
   let finish;
   const pendingPhoto=new Promise(resolve=>{finish=resolve});
-  const oldEvents=[],old=make(pendingPhoto,{current:3},oldEvents);
-  const request=old.capture();
+  const oldEvents=[],oldCalls={calls:0},old=make(pendingPhoto,{current:3},oldEvents,oldCalls);
+  const request=old.capture(),doubleTap=old.capture();
   old.close();
   finish({base64:'old-picture'});
-  await request;
-  if(oldEvents.length)throw new Error('stale photo returned after user closed camera');
-  const newEvents=[],valid=make(Promise.resolve({base64:'fresh-picture'}),{current:9},newEvents);
+  await Promise.all([request,doubleTap]);
+  if(oldCalls.calls!==1||oldEvents.length)throw new Error('repeated taps or stale photo returned after camera close');
+  const newEvents=[],newCalls={calls:0},valid=make(Promise.resolve({base64:'fresh-picture'}),{current:9},newEvents,newCalls);
   await valid.capture();
-  if(newEvents.length!==1||newEvents[0][0]!=='AbuBassamNativeCameraResult'||
+  if(newCalls.calls!==1||newEvents.length!==1||newEvents[0][0]!=='AbuBassamNativeCameraResult'||
       newEvents[0][1].dataUrl!=='data:image/jpeg;base64,fresh-picture')
     throw new Error('valid camera capture no longer sends image to WebView');
 }
