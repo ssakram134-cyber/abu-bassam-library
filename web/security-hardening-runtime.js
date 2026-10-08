@@ -11,7 +11,7 @@ const APP_VERSION=String(window.__ABU_APP_META__?.version||'');
 const OFFLINE_GRACE_MS=12*60*60*1000;
 const CLOCK_SKEW_MS=5*60*1000;
 const LOCK_MINUTES_KEY='abuBassamSecurityLockMinutesV1';
-let patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0,offlineEpoch=0,offlineUnlockPending=null,offlineRevalidationPending=null;
+let patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0,offlineEpoch=0,offlineUnlockPending=null,offlineRevalidationPending=null,offlineRevalidationEpoch=-1;
 
 function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV3')||''}
 function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
@@ -72,7 +72,7 @@ async function updateOfflineButton(){const b=$('abuOfflineBtn');if(!b)return;if(
 // session must never re-enable its roles or permissions.
 async function revalidateOfflineSession(){
   if(!offlineSession||!online())return true;
-  if(offlineRevalidationPending)return offlineRevalidationPending;
+  if(offlineRevalidationPending&&offlineRevalidationEpoch===offlineEpoch)return offlineRevalidationPending;
   const epoch=offlineEpoch;
   const task=(async()=>{
     const sec=window.AbuBassamSecurity,c=window.AbuBassamCloud?.client,trust=sec?.__offlineTrust;
@@ -96,8 +96,8 @@ async function revalidateOfflineSession(){
       return false
     }
   })();
-  offlineRevalidationPending=task;
-  try{return await task}finally{if(offlineRevalidationPending===task)offlineRevalidationPending=null}
+  offlineRevalidationPending=task;offlineRevalidationEpoch=epoch;
+  try{return await task}finally{if(offlineRevalidationPending===task){offlineRevalidationPending=null;offlineRevalidationEpoch=-1}}
 }
 function patchSecurity(){const sec=window.AbuBassamSecurity;if(!sec||patched)return false;patched=true;sec.__baseCan=sec.can;sec.__baseDevice=sec.device;const baseLogin=sec.login?.bind(sec),baseBio=sec.unlockWithBiometric?.bind(sec),baseLogout=sec.logout?.bind(sec);
   sec.role=effectiveRole;sec.device=effectiveDevice;sec.can=effectiveCan;sec.offlineUnlock=secureOfflineUnlock;sec.isOfflineSession=()=>offlineSession;sec.clearOfflineTrust=clearTrust;sec.refreshDeviceLimit=refreshLimit;sec.offlineGraceHours=OFFLINE_GRACE_MS/3600000;
@@ -110,7 +110,7 @@ function patchSecurity(){const sec=window.AbuBassamSecurity;if(!sec||patched)ret
 async function sealIfOnlineUnlocked(){if(!online()||offlineSession||Date.now()-lastSealAt<60000)return;const sec=window.AbuBassamSecurity,gate=$('abuSecurityGate'),d=sec?.__baseDevice?.();if(sec&&gate?.classList.contains('hide')&&d?.active!==false)await seal(d).catch(()=>{})}
 async function enforceOfflineSession(){if(!offlineSession)return;const trust=await loadTrust().catch(()=>null);if(!trust){lockOffline('انتهت صلاحية الفتح دون إنترنت. اتصل بالإنترنت وسجّل الدخول.');return}if(online())await revalidateOfflineSession()}
 function onVisibility(){if(document.visibilityState==='hidden'){if(offlineSession)offlineBackgroundAt=Date.now();return}updateOfflineButton();if(offlineSession){const mins=Math.max(0,Number(localStorage.getItem(LOCK_MINUTES_KEY)||5));if(offlineBackgroundAt&&Date.now()-offlineBackgroundAt>=mins*60000){lockOffline('انتهت مهلة القفل التلقائي.');return}offlineBackgroundAt=0;enforceOfflineSession()}else if(online())sealIfOnlineUnlocked()}
-function onSecurityState(event){updateOfflineButton();if(event?.detail?.state==='locked'&&offlineSession)clearOfflineState();if(event?.detail?.state==='unlocked'&&online())sealIfOnlineUnlocked()}
+function onSecurityState(event){updateOfflineButton();if(event?.detail?.state==='locked'){if(offlineSession)clearOfflineState();else offlineEpoch++;}if(event?.detail?.state==='unlocked'&&online())sealIfOnlineUnlocked()}
 function init(){cleanLegacy();if(!patchSecurity())throw new Error('APP_SECURITY_REQUIRED');document.addEventListener('abu-bassam-security-state',onSecurityState);document.addEventListener('abu-bassam-auth-changed',()=>{refreshLimit();updateOfflineButton();if(online())sealIfOnlineUnlocked()});window.addEventListener('online',()=>{refreshLimit();updateOfflineButton();if(offlineSession)revalidateOfflineSession();else setTimeout(sealIfOnlineUnlocked,500)});window.addEventListener('offline',updateOfflineButton);document.addEventListener('visibilitychange',onVisibility);setInterval(enforceOfflineSession,60000)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
