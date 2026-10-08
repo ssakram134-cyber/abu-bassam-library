@@ -438,6 +438,14 @@ async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRest
 
 function cloud(){return window.AbuBassamCloud}
 function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',blob,syncState:'synced',deleted:false}}
+function assertVaultSyncContext(scope){
+  // A delayed RPC belongs only to the account/device and permissions that
+  // initiated it; logout, role changes and loss of connectivity abort the run.
+  if(!navigator.onLine||!sessionOk()||syncScope()!==scope||
+    !vaultScopeOk(false)||!vaultAllowed('vaultSync')||
+    !window.AbuBassamSecurity?.device?.()?.device_id)
+    throw new Error('VAULT_SYNC_CONTEXT_CHANGED')
+}
 async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(state.syncing)return false;
   if(!manual&&!automaticDue())return false;
@@ -450,17 +458,23 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(!navigator.onLine){setSyncStatus('لا يوجد إنترنت • التغييرات محفوظة محلياً');if(manual)alert('لا يوجد اتصال بالإنترنت الآن');return false}
   if(!sessionOk()){setSyncStatus('اربط حسابك لتفعيل المزامنة الآمنة');if(manual&&cloud())cloud().openLogin();return false}
   if(!window.AbuBassamSecurity?.device?.()?.device_id){setSyncStatus('يلزم اعتماد الجهاز قبل المزامنة');return false}
+  const runScope=syncScope();
   state.syncing=true;setSyncStatus('جاري رفع التغييرات إلى الحاوية الخاصة...');
   try{
     const service=cloud(),pending=(await dbAll()).filter(item=>item.syncState==='pending');
+    assertVaultSyncContext(runScope);
     for(const item of pending){
-      const row=await service.get('vault',item.id),remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
+      assertVaultSyncContext(runScope);
+      const row=await service.get('vault',item.id);
+      assertVaultSyncContext(runScope);
+      const remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
           if(remote?.deleted){await dbResolvePendingConflict(item,null);continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
+          assertVaultSyncContext(runScope);
           await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion));
           continue
         }
@@ -470,6 +484,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
+        assertVaultSyncContext(runScope);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
         await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy);
         continue
@@ -479,25 +494,38 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         if(!row){await dbDeleteIfUnchanged(item);continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
+        assertVaultSyncContext(runScope);
         await service.upsert('vault',item.id,data);
+        assertVaultSyncContext(runScope);
         await dbDeleteIfUnchanged(item);
-        if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
+        if(oldPath){assertVaultSyncContext(runScope);await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}})}
         continue
       }
 
       if(!item.blob)throw new Error('ملف محلي بلا محتوى فعلي: '+String(item.name||item.id));
       const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);
+      assertVaultSyncContext(runScope);
       const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
       let saved;
       try{saved=await service.upsert('vault',item.id,data)}
-      catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
+      catch(error){
+        // The RPC may have committed before its response was lost. Do not
+        // remove the only object now referenced by committed metadata.
+        throw error
+      }
+      assertVaultSyncContext(runScope);
       await dbCommitUpload(item,saved?.updated_at);
-      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
+      if(oldPath&&oldPath!==newPath){assertVaultSyncContext(runScope);await service.removeVault(oldPath).catch(()=>{})}
     }
 
     setSyncStatus('جاري استقبال تغييرات الأجهزة...');
-    const rows=await service.list('vault',10000),local=new Map((await dbAll()).map(item=>[String(item.id),item]));
+    assertVaultSyncContext(runScope);
+    const rows=await service.list('vault',10000);
+    assertVaultSyncContext(runScope);
+    const local=new Map((await dbAll()).map(item=>[String(item.id),item]));
+    assertVaultSyncContext(runScope);
     for(const row of rows){
+      assertVaultSyncContext(runScope);
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
@@ -505,9 +533,12 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
+      assertVaultSyncContext(runScope);
       await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))
     }
+    assertVaultSyncContext(runScope);
     await refresh();
+    assertVaultSyncContext(runScope);
     const stillPending=state.items.filter(item=>item.syncState==='pending').length;
     if(stillPending){
       // Another edit may have arrived while upload/download responses were
