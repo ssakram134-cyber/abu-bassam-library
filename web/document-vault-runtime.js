@@ -254,13 +254,36 @@ async function addBlob(name,blob,category,id,folder=''){
   await dbPut(item);return item
 }
 async function addFiles(fileList,category,input){
-  let files=[...(fileList||[])];if(!files.length)return;
-  let count=state.items.filter(item=>!item.deleted).length,room=MAX_ITEMS-count;if(room<=0){alert('وصل الأرشيف إلى الحد الأقصى: 1000 عنصر');return}
-  if(files.length>room){alert(`لا توجد مساحة كافية لكل الملفات المحددة. المتاح ${room} فقط من أصل ${files.length}. لم يُحفظ أي ملف.`);if(input)input.value='';state.uploadFolder='';return}
+  const files=[...(fileList||[])];
+  if(!files.length)return false;
+  if(state.busy){alert('انتظر انتهاء عملية الأرشيف الحالية قبل رفع ملفات إضافية.');return false}
   setBusy(true,'جاري حفظ الملفات بأسمائها الأصلية...');
-  try{let folder=state.uploadFolder;for(let file of files)await addBlob(file.name,file,category,undefined,folder);state.filter=folder?'folder:'+folder:category;await refresh();logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',files.length+' عنصر');setSyncStatus('تم الحفظ محلياً • بانتظار المزامنة');if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),700)}
-  catch(e){alert('تعذر حفظ أحد الملفات: '+(e.message||e))}
-  finally{setBusy(false);state.uploadFolder='';if(input)input.value=''}
+  let saved=0;
+  try{
+    // Read the committed database, not a potentially stale state.items view.
+    const rows=await dbAll(),used=rows.filter(item=>!item.deleted).length,room=MAX_ITEMS-used;
+    if(room<=0){alert('وصل الأرشيف إلى الحد الأقصى: 1000 عنصر');return false}
+    if(files.length>room){
+      alert(`لا توجد مساحة كافية لكل الملفات المحددة. المتاح ${room} فقط من أصل ${files.length}. لم يُحفظ أي ملف.`);
+      return false
+    }
+    const folder=state.uploadFolder;
+    for(const file of files){await addBlob(file.name,file,category,undefined,folder);saved++}
+    state.filter=folder?'folder:'+folder:category;
+    await refresh();
+    logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',saved+' عنصر');
+    setSyncStatus('تم الحفظ محلياً • بانتظار المزامنة');
+    if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),700);
+    return true
+  }catch(error){
+    if(saved)await refresh().catch(()=>{});
+    alert((saved?`تم حفظ ${saved} من ${files.length} ملف محلياً. `:'')+'تعذر إكمال رفع الملفات: '+String(error?.message||error));
+    return false
+  }finally{
+    setBusy(false);
+    state.uploadFolder='';
+    if(input)input.value=''
+  }
 }
 function findItem(id){return state.items.find(item=>item.id===id)}
 async function blobDataUrl(blob){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})}
