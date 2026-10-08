@@ -144,6 +144,10 @@
     try{
       await stabilizeIdentity();
       await loadApprovedUi();
+      const securityBoot=window.__ABU_SECURITY_BOOT_PROMISE__;
+      if(!securityBoot||typeof securityBoot.then!=='function')throw new Error('APP_SECURITY_BOOT_PROMISE_REQUIRED');
+      await securityBoot;
+      if(!document.getElementById('abuSecurityGate'))throw new Error('APP_SECURITY_GATE_REQUIRED');
       signalBootReady();
       dismissSplash();
       setTimeout(heartbeatSafely,200)
