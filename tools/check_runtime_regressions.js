@@ -734,6 +734,31 @@ async function testBackupRestoreExclusiveLock(){
     throw Error('restore did not complete or release exclusive lock');
 }
 
+async function testVaultDeleteAckPreservesNewEdits(){
+  const src=read('document-vault-runtime.js');
+  const b=src.indexOf('function uploadedSnapshotUnchanged(');
+  const e=src.indexOf('async function dbCommitUpload(',b);
+  const rb=src.indexOf('function remoteSnapshotStillCurrent(');
+  const re=src.indexOf('async function dbReceiveRemoteIfUnchanged(',rb);
+  const db=src.indexOf('async function dbDeleteIfUnchanged('),de=src.indexOf('async function dbDelete(id){',db);
+  if([b,e,rb,re,db,de].some(x=>x<0))throw Error('delete acknowledgement guard missing');
+  const table=new Map();let changes=0;
+  const database={transaction(){const tx={};tx.objectStore=()=>({
+    get:id=>{const req={};Promise.resolve().then(()=>{req.result=table.get(id);req.onsuccess?.();Promise.resolve().then(()=>tx.oncomplete?.())});return req},
+    delete:id=>{table.delete(id);changes++;Promise.resolve().then(()=>tx.oncomplete?.())}
+  });return tx}};
+  const call=vm.runInNewContext('(openDb,STORE)=>{'+src.slice(b,e)+src.slice(rb,re)+src.slice(db,de)+';return dbDeleteIfUnchanged}')(
+    async()=>database,'items');
+  const saved={id:'one',syncState:'pending',localEditToken:'rev1',name:'old',folder:'',favorite:false,size:0,mime:'image/png',updatedAt:'same',deleted:true};
+  table.set('one',{...saved,localEditToken:'rev2',name:'edited'});
+  if(await call(saved)!==false||changes!==0||!table.has('one'))throw Error('stale tombstone removed new local edit');
+  table.set('one',{...saved});
+  if(await call(saved)!==true||table.has('one'))throw Error('matching tombstone was not deleted');
+  const clean={...saved,syncState:'synced',remoteUpdatedAt:'cloud1'};
+  table.set('one',{...clean,remoteUpdatedAt:'cloud2'});
+  if(await call(clean)!==false||!table.has('one'))throw Error('remote delete removed newer version');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1022,7 +1047,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
