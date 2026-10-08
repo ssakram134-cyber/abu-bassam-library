@@ -426,7 +426,7 @@ async function testCameraCaptureCancelledAfterClose(){
   if(openBegin<0||openEnd<=openBegin)throw new Error('camera permission handler missing');
   const openBody=native.slice(openBegin+"  const openCamera = useCallback(async (mode, frameKind = 'paper') => {".length,openEnd);
   const makeOpen=vm.runInNewContext('(requestPermission,sessionRef,modeEvents,permission)=>{'
-    +'const cameraSessionRef=sessionRef,cameraOpenPendingRef={current:false},'
+    +'const cameraSessionRef=sessionRef,cameraOpenPendingRef={current:false},captureInFlightRef={current:false},'
     +'cameraPermission=permission,requestCameraPermission=requestPermission,barcodeScanHandledRef={current:false};'
     +'const cameraError=()=>modeEvents.push("error");'
     +'const setCameraMode=mode=>modeEvents.push(mode),setCameraReady=()=>{},setBarcodeLocked=()=>{},'
