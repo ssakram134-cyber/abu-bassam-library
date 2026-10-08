@@ -349,6 +349,20 @@ async function verifyAuthStartupAndSecret(){
   if(stale.state().unlocked||stale.state().currentDevice.role!=='owner')
     throw new Error('late device RPC overwrote a locked session');
 
+  const replies=[];const overlapping=makeDevice({rpc:()=>new Promise(resolve=>replies.push(resolve))});
+  const firstTouch=overlapping.touchDevice();
+  for(let i=0;i<8&&replies.length<1;i++)await Promise.resolve();
+  const secondTouch=overlapping.touchDevice();
+  for(let i=0;i<8&&replies.length<2;i++)await Promise.resolve();
+  if(replies.length!==2)throw new Error('two device revalidations did not start');
+  replies[1]({data:{active:true,role:'secondary',permissions:{cardsPrint:false}},error:null});
+  await secondTouch;
+  replies[0]({data:{active:true,role:'owner',permissions:{cardsPrint:true}},error:null});
+  await firstTouch;
+  if(overlapping.state().currentDevice.role!=='secondary'||
+     overlapping.state().currentDevice.permissions.cardsPrint!==false)
+    throw new Error('older device heartbeat restored revoked admin capabilities');
+
   // Test the shipped password/biometric handlers rather than a model of them:
   // explicit locking must invalidate in-flight authentication completions.
   const authAttemptStart=authSource.indexOf('async function login(){');
