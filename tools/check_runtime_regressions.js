@@ -41,7 +41,10 @@ for(const marker of [
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
 // The native bridge is injected at document-start AND document-end. Reinjection
 // must not replace pending-response callbacks or lose native request state.
-const bridgeMatch=native.match(/const ANDROID_BRIDGE = \`([\\s\\S]*?)\`;/);
+const bridgeMarker='const ANDROID_BRIDGE = '+String.fromCharCode(96);
+const bridgeStart=native.indexOf(bridgeMarker);
+const bridgeEnd=bridgeStart<0?-1:native.indexOf(String.fromCharCode(96)+';',bridgeStart+bridgeMarker.length);
+const bridgeMatch=bridgeEnd<0?null:['',native.slice(bridgeStart+bridgeMarker.length,bridgeEnd)];
 if(!bridgeMatch)errors.push('native WebView bridge template missing');
 else{
   const interpolation='\${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })}';
