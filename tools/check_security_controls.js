@@ -419,6 +419,53 @@ async function verifyAuthStartupAndSecret(){
   if(!authSource.includes('onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.()&&navigator.onLine)await touchDevice()}'))
     throw new Error('auth change still registers a revoked device');
 
+  // An old cloud appearance response must not apply a previous account's
+  // theme after lock/logout; a failed upload must remain eligible for retry.
+  const appearanceStart=authSource.indexOf('async function pushAppearance(){');
+  const appearanceEnd=authSource.indexOf('async function appearanceSync(',appearanceStart);
+  if(appearanceStart<0||appearanceEnd<=appearanceStart)
+    throw new Error('appearance session fence missing');
+  const makeAppearance=vm.runInNewContext('(opts)=>{'
+    +'let unlocked=true,deviceSessionEpoch=1,appearanceStamp="",userId="owner1",pushes=0,applied=0;'
+    +'const values=new Map([["abuBassamAppearanceSyncV1","1"],["theme","old"]]);'
+    +'const APPEARANCE_SYNC_KEY="abuBassamAppearanceSyncV1",PREVIOUS_THEME_KEY="prev";'
+    +'const localStorage={getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,String(value))};'
+    +'const window={applyTheme:()=>{applied++},AbuBassamTypography:{applyApp:()=>{applied++}}};'
+    +'const service={isConnected:()=>true,session:()=>({user:{id:userId}}),'
+    +'upsert:async(...args)=>{pushes++;return opts.upsert?.(...args)},get:(...args)=>opts.get(...args)};'
+    +'const cloud=()=>service,can=()=>true,currentRole=()=>"owner",'
+    +'appearancePayload=()=>({theme:localStorage.getItem("theme")||"default",typography:{}});'
+    +authSource.slice(appearanceStart,appearanceEnd)
+    +';return{pull:pullAppearanceIfNeeded,push:pushAppearance,lock:()=>{unlocked=false;deviceSessionEpoch++},'
+    +'changeUser:id=>{userId=id},state:()=>({theme:localStorage.getItem("theme"),pushes,applied,appearanceStamp})}}');
+  for(const race of ['lock','switch']){
+    let release=null;
+    const app=makeAppearance({get:()=>new Promise(resolve=>{release=resolve})});
+    const active=app.pull();
+    for(let i=0;i<8&&!release;i++)await Promise.resolve();
+    if(!release)throw new Error('appearance cloud read did not begin');
+    if(race==='lock')app.lock();else app.changeUser('owner2');
+    release({data:{theme:'foreign-account'}});
+    await active;
+    if(app.state().theme!=='old'||app.state().applied!==0)
+      throw new Error('stale appearance response crossed a '+race+' boundary');
+  }
+  const validAppearance=makeAppearance({get:async()=>({data:{theme:'new'}})});
+  await validAppearance.pull();
+  if(validAppearance.state().theme!=='new'||validAppearance.state().applied!==1)
+    throw new Error('valid appearance sync did not apply');
+  let uploadFails=true;
+  const retryable=makeAppearance({get:async()=>null,upsert:async()=>{
+    if(uploadFails)throw new Error('NETWORK_UNAVAILABLE')
+  }});
+  await retryable.push();
+  if(retryable.state().appearanceStamp!==''||retryable.state().pushes!==1)
+    throw new Error('failed appearance sync was marked as completed');
+  uploadFails=false;
+  await retryable.push();
+  if(retryable.state().pushes!==2||!retryable.state().appearanceStamp)
+    throw new Error('failed theme upload never retried');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
