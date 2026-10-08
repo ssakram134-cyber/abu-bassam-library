@@ -1018,6 +1018,50 @@ async function testVaultSyncAccountFence(){
   ])need(source,marker,'vault account and permission fence');
 }
 
+function testVaultSyncTimerVisibility(){
+  const source=read('document-vault-runtime.js');
+  const start=source.indexOf('let vaultSyncTimer=null;');
+  const end=source.indexOf('async function build(){',start);
+  if(start<0||end<=start)throw Error('vault sync scheduling helper missing');
+  const scheduler=vm.runInNewContext('(deps)=>{'
+    +'const {document,setTimeout,clearTimeout,automaticDue,syncNow}=deps;'
+    +source.slice(start,end)
+    +';return {scheduleVaultSyncTimer,state:()=>vaultSyncTimer}}');
+  const timers=new Map(),doc={visibilityState:'visible'};
+  let seq=0,attempts=0,due=true;
+  const clock=scheduler({document:doc,
+    setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id},
+    clearTimeout:id=>timers.delete(id),
+    automaticDue:()=>due,
+    syncNow:()=>{attempts++;return Promise.resolve(true)}
+  });
+  clock.scheduleVaultSyncTimer(5000);
+  if(timers.size!==1)throw Error('first vault sync check not scheduled');
+  clock.scheduleVaultSyncTimer();
+  if(timers.size!==1)throw Error('vault sync created redundant timers');
+  const [timer,fire]=[...timers][0];
+  timers.delete(timer);fire();
+  if(attempts!==1||timers.size!==1)
+    throw Error('visible vault sync did not resume its one-timer loop');
+  doc.visibilityState='hidden';
+  clock.scheduleVaultSyncTimer();
+  if(timers.size)throw Error('vault timer continued running while hidden');
+  doc.visibilityState='visible';due=false;
+  clock.scheduleVaultSyncTimer();
+  const [resumed,run]=[...timers][0];
+  timers.delete(resumed);run();
+  if(attempts!==1||timers.size!==1)
+    throw Error('offline/unchanged vault caused unnecessary sync');
+  for(const marker of [
+    "document.addEventListener('visibilitychange'",
+    "clearTimeout(vaultSyncTimer);vaultSyncTimer=null",
+    "if(automaticDue())void syncNow(false);",
+    "scheduleVaultSyncTimer(5000);"
+  ])need(source,marker,'vault visibility-aware sync lifecycle');
+  if(source.includes("setInterval(()=>{if(automaticDue())syncNow(false)},900000)"))
+    throw Error('legacy permanent vault sync interval still active');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1306,7 +1350,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
