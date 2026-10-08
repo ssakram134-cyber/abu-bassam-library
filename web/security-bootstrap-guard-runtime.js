@@ -5,7 +5,6 @@ window.__ABU_SECURITY_BOOTSTRAP_GUARD_V1__=true;
 
 const LEGACY_TRUST_KEY='abuBassamSecurityTrustV1';
 const LEGACY_SECRET_PREFIX='__dev_secure_';
-let timer=0;
 
 function wipeLegacyTrust(){
   try{localStorage.removeItem(LEGACY_TRUST_KEY)}catch(_){}
@@ -75,9 +74,15 @@ function captureSensitiveClick(event){
     denyLegacyOffline();
   }
 }
+function onRuntimeLoaded(event){
+  const src=String(event?.detail?.src||'');
+  if(src==='app-security-runtime.js')installRuntimeGuard();
+  if(src==='security-hardening-runtime.js'||window.__ABU_SECURITY_HARDENING_V2__)cleanup();
+}
 function cleanup(){
-  if(timer){clearInterval(timer);timer=0}
   document.removeEventListener('click',captureSensitiveClick,true);
+  document.removeEventListener('abu-runtime-loaded',onRuntimeLoaded);
+  document.removeEventListener('abu-bassam-security-state',installRuntimeGuard);
   wipeLegacyTrust();
   wipeLegacySecretStorage();
   installLegacySecretStorageBlock();
@@ -87,8 +92,7 @@ installLegacySecretStorageBlock();
 wipeLegacyTrust();
 wipeLegacySecretStorage();
 document.addEventListener('click',captureSensitiveClick,true);
+document.addEventListener('abu-runtime-loaded',onRuntimeLoaded);
+document.addEventListener('abu-bassam-security-state',installRuntimeGuard);
 installRuntimeGuard();
-let attempts=0;
-timer=setInterval(()=>{installRuntimeGuard();if(++attempts>=200){clearInterval(timer);timer=0}},25);
-setTimeout(()=>{if(window.__ABU_SECURITY_HARDENING_V2__)cleanup()},2000);
 })();
