@@ -39,6 +39,24 @@ for(const marker of [
 ])need(nativeAuth,marker,'native auth must not block offline startup');
 
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
+// The native bridge is injected at document-start AND document-end. Reinjection
+// must not replace pending-response callbacks or lose native request state.
+const bridgeMatch=native.match(/const ANDROID_BRIDGE = \`([\\s\\S]*?)\`;/);
+if(!bridgeMatch)errors.push('native WebView bridge template missing');
+else{
+  const interpolation='\${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })}';
+  const bridgeSource=bridgeMatch[1].replace(interpolation, '{"version":"test","buildNumber":"test","releaseDate":"test"}');
+  const testWindow={ReactNativeWebView:{postMessage:()=>{}}};
+  try{
+    const context=vm.createContext({window:testWindow});
+    vm.runInContext(bridgeSource,context);
+    const firstAndroid=testWindow.Android;
+    const firstOutputCallback=testWindow.AbuBassamNativeOutputResult;
+    vm.runInContext(bridgeSource,context);
+    if(!testWindow.__ABU_NATIVE_BRIDGE_INSTALLED_V1__||testWindow.Android!==firstAndroid||testWindow.AbuBassamNativeOutputResult!==firstOutputCallback)
+      errors.push('native bridge reinjection replaced a live bridge or its output callback');
+  }catch(error){errors.push('native bridge reinjection simulation failed: '+error.message)}
+}
 for(const metadataMarker of ["window.__ABU_APP_META__ =","releaseDate: RELEASE_DATE"])need(native,metadataMarker,'canonical native app metadata');
 for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js','app-security-runtime.js','security-hardening-runtime.js','backup-center-runtime.js','settings-corrections-runtime.js']){
   const src=read(file);need(src,'__ABU_APP_META__','runtime app metadata');forbid(src,"'4.3.2'",'runtime hard-coded app version');
