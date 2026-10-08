@@ -23,6 +23,7 @@ const OWNER_PERMISSIONS={edit:true,print:true,export:true,appearance:true,sync:t
 const pending=new Map();
 let requestSeq=0;
 let currentDevice=null;
+let deviceSessionEpoch=0;
 let deviceSecret='';
 let deviceSecretPending=null;
 let unlocked=false;
@@ -101,7 +102,7 @@ function buildUi(){addCss();document.body.insertAdjacentHTML('beforeend',gateHtm
 function setError(message){if($('abuLoginError'))$('abuLoginError').textContent=message||''}
 function toast(message){const el=$('abuControlToast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),1800)}
 function emitSecurityState(state){document.dispatchEvent(new CustomEvent('abu-bassam-security-state',{detail:{state,unlocked,device:currentDevice}}))}
-function showGate(message=''){unlocked=false;$('abuSecurityGate')?.classList.remove('hide');setError(message);emitSecurityState('locked')}
+function showGate(message=''){deviceSessionEpoch++;unlocked=false;$('abuSecurityGate')?.classList.remove('hide');setError(message);emitSecurityState('locked')}
 function hideGate(){unlocked=true;$('abuSecurityGate')?.classList.add('hide');setError('');log('فتح التطبيق',`${roleLabel()} • ${currentDevice?.device_name||''}`);emitSecurityState('unlocked')}
 
 async function fetchDeviceInfo(){try{deviceInfo=Object.assign(deviceInfo,await nativeRequest('deviceInfo')||{})}catch(e){}if($('abuLoginDevice'))$('abuLoginDevice').textContent=`هذا الجهاز: ${deviceInfo.model||deviceInfo.name||'Android'}`;return deviceInfo}
@@ -109,11 +110,39 @@ async function ensureDeviceName(){let id=identity(),name=String(localStorage.get
 function normalizeDevice(data){if(!data)return null;return Array.isArray(data)?data[0]||null:data}
 async function registerDevice(){
   const c=client();if(!c)throw new Error('خدمة الدخول غير جاهزة');
+  const epoch=deviceSessionEpoch;
   const secret=await getSecret(),named=await ensureDeviceName();
+  if(epoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
   const {data,error}=await c.rpc('abu_bassam_register_device',{p_device_id:named.id,p_secret:secret,p_device_name:named.name,p_model:deviceInfo.model||deviceInfo.name||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});
-  if(error)throw error;currentDevice=normalizeDevice(data);if(!currentDevice)throw new Error('تعذر تسجيل الجهاز');localStorage.setItem(DEVICE_NAME_KEY,currentDevice.device_name||named.name);renderSecurityCard();return currentDevice
+  if(epoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
+  if(error)throw error;
+  const row=normalizeDevice(data);
+  if(!row)throw new Error('DEVICE_NOT_AUTHORIZED');
+  if(row.active===false)throw new Error('DEVICE_DISABLED');
+  currentDevice=row;
+  localStorage.setItem(DEVICE_NAME_KEY,row.device_name||named.name);
+  renderSecurityCard();
+  return row
 }
-async function touchDevice(){if(!cloud()?.isConnected?.()||!navigator.onLine)return;try{const secret=await getSecret(),id=identity(),name=localStorage.getItem(DEVICE_NAME_KEY)||deviceInfo.model||'هاتف';const {data,error}=await client().rpc('abu_bassam_touch_device',{p_device_id:id.id,p_secret:secret,p_device_name:name,p_model:deviceInfo.model||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});if(error)throw error;currentDevice=normalizeDevice(data);if(currentDevice.active===false)lock('تم إيقاف هذا الجهاز من الحساب الرئيسي')}catch(e){if(/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))lock('هذا الجهاز غير مصرح له بالدخول') }}
+async function touchDevice(){
+  if(!unlocked||!cloud()?.isConnected?.()||!navigator.onLine)return;
+  const epoch=deviceSessionEpoch;
+  try{
+    const secret=await getSecret(),id=identity(),name=localStorage.getItem(DEVICE_NAME_KEY)||deviceInfo.model||'هاتف';
+    if(epoch!==deviceSessionEpoch||!unlocked)return;
+    const {data,error}=await client().rpc('abu_bassam_touch_device',{p_device_id:id.id,p_secret:secret,p_device_name:name,p_model:deviceInfo.model||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});
+    // A response from before logout/lock may not replace the next session's role.
+    if(epoch!==deviceSessionEpoch||!unlocked)return;
+    if(error)throw error;
+    const row=normalizeDevice(data);
+    if(!row)throw new Error('DEVICE_NOT_AUTHORIZED');
+    if(row.active===false)throw new Error('DEVICE_DISABLED');
+    currentDevice=row
+  }catch(e){
+    if(epoch===deviceSessionEpoch&&unlocked&&/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))
+      lock('هذا الجهاز غير مصرح له بالدخول')
+  }
+}
 
 function loginRemaining(){return Math.max(0,Number(localStorage.getItem(LOGIN_LOCK_KEY)||0)-Date.now())}
 function formatWait(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
