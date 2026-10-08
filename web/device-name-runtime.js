@@ -29,6 +29,12 @@
     return identity
   }
   async function heartbeat(){return stabilizeIdentity()}
+  // Boot must fail closed; periodic identity checks are best-effort and must
+  // never create unhandled Promise rejections during offline/background use.
+  function heartbeatSafely(){
+    if(document.visibilityState==='hidden')return;
+    void heartbeat().catch(error=>console.warn('Abu Bassam background device check failed',error));
+  }
   async function adoptIdentity(id){
     const value=String(id||'').trim();if(!validIdentityId(value))throw new Error('SECURE_DEVICE_ID_INVALID');
     await native('secureSet',{key:SECURE_DEVICE_ID_KEY,value});
@@ -140,11 +146,18 @@
       await loadApprovedUi();
       signalBootReady();
       dismissSplash();
-      setTimeout(heartbeat,200)
+      setTimeout(heartbeatSafely,200)
     }catch(error){showBootFailure(error)}
   }
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,adopt:adoptIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
-  setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000);
-  window.addEventListener('online',heartbeat);document.addEventListener('abu-bassam-auth-changed',()=>{heartbeat();window.AbuBassamSecurity?.onSessionChanged?.()});
+  setInterval(heartbeatSafely,120000);
+  window.addEventListener('online',heartbeatSafely);
+  document.addEventListener('abu-bassam-auth-changed',()=>{
+    heartbeatSafely();
+    try{
+      const recheck=window.AbuBassamSecurity?.onSessionChanged?.();
+      if(recheck&&typeof recheck.catch==='function')void recheck.catch(error=>console.warn('Abu Bassam session device refresh failed',error));
+    }catch(error){console.warn('Abu Bassam session device refresh failed',error)}
+  });
 })();
