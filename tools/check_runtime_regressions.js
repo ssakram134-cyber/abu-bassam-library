@@ -659,6 +659,12 @@ function testVaultSyncConflictRules(){
   for(const marker of ['tx=db.transaction(STORE,\'readwrite\')','await dbCommitUpload(item,saved?.updated_at)',
     'await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))'])
     need(source,marker,'atomic vault conflict handling');
+  for(const marker of [
+    "const stillPending=state.items.filter(item=>item.syncState==='pending').length;",
+    "if(stillPending){",
+    "syncSet(LAST_SYNC_KEY,String(Date.now()));"
+  ])need(source,marker,'accurate vault sync completion');
+
 }
 
 async function testVaultConflictCommitIsolation(){
