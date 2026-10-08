@@ -656,8 +656,8 @@ function testVaultSyncConflictRules(){
     throw Error('safe download was rejected');
   if(rules.remoteSnapshotStillCurrent({...b,syncState:'synced'}, {...a,syncState:'synced'}))
     throw Error('outdated download was accepted');
-  for(const marker of ['tx=db.transaction(STORE,\'readwrite\')','await dbCommitUpload(item,saved?.updated_at)',
-    'await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))'])
+  for(const marker of ['tx=db.transaction(STORE,\'readwrite\')','await dbCommitUpload(item,saved?.updated_at,runScope)',
+    'await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion),runScope)'])
     need(source,marker,'atomic vault conflict handling');
   for(const marker of [
     "const stillPending=state.items.filter(item=>item.syncState==='pending').length;",
