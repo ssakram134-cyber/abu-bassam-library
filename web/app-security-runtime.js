@@ -107,12 +107,21 @@ function loginRemaining(){return Math.max(0,Number(localStorage.getItem(LOGIN_LO
 function formatWait(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
 function clearCredentialFailures(){localStorage.removeItem(ATTEMPT_KEY);localStorage.removeItem(LOGIN_LOCK_KEY);localStorage.removeItem(BLOCK_COUNT_KEY)}
 function recordCredentialFailure(message){const attempts=Number(localStorage.getItem(ATTEMPT_KEY)||0)+1;if(attempts<5){localStorage.setItem(ATTEMPT_KEY,String(attempts));setError(String(message||'بيانات الدخول غير صحيحة')+' • المتبقي قبل الانتظار: '+(5-attempts));return}const blocks=Number(localStorage.getItem(BLOCK_COUNT_KEY)||0)+1,duration=Math.min(300000,30000*Math.max(1,blocks));localStorage.setItem(ATTEMPT_KEY,'0');localStorage.setItem(BLOCK_COUNT_KEY,String(blocks));localStorage.setItem(LOGIN_LOCK_KEY,String(Date.now()+duration));setError('محاولات كلمة مرور غير صحيحة كثيرة. انتظر '+formatWait(duration)+' ثم حاول مرة أخرى.')}
+function isCredentialFailure(error){
+  const code=String(error?.code||'').toLowerCase();
+  const message=String(error?.message||error||'');
+  return code==='invalid_credentials'||/invalid login credentials/i.test(message)
+}
 function authError(error){const m=String(error?.message||error||'تعذر تسجيل الدخول');if(/invalid login credentials/i.test(m))return 'اسم المستخدم أو كلمة المرور غير صحيحة.';if(/DEVICE_LIMIT_REACHED/i.test(m))return 'وصل الحساب إلى الحد الأقصى: ٥ أجهزة. احذف جهازًا فرعيًا من الجهاز الرئيسي أولاً.';if(/DEVICE_DISABLED/i.test(m))return 'هذا الجهاز موقوف من الجهاز الرئيسي.';if(/network|fetch/i.test(m))return 'تعذر الاتصال بالإنترنت.';return m.replace(/^.*?error:\s*/i,'')}
 async function login(){
   if(busy)return;const wait=loginRemaining();if(wait>0)return setError('الدخول متوقف مؤقتًا بسبب محاولات بيانات اعتماد غير صحيحة. حاول بعد '+formatWait(wait)+'.');const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME){recordCredentialFailure('اسم المستخدم غير صحيح.');return}if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;setError('جاري التحقق...');let authenticated=false;
   try{
     const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});
-    if(result.error){recordCredentialFailure(authError(result.error));return}
+    if(result.error){
+      if(isCredentialFailure(result.error))recordCredentialFailure(authError(result.error));
+      else setError(authError(result.error));
+      return
+    }
     authenticated=!!result.data?.session;clearCredentialFailures();if($('abuLoginPass'))$('abuLoginPass').value='';
     await fetchDeviceInfo();await registerDevice();hideGate();await pullAppearanceIfNeeded();log('تسجيل دخول ناجح',MAIN_USERNAME+' • '+roleLabel())
   }catch(e){
@@ -187,5 +196,18 @@ window.AbuBassamSecurity={
   onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.())try{await registerDevice()}catch(e){}},
 };
 
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+// Export the *completion* of async login-gate initialization, not the moment
+// its script finishes evaluating. The native shell must not reveal the UI
+// before the gate has been constructed and boot has finished safely.
+let resolveSecurityBoot,rejectSecurityBoot;
+window.__ABU_SECURITY_BOOT_PROMISE__=new Promise((resolve,reject)=>{
+  resolveSecurityBoot=resolve;rejectSecurityBoot=reject
+});
+function startSecurityBoot(){
+  Promise.resolve().then(boot).then(()=>{
+    if(!document.getElementById('abuSecurityGate'))throw new Error('SECURITY_GATE_NOT_READY');
+    resolveSecurityBoot(true)
+  },rejectSecurityBoot)
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startSecurityBoot,{once:true});else startSecurityBoot();
 })();
