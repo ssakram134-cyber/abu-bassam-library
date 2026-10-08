@@ -775,7 +775,7 @@ function testVaultPendingSyncSchedule(){
   for(const mode of ['daily','weekly'])
     if(!due({mode,wifiOnly:false},true))throw Error('pending vault edits delayed until calendar cadence: '+mode);
   if(due({mode:'manual',wifiOnly:false},true))throw Error('manual-only policy was ignored');
-  if(due({mode:'daily',wifiOnly:true},true,true===false))throw Error('Wi-Fi requirement was ignored');
+  if(due({mode:'daily',wifiOnly:true},true,true,false))throw Error('Wi-Fi requirement was ignored');
   if(due({mode:'daily',wifiOnly:false},true,false,false))throw Error('offline scheduler unexpectedly ran');
   if(due({mode:'daily',wifiOnly:false},false))throw Error('unchanged vault was synced ahead of daily schedule');
 }
