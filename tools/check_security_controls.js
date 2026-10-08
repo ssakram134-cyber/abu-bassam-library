@@ -349,6 +349,62 @@ async function verifyAuthStartupAndSecret(){
   if(stale.state().unlocked||stale.state().currentDevice.role!=='owner')
     throw new Error('late device RPC overwrote a locked session');
 
+  // Test the shipped password/biometric handlers rather than a model of them:
+  // explicit locking must invalidate in-flight authentication completions.
+  const authAttemptStart=authSource.indexOf('async function login(){');
+  const authAttemptEnd=authSource.indexOf('function lock(reason=',authAttemptStart);
+  if(authAttemptStart<0||authAttemptEnd<=authAttemptStart)
+    throw new Error('login/biometric cancellation source missing');
+  const makeAttempt=vm.runInNewContext('(opts)=>{'
+    +'let busy=false,unlocked=false,deviceSessionEpoch=1,currentDevice=null,signOuts=0,opens=0,registers=0;'
+    +'const MAIN_USERNAME="akram",MAIN_EMAIL="akram@domain",'
+    +'cloud=()=>({isConnected:()=>true}),'
+    +'client=()=>({auth:{signInWithPassword:opts.signIn,signOut:async()=>{signOuts++}}}),'
+    +'navigator={onLine:true},$=id=>({value:id==="abuLoginUser"?"akram":"validpass123"}),'
+    +'loginRemaining=()=>0,formatWait=x=>String(x),recordCredentialFailure=()=>{},'
+    +'setError=()=>{},authError=x=>String(x?.message||x),'
+    +'isCredentialFailure=()=>false,clearCredentialFailures=()=>{},'
+    +'fetchDeviceInfo=async()=>{},registerDevice=async()=>{registers++;currentDevice={role:"owner"}},'
+    +'hideGate=()=>{opens++;unlocked=true},pullAppearanceIfNeeded=async()=>{},log=()=>{},'
+    +'getBiometricEnabled=async()=>true,biometricStatus=async()=>({available:true,enrolled:true}),'
+    +'biometricAuth=opts.biometric||(async()=>({success:true})),roleLabel=()=>currentDevice?.role||"";'
+    +authSource.slice(authAttemptStart,authAttemptEnd)
+    +';return {login,unlockWithBiometric,lock:()=>{deviceSessionEpoch++;unlocked=false},'
+    +'state:()=>({opens,registers,signOuts,busy,unlocked})}}');
+  let finishLogin=null;
+  const oldLogin=makeAttempt({signIn:()=>new Promise(resolve=>{finishLogin=resolve})});
+  const oldLoginWork=oldLogin.login();
+  for(let i=0;i<8&&!finishLogin;i++)await Promise.resolve();
+  if(!finishLogin)throw new Error('password auth race did not start');
+  oldLogin.lock();
+  finishLogin({data:{session:{id:'valid'}},error:null});
+  await oldLoginWork;
+  const oldStatus=oldLogin.state();
+  if(oldStatus.opens!==0||oldStatus.signOuts!==1||oldStatus.busy)
+    throw new Error('stale successful sign-in reopened the locked app or leaked Supabase session');
+  const currentLogin=makeAttempt({signIn:async()=>({data:{session:{id:'valid'}},error:null})});
+  await currentLogin.login();
+  const accepted=currentLogin.state();
+  if(accepted.opens!==1||accepted.registers!==1||accepted.signOuts!==0)
+    throw new Error('current valid password sign-in failed');
+  let finishBio=null;
+  const oldBio=makeAttempt({signIn:async()=>({data:{session:{}},error:null}),
+    biometric:()=>new Promise(resolve=>{finishBio=resolve})});
+  const oldBioWork=oldBio.unlockWithBiometric();
+  for(let i=0;i<8&&!finishBio;i++)await Promise.resolve();
+  if(!finishBio)throw new Error('biometric auth race did not start');
+  oldBio.lock();
+  finishBio({success:true});
+  await oldBioWork;
+  const oldBioStatus=oldBio.state();
+  if(oldBioStatus.opens||oldBioStatus.registers||oldBioStatus.busy)
+    throw new Error('late biometric response reopened a locked app');
+
+  // A removed secondary device must be revalidated, not silently
+  // re-registered when a cloud auth event fires.
+  if(!authSource.includes('onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.()&&navigator.onLine)await touchDevice()}'))
+    throw new Error('auth change still registers a revoked device');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
