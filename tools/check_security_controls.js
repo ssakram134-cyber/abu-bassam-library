@@ -176,17 +176,21 @@ async function verifyAuthStartupAndSecret(){
   const logoutEnd=authSource.indexOf('function lockNow(){',logoutBegin);
   if(logoutBegin<0||logoutEnd<=logoutBegin)throw new Error('logout source missing');
   const makeLogout=vm.runInNewContext(
-    '(confirm,cloud,showGate,log)=>{let currentDevice={role:"owner"},unlocked=true;'
+    '(confirm,cloud,showGate,log,securityApi)=>{const window={AbuBassamSecurity:securityApi};let currentDevice={role:"owner"},unlocked=true;'
     +authSource.slice(logoutBegin,logoutEnd)+';return{logout,state:()=>unlocked}}');
   let logoutCalled=0,gateClosed=0;
-  const cancelLogout=makeLogout(()=>false,()=>({client:{auth:{signOut:async()=>{logoutCalled++}}}}),()=>{gateClosed++},()=>{});
+  const cancelLogout=makeLogout(()=>false,()=>({client:{auth:{signOut:async()=>{logoutCalled++}}}}),()=>{gateClosed++},()=>{},{clearOfflineTrust:async()=>{logoutCalled++}});
   if((await cancelLogout.logout())!==false||logoutCalled||gateClosed||cancelLogout.state()!==true)
     throw new Error('Cancel destroyed the current login');
-  let releaseLogout=()=>{};
+  let releaseLogout=null,offlineTrustRevoked=0;
   const slowSignout=()=>new Promise(resolve=>{releaseLogout=resolve});
-  const acceptLogout=makeLogout(()=>true,()=>({client:{auth:{signOut:slowSignout}}}),()=>{gateClosed++},()=>{});
+  const acceptLogout=makeLogout(()=>true,()=>({client:{auth:{signOut:slowSignout}}}),()=>{gateClosed++},()=>{},
+    {clearOfflineTrust:async()=>{offlineTrustRevoked++}});
   const pendingLogout=acceptLogout.logout();
-  if(gateClosed!==1||acceptLogout.state()!==false)throw new Error('logout did not lock UI before sign-out');
+  if(gateClosed!==1||acceptLogout.state()!==false||offlineTrustRevoked!==1)
+    throw new Error('confirmed logout failed to gate UI and revoke trust before network signout');
+  for(let i=0;i<5&&!releaseLogout;i++)await Promise.resolve();
+  if(!releaseLogout)throw new Error('network signout did not start after local trust revocation');
   releaseLogout();
   if((await pendingLogout)!==true)throw new Error('confirmed logout did not complete');
 
