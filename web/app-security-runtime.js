@@ -43,8 +43,10 @@ function cloud(){return window.AbuBassamCloud||null}
 function client(){return cloud()?.client||null}
 function identity(){return window.AbuBassamDevices?.ensure?.()||{id:localStorage.getItem(DEVICE_ID_KEY)||'',name:localStorage.getItem(DEVICE_NAME_KEY)||''}}
 function roleLabel(){return currentDevice?.role==='owner'?'رئيسي':'فرعي'}
+function currentRole(){return unlocked?currentDevice?.role||'':''}
+function currentAuthorizedDevice(){return unlocked?currentDevice:null}
 function permissions(){return currentDevice?.role==='owner'?OWNER_PERMISSIONS:Object.assign({},SECONDARY_DEFAULT,currentDevice?.permissions||{})}
-function can(name){return !!permissions()[name]}
+function can(name){return unlocked&&!!permissions()[name]}
 // The validated offline gate is managed by security-hardening-runtime.js;
 // a hidden gate alone must not be treated as authorization.
 function sessionUnlocked(){return unlocked||window.AbuBassamSecurity?.isOfflineSession?.()===true}
@@ -155,23 +157,30 @@ function isCredentialFailure(error){
 }
 function authError(error){const m=String(error?.message||error||'تعذر تسجيل الدخول');if(/invalid login credentials/i.test(m))return 'اسم المستخدم أو كلمة المرور غير صحيحة.';if(/DEVICE_LIMIT_REACHED/i.test(m))return 'وصل الحساب إلى الحد الأقصى: ٥ أجهزة. احذف جهازًا فرعيًا من الجهاز الرئيسي أولاً.';if(/DEVICE_DISABLED/i.test(m))return 'هذا الجهاز موقوف من الجهاز الرئيسي.';if(/network|fetch/i.test(m))return 'تعذر الاتصال بالإنترنت.';return m.replace(/^.*?error:\s*/i,'')}
 async function login(){
-  if(busy)return;const wait=loginRemaining();if(wait>0)return setError('الدخول متوقف مؤقتًا بسبب محاولات بيانات اعتماد غير صحيحة. حاول بعد '+formatWait(wait)+'.');const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME){recordCredentialFailure('اسم المستخدم غير صحيح.');return}if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;setError('جاري التحقق...');let authenticated=false;
+  if(busy)return;const wait=loginRemaining();if(wait>0)return setError('الدخول متوقف مؤقتًا بسبب محاولات بيانات اعتماد غير صحيحة. حاول بعد '+formatWait(wait)+'.');const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME){recordCredentialFailure('اسم المستخدم غير صحيح.');return}if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;const attemptEpoch=deviceSessionEpoch;setError('جاري التحقق...');let authenticated=false;
   try{
     const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     if(result.error){
       if(isCredentialFailure(result.error))recordCredentialFailure(authError(result.error));
       else setError(authError(result.error));
       return
     }
     authenticated=!!result.data?.session;clearCredentialFailures();if($('abuLoginPass'))$('abuLoginPass').value='';
-    await fetchDeviceInfo();await registerDevice();hideGate();await pullAppearanceIfNeeded();log('تسجيل دخول ناجح',MAIN_USERNAME+' • '+roleLabel())
+    await fetchDeviceInfo();
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
+    await registerDevice();
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
+    hideGate();
+    await pullAppearanceIfNeeded();
+    log('تسجيل دخول ناجح',MAIN_USERNAME+' • '+roleLabel())
   }catch(e){
     if(authenticated){try{await client().auth.signOut({scope:'local'})}catch(_){}}
     currentDevice=null;unlocked=false;setError(authError(e));log('فشل تسجيل الدخول',authError(e))
   }finally{busy=false}
 }
 async function unlockWithBiometric(){
-  if(busy)return;busy=true;setError('جاري التحقق من البصمة...');
+  if(busy)return;busy=true;const attemptEpoch=deviceSessionEpoch;setError('جاري التحقق من البصمة...');
   try{
     const enabled=await getBiometricEnabled();
     if(!enabled)throw new Error('فعّل تسجيل الدخول بالبصمة أولاً من الإعدادات.');
@@ -182,8 +191,11 @@ async function unlockWithBiometric(){
     if(!status.available||!status.enrolled)throw new Error('لا توجد بصمة مفعلة في إعدادات هذا الهاتف.');
     const result=await biometricAuth('افتح مكتبة أبو بسام');
     if(!result?.success)throw new Error(result?.error==='user_cancel'?'تم إلغاء البصمة.':'لم تنجح المصادقة بالبصمة.');
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     await fetchDeviceInfo();
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     await registerDevice();
+    if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     hideGate();
     await pullAppearanceIfNeeded();
     log('فتح بالبصمة',currentDevice?.device_name||'')
@@ -277,7 +289,7 @@ async function boot(){
 }
 
 window.AbuBassamSecurity={
-  username:MAIN_USERNAME,email:MAIN_EMAIL,maxDevices:MAX_DEVICES,can,role:()=>currentDevice?.role||'',device:()=>currentDevice,
+  username:MAIN_USERNAME,email:MAIN_EMAIL,maxDevices:MAX_DEVICES,can,role:currentRole,device:currentAuthorizedDevice,isOnlineUnlocked:()=>unlocked,
   login,unlockWithBiometric,toggleBiometric,setLockMinutes,lockNow,logout,
   openDevices,closeDevices,renderDevices,renameDevice,toggleDevice,permissionsDevice,removeDevice,
   appearanceSync,restorePreviousTheme,pushAppearance,pullAppearanceIfNeeded,
