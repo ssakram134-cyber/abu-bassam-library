@@ -637,6 +637,30 @@ async function testCameraCaptureCancelledAfterClose(){
     throw new Error('valid camera capture no longer sends image to WebView');
 }
 
+function testVaultSyncConflictRules(){
+  const source=read('document-vault-runtime.js');
+  const begin=source.indexOf('function uploadedSnapshotUnchanged(');
+  const end=source.indexOf('async function dbCommitUpload(',begin);
+  const remote=source.slice(source.indexOf('function remoteSnapshotStillCurrent('),source.indexOf('async function dbReceiveRemoteIfUnchanged('));
+  if(begin<0||end<=begin||!remote.startsWith('function remoteSnapshotStillCurrent('))throw Error('vault conflict guards missing');
+  const rules=vm.runInNewContext('(()=>{'+source.slice(begin,end)+remote+'return {mergeUploadReceipt,remoteSnapshotStillCurrent}})()');
+  const a={id:'x',name:'old',localEditToken:'one',updatedAt:'time',folder:'',favorite:false,size:10,mime:'image/png',deleted:false,syncState:'pending'};
+  const b={...a,name:'new',localEditToken:'two',blob:{data:'new'}};
+  const late=rules.mergeUploadReceipt(b,a,'remote-new');
+  if(late.name!=='new'||late.blob!==b.blob||late.syncState!=='pending'||late.remoteUpdatedAt!=='remote-new')
+    throw Error('late upload overwrote local edit');
+  if(rules.mergeUploadReceipt(a,a,'remote-new').syncState!=='synced')throw Error('matching upload not acknowledged');
+  if(rules.mergeUploadReceipt(null,a,'remote-new')!==null)throw Error('deleted row resurrected');
+  if(rules.remoteSnapshotStillCurrent(b,{...b,syncState:'synced'}))throw Error('late download overwrote pending edit');
+  if(!rules.remoteSnapshotStillCurrent({...a,syncState:'synced'}, {...a,syncState:'synced'}))
+    throw Error('safe download was rejected');
+  if(rules.remoteSnapshotStillCurrent({...b,syncState:'synced'}, {...a,syncState:'synced'}))
+    throw Error('outdated download was accepted');
+  for(const marker of ['tx=db.transaction(STORE,\'readwrite\')','await dbCommitUpload(item,saved?.updated_at)',
+    'await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))'])
+    need(source,marker,'atomic vault conflict handling');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -925,7 +949,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
