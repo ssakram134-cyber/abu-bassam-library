@@ -622,10 +622,10 @@ async function testBackupIndexedDbConnectionLifecycle(){
     };
     return {state,run:create(()=>Promise.resolve(db))}
   };
-  const ok=make('ok'),read=ok.run();
+  const ok=make('ok'),reading=ok.run();
   for(let i=0;i<3;i++)await Promise.resolve();
   ok.state.req.onsuccess();
-  if((await read)?.[0]?.id!=='safe'||ok.state.closed!==1)
+  if((await reading)?.[0]?.id!=='safe'||ok.state.closed!==1)
     throw new Error('backup success did not close database');
   const failure=make('failure'),broken=failure.run();
   for(let i=0;i<3;i++)await Promise.resolve();
