@@ -235,8 +235,42 @@ function permissionForTarget(target){if(!target)return'';const onclick=String(ta
 function guardClicks(){document.addEventListener('click',event=>{const target=event.target?.closest?.('button,[role="button"]');const need=permissionForTarget(target);if(!need||(sessionUnlocked()&&window.AbuBassamSecurity?.role?.()==='owner'))return;if(!sessionUnlocked()||!window.AbuBassamSecurity?.can?.(need)){event.preventDefault();event.stopImmediatePropagation();toast('هذه العملية متاحة للحساب الرئيسي فقط')}},true)}
 
 function appearancePayload(){return{theme:localStorage.getItem('theme')||'default',typography:readJson('abuBassamTypographyV5',{})}}
-async function pushAppearance(){if(!cloud()?.isConnected?.()||!can('appearance')||currentDevice?.role!=='owner')return;const payload=appearancePayload(),stamp=JSON.stringify(payload);if(stamp===appearanceStamp)return;appearanceStamp=stamp;try{await cloud().upsert('appearance','shared',payload)}catch(e){}}
-async function pullAppearanceIfNeeded(){if(localStorage.getItem(APPEARANCE_SYNC_KEY)!=='1'||!cloud()?.isConnected?.())return;try{const row=await cloud().get('appearance','shared');if(!row?.data)return;const data=row.data;if(data.theme){localStorage.setItem(PREVIOUS_THEME_KEY,localStorage.getItem('theme')||'default');localStorage.setItem('theme',data.theme);if(typeof window.applyTheme==='function')window.applyTheme(data.theme)}if(data.typography&&typeof data.typography==='object'){localStorage.setItem('abuBassamTypographyV5',JSON.stringify(data.typography));window.AbuBassamTypography?.applyApp?.()}appearanceStamp=JSON.stringify(appearancePayload())}catch(e){}}
+async function pushAppearance(){
+  if(!cloud()?.isConnected?.()||!can('appearance')||currentRole()!=='owner')return;
+  const epoch=deviceSessionEpoch,user=String(cloud()?.session?.()?.user?.id||'');
+  if(!user)return;
+  const payload=appearancePayload(),stamp=JSON.stringify(payload);
+  if(stamp===appearanceStamp)return;
+  try{
+    await cloud().upsert('appearance','shared',payload);
+    // Only successful updates in the same session count as synchronized.
+    if(epoch===deviceSessionEpoch&&unlocked&&user===String(cloud()?.session?.()?.user?.id||''))
+      appearanceStamp=stamp
+  }catch(e){}
+}
+async function pullAppearanceIfNeeded(){
+  if(localStorage.getItem(APPEARANCE_SYNC_KEY)!=='1'||!cloud()?.isConnected?.()||!unlocked)return;
+  const epoch=deviceSessionEpoch,user=String(cloud()?.session?.()?.user?.id||'');
+  if(!user)return;
+  try{
+    const row=await cloud().get('appearance','shared');
+    if(epoch!==deviceSessionEpoch||!unlocked||
+      user!==String(cloud()?.session?.()?.user?.id||'')||
+      localStorage.getItem(APPEARANCE_SYNC_KEY)!=='1')return;
+    if(!row?.data)return;
+    const data=row.data;
+    if(data.theme){
+      localStorage.setItem(PREVIOUS_THEME_KEY,localStorage.getItem('theme')||'default');
+      localStorage.setItem('theme',data.theme);
+      if(typeof window.applyTheme==='function')window.applyTheme(data.theme)
+    }
+    if(data.typography&&typeof data.typography==='object'){
+      localStorage.setItem('abuBassamTypographyV5',JSON.stringify(data.typography));
+      window.AbuBassamTypography?.applyApp?.()
+    }
+    appearanceStamp=JSON.stringify(appearancePayload())
+  }catch(e){}
+}
 async function appearanceSync(enabled){localStorage.setItem(APPEARANCE_SYNC_KEY,enabled?'1':'0');if(enabled){if(currentDevice?.role==='owner')await pushAppearance();else await pullAppearanceIfNeeded()}log('مزامنة المظهر',enabled?'مفعلة':'متوقفة')}
 function installAppearanceHooks(){if(window.AbuBassamSettings?.theme&&!window.AbuBassamSettings.theme.__securityWrapped){const original=window.AbuBassamSettings.theme;const wrapped=function(key){localStorage.setItem(PREVIOUS_THEME_KEY,localStorage.getItem('theme')||'default');const out=original.apply(this,arguments);setTimeout(pushAppearance,80);return out};wrapped.__securityWrapped=true;window.AbuBassamSettings.theme=wrapped}if(window.AbuBassamTypography?.global&&!window.AbuBassamTypography.global.__securityWrapped){const original=window.AbuBassamTypography.global;const wrapped=function(){const out=original.apply(this,arguments);setTimeout(pushAppearance,100);return out};wrapped.__securityWrapped=true;window.AbuBassamTypography.global=wrapped}}function wrapAppearance(){installAppearanceHooks();document.addEventListener('abu-runtime-loaded',installAppearanceHooks);document.addEventListener('abu-settings-ready',installAppearanceHooks)}
 function restorePreviousTheme(){const prev=localStorage.getItem(PREVIOUS_THEME_KEY);if(!prev)return toast('لا يوجد مظهر سابق محفوظ');const current=localStorage.getItem('theme')||'default';localStorage.setItem(PREVIOUS_THEME_KEY,current);localStorage.setItem('theme',prev);if(typeof window.applyTheme==='function')window.applyTheme(prev);window.AbuBassamSettings?.open?.();setTimeout(()=>window.AbuBassamSettings?.theme?.(prev),30);toast('تمت استعادة المظهر السابق')}
