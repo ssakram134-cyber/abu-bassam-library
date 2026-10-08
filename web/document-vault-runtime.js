@@ -97,6 +97,25 @@ async function dbCommitUpload(snapshot,remoteVersion){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_SYNC_ACK_ABORTED'))
   })
 }
+async function dbResolvePendingConflict(snapshot,replacement,localCopy=null){
+  // Commit preservation of a local copy and any remote replacement atomically.
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+    const req=store.get(snapshot.id);
+    let applied=false;
+    req.onsuccess=()=>{
+      if(!uploadedSnapshotUnchanged(req.result,snapshot))return;
+      if(localCopy)store.put({...localCopy,localEditToken:uuid()});
+      if(replacement)store.put(replacement);
+      else store.delete(snapshot.id);
+      applied=true
+    };
+    tx.oncomplete=()=>resolve(applied);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_CONFLICT_COMMIT_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_CONFLICT_COMMIT_ABORTED'))
+  })
+}
 function remoteSnapshotStillCurrent(current,observed){
   if(!observed)return !current;
   if(!current||current.syncState==='pending')return false;
@@ -339,21 +358,20 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbDelete(item.id);continue}
+          if(remote?.deleted){await dbResolvePendingConflict(item,null);continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
-          await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+          await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion));
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbPut(copy);await dbDelete(item.id);continue
+          await dbResolvePendingConflict(item,null,copy);continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-        await dbPut(localCopy);
-        await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+        await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy);
         continue
       }
 
