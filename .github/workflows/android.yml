@@ -87,7 +87,8 @@ jobs:
           test -s dist/SIGNING_CERTIFICATE.txt
 
       - name: Upload APK artifacts
-        if: ${{ github.event_name != 'pull_request' }}
+        # QA artifact for trusted same-repo PRs only; default signing key is not for production.
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: abu-bassam-android-test-${{ github.event.pull_request.head.sha || github.sha }}
@@ -97,4 +98,4 @@ jobs:
             dist/SHA256.txt
             dist/SIGNING_CERTIFICATE.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
