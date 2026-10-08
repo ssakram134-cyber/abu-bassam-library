@@ -421,6 +421,33 @@ async function testCameraCaptureCancelledAfterClose(){
     +'const closeCamera=()=>{cameraSessionRef.current++};'
     +'const inject=(name,payload)=>events.push([name,payload]);'
     +'return {capture:async()=>{'+body+'},close:closeCamera}}');
+  const openBegin=native.indexOf("  const openCamera = useCallback(async (mode, frameKind = 'paper') => {");
+  const openEnd=native.indexOf('  }, [cameraError, cameraPermission, requestCameraPermission]);',openBegin);
+  if(openBegin<0||openEnd<=openBegin)throw new Error('camera permission handler missing');
+  const openBody=native.slice(openBegin+"  const openCamera = useCallback(async (mode, frameKind = 'paper') => {".length,openEnd);
+  const makeOpen=vm.runInNewContext('(requestPermission,sessionRef,modeEvents,permission)=>{'
+    +'const cameraSessionRef=sessionRef,cameraOpenPendingRef={current:false},'
+    +'cameraPermission=permission,requestCameraPermission=requestPermission,barcodeScanHandledRef={current:false};'
+    +'const cameraError=()=>modeEvents.push("error");'
+    +'const setCameraMode=mode=>modeEvents.push(mode),setCameraReady=()=>{},setBarcodeLocked=()=>{},'
+    +'setTorch=()=>{},setCameraFacing=()=>{},setCameraFrameKind=()=>{};'
+    +'return {open:async(mode,frameKind="paper")=>{'+openBody+'},pending:cameraOpenPendingRef}}');
+  let finishPermission=null,permissionCalls=0;
+  const modes=[],sessionRef={current:1};
+  const opener=makeOpen(()=>{permissionCalls++;return new Promise(resolve=>{finishPermission=resolve})},
+    sessionRef,modes,{granted:false});
+  const firstOpen=opener.open('barcode');
+  const duplicateOpen=opener.open('scan');
+  sessionRef.current++;
+  finishPermission({granted:true});
+  await Promise.all([firstOpen,duplicateOpen]);
+  if(permissionCalls!==1||modes.length||opener.pending.current)
+    throw new Error('canceled camera permission reopened an old section or duplicated the system prompt');
+  const normalModes=[],normalOpener=makeOpen(async()=>({granted:true}),{current:6},
+    normalModes,{granted:true});
+  await normalOpener.open('barcode');
+  if(normalModes.length!==1||normalModes[0]!=='barcode')
+    throw new Error('normal camera permission failed to open scanner');
   let finish;
   const pendingPhoto=new Promise(resolve=>{finish=resolve});
   const oldEvents=[],old=make(pendingPhoto,{current:3},oldEvents);
