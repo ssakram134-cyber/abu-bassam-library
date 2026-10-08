@@ -30,12 +30,19 @@ need(bridge,'__abuOriginal','bridge must retain the raw operation writer');
 need(bridge,'ops.list?.()?.[0]','bridge must read the persisted operation id');
 need(bridge,'abuBassamOperationDeviceScopeV1','operation ownership map');
 need(bridge,'bindOperationToDevice','new operations must be bound to their originating device');
-need(bridge,'attempts>50','bridge must survive startup wrapper races');
+need(bridge,'function refreshBridge(){install();loadSecondaryPrivacy();loadCorrections()}','bridge must use deterministic lifecycle refresh');
+need(bridge,"document.addEventListener('abu-bassam-auth-changed',refreshBridge)",'bridge must refresh on auth changes');
+forbid(bridge,'setInterval(','bridge must not poll for startup races');
+forbid(bridge,'7000','bridge must not use delayed startup retry');
 need(privacy,"!=='operation'",'legacy operation cloud traffic must be intercepted');
 need(privacy,"role()!=='secondary'",'secondary local log isolation');
 need(privacy,'ownerId===id','secondary logs must be filtered by exact device id');
 need(privacy,'abuBassamOperationDeviceScopeV1','secondary logs must use the ownership map');
-need(privacy,'delayedClean','startup/online sync race must be cleaned repeatedly');
+need(privacy,'function refreshPrivacy(){const installed=installClientBoundary();forceClean();','operation privacy must use deterministic lifecycle refresh');
+need(privacy,"document.addEventListener('abu-bassam-auth-changed',refreshPrivacy)",'operation privacy must refresh on auth changes');
+need(privacy,"document.addEventListener('abu-bassam-security-state',refreshPrivacy)",'operation privacy must refresh on security state');
+forbid(privacy,'setInterval(','operation privacy must not poll');
+forbid(privacy,'[250,800,1800,3500,7000]','operation privacy must not use retry timer ladder');
 forbid(privacy,'deviceName()','secondary isolation must not fall back to device name');
 need(secondaryPrivacy,"role()!=='secondary'",'secondary notification inbox must be isolated');
 need(secondaryPrivacy,'ownerId===id','operation notifications must match exact device id');
@@ -47,7 +54,9 @@ need(secondaryPrivacy,'ownQueue','foreign queued audit events must be purged bef
 need(runtime,'abuNotificationBell','bell button');need(runtime,'abuNotificationBadge','unread badge');need(runtime,'markAll','mark all read');need(runtime,'clearRead','clear read notifications');
 need(runtime,"function markAll(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsMarkRead'))",'bulk mark-read must require notificationsManage and notificationsMarkRead');
 need(runtime,"function clearRead(){if(!requirePermission('notificationsManage')||!requirePermission('notificationsDelete'))",'bulk clear-read must require notificationsManage and notificationsDelete');
-need(runtime,"setInterval(()=>{if(document.visibilityState==='hidden')return;hookOperations();flushAuditQueue();if(isOwner())pullOwnerActivity(true)},120000)",'periodic notification sync must pause while the app is hidden');
+need(runtime,"setInterval(()=>{if(document.visibilityState==='hidden')return;syncOperationBridge(true)},120000)",'periodic notification sync must pause while the app is hidden');
+need(runtime,'function syncOperationBridge(notifyOwner=false)','notification operation bridge must be event driven');
+forbid(runtime,'},250)','notification center must not restore startup polling');
 for(const marker of [
   "function canViewNotification(n)",
   "notificationsMaintenance",
