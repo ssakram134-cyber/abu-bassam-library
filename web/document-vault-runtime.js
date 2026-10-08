@@ -97,6 +97,31 @@ async function dbCommitUpload(snapshot,remoteVersion){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_SYNC_ACK_ABORTED'))
   })
 }
+function remoteSnapshotStillCurrent(current,observed){
+  if(!observed)return !current;
+  if(!current||current.syncState==='pending')return false;
+  return ['localEditToken','updatedAt','remoteUpdatedAt','name','folder','favorite','size','deleted']
+    .every(key=>current[key]===observed[key])
+}
+async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord){
+  // Cloud downloads may finish after a user has edited or deleted the row.
+  // Check again inside the same write transaction before replacing content.
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+    let written=false;
+    const req=store.get(remoteItemRecord.id);
+    req.onsuccess=()=>{
+      if(remoteSnapshotStillCurrent(req.result,observed)){
+        store.put(remoteItemRecord);
+        written=true
+      }
+    };
+    tx.oncomplete=()=>resolve(written);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_REMOTE_RECEIVE_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_REMOTE_RECEIVE_ABORTED'))
+  })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 
 function addCss(){
@@ -362,7 +387,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
-      await dbPut(remoteItem(data,blob,remoteVersion))
+      await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))
     }
     syncSet(LAST_SYNC_KEY,String(Date.now()));
     await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
