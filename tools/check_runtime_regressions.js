@@ -25,10 +25,57 @@ const device=read('device-name-runtime.js');
 for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
-for(const marker of ["await stabilizeIdentity();","function heartbeatSafely()","void heartbeat().catch(","setTimeout(heartbeatSafely,200)","setInterval(heartbeatSafely,120000)","window.addEventListener('online',heartbeatSafely)"])
+for(const marker of ["await stabilizeIdentity();","function heartbeatSafely()","void heartbeat().catch(","setTimeout(heartbeatSafely,200)","scheduleHeartbeat();","document.addEventListener('visibilitychange'","if(heartbeatPending)return heartbeatPending","window.addEventListener('online',heartbeatSafely)"])
   need(device,marker,'device identity startup and background heartbeat separation');
 for(const marker of ["setTimeout(heartbeat,200)","window.addEventListener('online',heartbeat)","setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()}"])
   forbid(device,marker,'unhandled async device heartbeat');
+async function testSecureDeviceHeartbeatLifecycle(){
+  const device=read('device-name-runtime.js');
+  const begin=device.indexOf('  let heartbeatPending=null,heartbeatTimer=null;');
+  const end=device.indexOf('  async function adoptIdentity(',begin);
+  if(begin<0||end<=begin)throw new Error('device identity heartbeat source missing');
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {stabilizeIdentity,document,setTimeout,clearTimeout,console}=deps;'
+    +device.slice(begin,end)
+    +';return {heartbeat,heartbeatSafely,scheduleHeartbeat,state:()=>({pending:!!heartbeatPending,timer:heartbeatTimer})}}');
+  let runs=0,finish=null;
+  const timers=new Map();let seq=0;
+  const dom={visibilityState:'visible'};
+  const work=factory({
+    stabilizeIdentity:()=>{runs++;return new Promise(resolve=>{finish=resolve})},
+    document:dom,
+    setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id},
+    clearTimeout:id=>timers.delete(id),
+    console:{warn(){}}
+  });
+  const p1=work.heartbeat(),p2=work.heartbeat();
+  if(p1!==p2||runs!==1)throw new Error('simultaneous identity checks were not deduplicated');
+  finish({id:'device'});
+  await Promise.all([p1,p2]);
+  await Promise.resolve();
+  const p3=work.heartbeat();
+  if(runs!==2)throw new Error('identity check lock did not release after success');
+  finish({id:'device'});await p3;
+  work.scheduleHeartbeat();
+  if(timers.size!==1)throw new Error('visible heartbeat did not set exactly one timer');
+  const [id,fire]=[...timers][0];timers.delete(id);fire();
+  if(timers.size!==1)throw new Error('heartbeat cycle created zero/multiple recurring timers');
+  dom.visibilityState='hidden';
+  work.scheduleHeartbeat();
+  if(timers.size)throw new Error('identity heartbeat kept running in background');
+  dom.visibilityState='visible';
+  work.scheduleHeartbeat();
+  if(timers.size!==1)throw new Error('identity heartbeat did not resume');
+  const failed=factory({
+    stabilizeIdentity:()=>{runs++;return Promise.reject(new Error('SECURESTORE_UNAVAILABLE'))},
+    document:dom,setTimeout:()=>1,clearTimeout:()=>{},console:{warn(){}}
+  });
+  let rejected=false;
+  try{await failed.heartbeat()}catch(error){rejected=error.message==='SECURESTORE_UNAVAILABLE'}
+  await Promise.resolve();
+  if(!rejected||failed.state().pending)throw new Error('failed device heartbeat remained stuck');
+}
+
 // Exercise the actual startup-failure handler against the shipped image-only
 // splash markup. A missing #splashText must not leave the failure invisible.
 {
@@ -841,7 +888,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
