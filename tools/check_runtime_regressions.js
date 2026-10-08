@@ -702,6 +702,38 @@ async function testVaultConflictCommitIsolation(){
     throw Error('late remote deletion erased an edited document');
 }
 
+async function testBackupRestoreExclusiveLock(){
+  const src=read('backup-center-runtime.js');
+  const b=src.indexOf("async function backupNow("),d=src.indexOf("async function downloadBytes(",b);
+  const r=src.indexOf("async function restoreCloud("),e=src.indexOf("async function deleteCloud(",r);
+  if([b,d,r,e].some(x=>x<0))throw Error('restore functions missing');
+  const factory=vm.runInNewContext('(deps)=>{let busy=false;'
+    +'const {can,status,fingerprint,stateGet,stateSet,stateRemove,packageBytes,digest,CHUNK,api,uploadPart,retention,APP,log,fmt,refreshList,paint,downloadBytes,dev,window,File,alert,confirm}=deps;'
+    +'const LASTFP="fp",LAST="last",LASTERR="error",RETRY="retry";'
+    +src.slice(b,d)+src.slice(r,e)+';return {backupNow,restoreCloud,busy:()=>busy}}');
+  let resume=null,backupCount=0,restoreCount=0;
+  const app=factory({
+    can:()=>true,status:()=>{},fingerprint:()=>new Promise(resolve=>{resume=resolve}),
+    stateGet:()=>null,stateSet:()=>{},stateRemove:()=>{},
+    packageBytes:async()=>({bytes:new Uint8Array([1]),count:1}),
+    digest:async()=>"a".repeat(64),CHUNK:5242880,
+    api:async kind=>kind==='plan'?(backupCount++,{uploads:[],backup_id:'b1'}):{},
+    uploadPart:async()=>{},retention:()=>7,APP:'1',log:()=>{},fmt:()=>'',refreshList:async()=>{},paint:()=>{},
+    downloadBytes:async()=>({bytes:new Uint8Array([1]),backup:{branch_device_id:'phone'}}),
+    dev:()=>({device_id:'phone'}),window:{AbuDocumentVaultHardening:{restore:async()=>{restoreCount++;return true}}},
+    File:class{constructor(){}},alert:()=>{},confirm:()=>true
+  });
+  const active=app.restoreCloud('old');
+  for(let i=0;i<8&&!resume;i++)await Promise.resolve();
+  if(!resume||!app.busy())throw Error('restore dropped exclusive lock before snapshot');
+  let blocked=false;
+  try{await app.backupNow('manual')}catch(e){blocked=true}
+  if(!blocked||await app.restoreCloud('second')!==false)throw Error('parallel backup/restore accepted');
+  resume('verified');
+  if(await active!==true||backupCount!==1||restoreCount!==1||app.busy())
+    throw Error('restore did not complete or release exclusive lock');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -990,7 +1022,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
