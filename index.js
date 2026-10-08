@@ -161,6 +161,7 @@ function App() {
   const cameraOpenPendingRef = useRef(false);
   const captureInFlightRef = useRef(false);
   const bootFailureAlertShown = useRef(false);
+  const webViewGenerationRef = useRef(0);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -194,7 +195,8 @@ function App() {
     closeCamera();
     bootFailureAlertShown.current = false;
     setWebReady(false);
-    setWebViewKey((value) => value + 1);
+    webViewGenerationRef.current += 1;
+    setWebViewKey(webViewGenerationRef.current);
     if (notice) Alert.alert('استعادة واجهة التطبيق', notice);
   }, [closeCamera]);
   const reportBootFailure = useCallback((title, description) => {
@@ -218,7 +220,8 @@ function App() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (cameraMode) { closeCamera(); return true; }
-      if (!webReady) return false;
+      // Keep Android back from exiting the app while the secure UI restarts.
+      if (!webReady) return true;
       inject('AbuBassamNativeBackPress', { source: 'hardware', at: Date.now() });
       return true;
     });
@@ -537,12 +540,14 @@ function App() {
           if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});
           return false;
         }}
-        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
+        injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE}
+        onMessage={(event) => { if (webViewGenerationRef.current === webViewKey) void onWebMessage(event); }}
         onRenderProcessGone={(event) => {
+          if (webViewGenerationRef.current !== webViewKey) return;
           const crashed = !!event?.nativeEvent?.didCrash;
           restartWebView(crashed ? 'تعطلت عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.' : 'أوقف Android عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.');
         }}
-        onError={() => reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.')}
+        onError={() => { if (webViewGenerationRef.current === webViewKey) reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (
