@@ -325,6 +325,12 @@ function testImageImportLifecycle(){
   app.clearImages();
   readers[3].onload({target:{result:'data:image/png;base64,stale'}});
   if(app.images().length!==0)throw new Error('cleared images were reimported by a stale FileReader');
+  // A generic MIME from an Android document picker can still decode as an
+  // image; do not reject it by MIME prefix alone.
+  app.onImageSelect({target:{files:[{n:5}],value:'selected'}});
+  readers[4].onload({target:{result:'data:application/octet-stream;base64,generic-picture'}});
+  if(app.images()[0]?.src!=='data:application/octet-stream;base64,generic-picture')
+    throw new Error('generic Android MIME prevented an otherwise decodable image');
 }
 Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
