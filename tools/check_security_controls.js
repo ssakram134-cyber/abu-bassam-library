@@ -47,6 +47,29 @@ if(nativeOwners.length!==1||nativeOwners[0]!=='secure-sync-runtime.js')failures.
 
 for(const file of ['web/secure-sync-runtime.js','web/app-security-runtime.js','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'])try{new vm.Script(read(file),{filename:file})}catch(e){failures.push(file+': syntax '+e.message)}
 for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!JSON.parse(read('package.json')).dependencies?.[dep])failures.push('package.json missing '+dep);
+// Offline UI must never use unsigned legacy localStorage trust. It must
+// preserve a verified secondary role even if an older online owner device
+// snapshot remains in memory before a successful offline biometric check.
+forbid('web/app-security-runtime.js', [
+  "TRUST_KEY='abuBassamSecurityTrustV1'",
+  'function offlineAllowed()',
+  'function offlineUnlock()',
+  'else if(offlineAllowed())',
+]);
+need('web/app-security-runtime.js', [
+  'function sessionUnlocked(){return unlocked||window.AbuBassamSecurity?.isOfflineSession?.()===true}',
+  "if(!navigator.onLine||!cloud()?.isConnected?.())throw new Error(",
+  "void window.AbuBassamSecurity?.unlockWithBiometric?.()",
+  "if(need&&!window.AbuBassamSecurity?.can?.(need))",
+]);
+need('web/security-hardening-runtime.js', [
+  'if(offlineSession)return sec?.__offlineRole',
+  'if(offlineSession)return sec?.__offlineTrust',
+  'if(offlineSession){if(sec?.__offlineRole',
+  'sec.isOfflineSession=()=>offlineSession',
+  "state:'unlocked',offline:true,device:trust",
+]);
+
 // Behavior tests, not just source markers: reject network errors from the
 // credential lockout counter and verify secure-device-key persistence.
 const authSource=read('web/app-security-runtime.js');
@@ -111,6 +134,31 @@ async function verifyAuthStartupAndSecret(){
     try{await w.__ABU_SECURITY_BOOT_PROMISE__;success=true}catch(error){}
     if(success!==gateReady)throw new Error('security boot handshake accepted an absent login gate');
   }
+  // Reproduce a stale base owner session while a different verified offline
+  // secondary session is active. Neither role, device nor permissions may leak.
+  const hardening=read('web/security-hardening-runtime.js');
+  const effectiveBegin=hardening.indexOf('function effectiveRole(){');
+  const effectiveEnd=hardening.indexOf('async function refreshLimit()',effectiveBegin);
+  if(effectiveBegin<0||effectiveEnd<=effectiveBegin)throw new Error('effective offline authorization functions missing');
+  const secondary={role:'secondary',device_id:'verified-secondary',permissions:{cardsPrint:false,cardsEdit:true}};
+  const staleOwner={role:'owner',device_id:'old-online-owner'};
+  const mockWindow={AbuBassamSecurity:{
+    __baseDevice:()=>staleOwner,__baseCan:()=>true,
+    __offlineRole:'secondary',__offlineTrust:secondary,
+    __offlinePermissions:secondary.permissions
+  }};
+  const roleContext={window:mockWindow,offlineSession:true};
+  vm.runInNewContext(hardening.slice(effectiveBegin,effectiveEnd)+';var result={role:effectiveRole(),device:effectiveDevice(),print:effectiveCan("cardsPrint"),edit:effectiveCan("cardsEdit")}',roleContext);
+  if(roleContext.result.role!=='secondary'||roleContext.result.device.device_id!=='verified-secondary'||roleContext.result.print!==false||roleContext.result.edit!==true)
+    throw new Error('verified offline secondary privileges were replaced by stale owner data');
+  roleContext.offlineSession=false;
+  vm.runInNewContext('result={role:effectiveRole(),device:effectiveDevice(),print:effectiveCan("cardsPrint")}',roleContext);
+  if(roleContext.result.role!=='owner'||roleContext.result.device.device_id!=='old-online-owner'||roleContext.result.print!==true)
+    throw new Error('online authorization did not return to its base implementation');
+  // The original biometric handler must not perform unsigned offline login.
+  const originalBio=authSource.slice(authSource.indexOf('async function unlockWithBiometric(){'),authSource.indexOf('function lock(reason='));
+  if(originalBio.includes('offlineAllowed()')||originalBio.includes('localTrust()'))
+    throw new Error('legacy biometric bypass remains reachable');
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
@@ -145,5 +193,5 @@ async function verifyAuthStartupAndSecret(){
 }
 verifyAuthStartupAndSecret().then(()=>{
   if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exitCode=1;return}
-  console.log('Security/control checks passed: credentials distinguish network failures, device keys survive write faults, and Android waits for the initialized security gate.');
+  console.log('Security/control checks passed: signed offline secondary privileges outrank stale owner state, legacy biometric bypass is forbidden, device keys survive write faults, and the native security gate initializes.');
 }).catch(error=>{failures.push('auth/startup behavior: '+error.message);process.stderr.write(failures.join('\n')+'\n');process.exitCode=1});
