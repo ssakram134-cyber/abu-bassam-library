@@ -25,6 +25,10 @@ const device=read('device-name-runtime.js');
 for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
+for(const marker of ["await stabilizeIdentity();","function heartbeatSafely()","void heartbeat().catch(","setTimeout(heartbeatSafely,200)","setInterval(heartbeatSafely,120000)","window.addEventListener('online',heartbeatSafely)"])
+  need(device,marker,'device identity startup and background heartbeat separation');
+for(const marker of ["setTimeout(heartbeat,200)","window.addEventListener('online',heartbeat)","setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()}"])
+  forbid(device,marker,'unhandled async device heartbeat');
 // Exercise the actual startup-failure handler against the shipped image-only
 // splash markup. A missing #splashText must not leave the failure invisible.
 {
