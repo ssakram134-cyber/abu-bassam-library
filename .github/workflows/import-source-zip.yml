@@ -224,4 +224,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Review imported Abu Bassam source" \
-            --body "Automated source import passed archive preflight and trusted static validation. The trusted workflow and validator were preserved. Review the diff first, then manually run the Android checks and test build workflow on this source-import branch before merging. This workflow never writes imported source directly to main."
+            --body "Automated source import passed archive preflight and trusted static validation. The trusted workflow and validator were preserved. Review the diff first, then run npm run check:web against the source locally before merging. APK builds and production signing are disabled in GitHub Actions. This workflow never writes imported source directly to main."
