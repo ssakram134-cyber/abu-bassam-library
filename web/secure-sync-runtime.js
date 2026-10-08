@@ -23,11 +23,17 @@
       const requestId = 'native-sec-' + Date.now() + '-' + (++nativeSeq);
       const timer = setTimeout(() => { nativePending.delete(requestId); reject(new Error('انتهت مهلة العملية الأمنية')); }, 15000);
       nativePending.set(requestId, { resolve, reject, timer });
-      Android.security(action, requestId, payload || {});
+      try { Android.security(action, requestId, payload || {}); }
+      catch (error) {
+        clearTimeout(timer);
+        nativePending.delete(requestId);
+        reject(error);
+      }
     });
   }
   window.AbuBassamNativeSecurityResult = function (message) {
     const data = typeof message === 'string' ? (() => { try { return JSON.parse(message); } catch (_) { return {}; } })() : (message || {});
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
     const slot = nativePending.get(data.requestId);
     if (!slot) return;
     clearTimeout(slot.timer);
