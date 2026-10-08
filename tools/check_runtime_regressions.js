@@ -759,6 +759,27 @@ async function testVaultDeleteAckPreservesNewEdits(){
   if(await call(clean)!==false||!table.has('one'))throw Error('remote delete removed newer version');
 }
 
+function testVaultPendingSyncSchedule(){
+  const source=read('document-vault-runtime.js');
+  const b=source.indexOf('function automaticDue(){'),e=source.indexOf('function vaultOwner(){',b);
+  if(b<0||e<=b)throw Error('vault sync scheduler missing');
+  const make=vm.runInNewContext('(deps)=>{'
+    +'const {autoSync,navigator,syncPolicy,wifiVerified,hasPending,syncGet,LAST_SYNC_KEY}=deps;'
+    +source.slice(b,e)+';return automaticDue}');
+  function due(policy,pending,online=true,wifi=true){
+    const fn=make({autoSync:()=>true,navigator:{onLine:online},syncPolicy:()=>policy,
+      wifiVerified:()=>wifi,hasPending:()=>pending,syncGet:()=>String(Date.now()-10000),
+      LAST_SYNC_KEY:'last'});
+    return fn()
+  }
+  for(const mode of ['daily','weekly'])
+    if(!due({mode,wifiOnly:false},true))throw Error('pending vault edits delayed until calendar cadence: '+mode);
+  if(due({mode:'manual',wifiOnly:false},true))throw Error('manual-only policy was ignored');
+  if(due({mode:'daily',wifiOnly:true},true,true===false))throw Error('Wi-Fi requirement was ignored');
+  if(due({mode:'daily',wifiOnly:false},true,false,false))throw Error('offline scheduler unexpectedly ran');
+  if(due({mode:'daily',wifiOnly:false},false))throw Error('unchanged vault was synced ahead of daily schedule');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1047,7 +1068,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
