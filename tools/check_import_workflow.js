@@ -44,7 +44,7 @@ for(const [marker,label] of [
   ['unset GH_TOKEN AUTH_ORIGIN','push credentials cleared after use'],
   ['gh pr create','review PR creation'],
   ['--base main','PR targets main'],
-  ['manually run the Android checks and test build workflow','manual post-review build instruction']
+  ['APK builds and production signing are disabled in GitHub Actions.','no builds in Actions after source ZIP import']
 ]) need(workflow,marker,label);
 
 for(const [marker,label] of [
