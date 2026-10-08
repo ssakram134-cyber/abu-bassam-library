@@ -93,6 +93,53 @@ else{
       errors.push('native bridge reinjection replaced a live bridge or its output callback');
   }catch(error){errors.push('native bridge reinjection simulation failed: '+error.message)}
 }
+
+async function testNativeOutputFailures(){
+  if(!bridgeMatch)throw new Error('native output bridge missing');
+  const raw=bridgeMatch[1];
+  const first=raw.indexOf('window.__ABU_APP_META__ = ');
+  const last=raw.indexOf(';\n  function send',first);
+  if(first<0||last<first)throw new Error('bridge metadata delimiter missing');
+  const code=raw.slice(0,first)+'window.__ABU_APP_META__ = {}'+raw.slice(last);
+  function makeBridge(postMessage){
+    const timers=new Map();let sequence=0;
+    const window={};
+    if(postMessage)window.ReactNativeWebView={postMessage};
+    const context=vm.createContext({window,
+      setTimeout:fn=>{const id=++sequence;timers.set(id,fn);return id},
+      clearTimeout:id=>timers.delete(id)
+    });
+    vm.runInContext(code,context);
+    return {window,context,timers};
+  }
+  for(const bridge of [null,()=>{throw new Error('BRIDGE_DESTROYED')}]){
+    const test=makeBridge(bridge);let rejected=false;
+    try{await test.window.Android.requestOutput('printHtml',{html:'test'})}
+    catch(e){rejected=e.message==='ANDROID_BRIDGE_UNAVAILABLE'}
+    if(!rejected||test.timers.size)throw new Error('failed native output send left an active request');
+  }
+  const sent=[],good=makeBridge(raw=>sent.push(JSON.parse(raw)));
+  const save=good.window.Android.requestOutput('savePdfHtml',{name:'a.pdf'});
+  const print=good.window.Android.requestOutput('printHtml',{html:'page'});
+  if(sent.length!==2||sent[0].requestId===sent[1].requestId||good.timers.size!==2)
+    throw new Error('native requests were not registered independently');
+  const callback=good.window.AbuBassamNativeOutputResult;
+  vm.runInContext(code,good.context);
+  if(callback!==good.window.AbuBassamNativeOutputResult)
+    throw new Error('bridge reinjection lost pending callbacks');
+  callback({requestId:sent[1].requestId,ok:true,value:'printed'});
+  callback({requestId:sent[0].requestId,ok:true,value:'saved'});
+  if((await print)!=='printed'||(await save)!=='saved'||good.timers.size)
+    throw new Error('native output responses failed when delivered out of order');
+  const hang=good.window.Android.requestOutput('printHtml',{html:'stuck'});
+  const timer=[...good.timers.entries()][0];
+  if(!timer)throw new Error('no fallback output deadline');
+  good.timers.delete(timer[0]);timer[1]();
+  let expired=false;
+  try{await hang}catch(e){expired=e.message==='OUTPUT_TIMEOUT'}
+  if(!expired||good.timers.size)throw new Error('native output deadline did not reject');
+}
+
 for(const metadataMarker of ["window.__ABU_APP_META__ =","releaseDate: RELEASE_DATE"])need(native,metadataMarker,'canonical native app metadata');
 for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js','app-security-runtime.js','security-hardening-runtime.js','backup-center-runtime.js','settings-corrections-runtime.js']){
   const src=read(file);need(src,'__ABU_APP_META__','runtime app metadata');forbid(src,"'4.3.2'",'runtime hard-coded app version');
@@ -646,7 +693,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
