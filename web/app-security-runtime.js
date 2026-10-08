@@ -24,6 +24,7 @@ const pending=new Map();
 let requestSeq=0;
 let currentDevice=null;
 let deviceSessionEpoch=0;
+let deviceTouchSeq=0;
 let deviceSecret='';
 let deviceSecretPending=null;
 let unlocked=false;
@@ -128,20 +129,25 @@ async function registerDevice(){
 }
 async function touchDevice(){
   if(!unlocked||!cloud()?.isConnected?.()||!navigator.onLine)return;
-  const epoch=deviceSessionEpoch;
+  const epoch=deviceSessionEpoch,touchSeq=++deviceTouchSeq;
   try{
     const secret=await getSecret(),id=identity(),name=localStorage.getItem(DEVICE_NAME_KEY)||deviceInfo.model||'هاتف';
-    if(epoch!==deviceSessionEpoch||!unlocked)return;
+    if(epoch!==deviceSessionEpoch||touchSeq!==deviceTouchSeq||!unlocked)return;
     const {data,error}=await client().rpc('abu_bassam_touch_device',{p_device_id:id.id,p_secret:secret,p_device_name:name,p_model:deviceInfo.model||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});
     // A response from before logout/lock may not replace the next session's role.
-    if(epoch!==deviceSessionEpoch||!unlocked)return;
+    if(epoch!==deviceSessionEpoch||touchSeq!==deviceTouchSeq||!unlocked)return;
     if(error)throw error;
     const row=normalizeDevice(data);
     if(!row)throw new Error('DEVICE_NOT_AUTHORIZED');
     if(row.active===false)throw new Error('DEVICE_DISABLED');
-    currentDevice=row
+    const previous=JSON.stringify({role:currentDevice?.role,active:currentDevice?.active,permissions:currentDevice?.permissions||{}});
+    currentDevice=row;
+    if(previous!==JSON.stringify({role:row.role,active:row.active,permissions:row.permissions||{}})){
+      renderSecurityCard();
+      emitSecurityState('unlocked')
+    }
   }catch(e){
-    if(epoch===deviceSessionEpoch&&unlocked&&/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))
+    if(epoch===deviceSessionEpoch&&touchSeq===deviceTouchSeq&&unlocked&&/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))
       lock('هذا الجهاز غير مصرح له بالدخول')
   }
 }
@@ -294,7 +300,7 @@ window.AbuBassamSecurity={
   openDevices,closeDevices,renderDevices,renameDevice,toggleDevice,permissionsDevice,removeDevice,
   appearanceSync,restorePreviousTheme,pushAppearance,pullAppearanceIfNeeded,
   back,home,focus,exit,
-  onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.())try{await registerDevice()}catch(e){}},
+  onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.()&&navigator.onLine)await touchDevice()},
 };
 
 // Export the *completion* of async login-gate initialization, not the moment
