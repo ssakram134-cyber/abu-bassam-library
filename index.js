@@ -52,6 +52,10 @@ const SECURE_KEYS = new Set([
 
 const ANDROID_BRIDGE = `
 (function () {
+  // The bridge is injected both before and after content load. Keep pending
+  // native requests and their callbacks intact across the second injection.
+  if (window.__ABU_NATIVE_BRIDGE_INSTALLED_V1__) return;
+  window.__ABU_NATIVE_BRIDGE_INSTALLED_V1__ = true;
   window.__ABU_APP_META__ = ${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })};
   function send(type, payload) {
     try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
