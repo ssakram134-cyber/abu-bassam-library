@@ -62,6 +62,17 @@ need('web/app-security-runtime.js', [
   "void window.AbuBassamSecurity?.unlockWithBiometric?.()",
   "if(need&&!window.AbuBassamSecurity?.can?.(need))",
 ]);
+need('web/app-security-runtime.js', ["if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return false;"]);
+need('web/security-hardening-runtime.js', [
+  'offlineRevalidationEpoch=epoch',
+  'if(offlineRevalidationPending&&offlineRevalidationEpoch===offlineEpoch)',
+  "if(event?.detail?.state==='locked'){if(offlineSession)clearOfflineState();else offlineEpoch++;}",
+  'if(baseLogout)sec.logout=async function(...args){const didLogout=await baseLogout(...args);',
+  'if(startEpoch!==offlineEpoch)',
+]);
+forbid('web/security-hardening-runtime.js', [
+  'await clearTrust();clearOfflineState();return baseLogout(...args)'
+]);
 need('web/security-hardening-runtime.js', [
   'if(offlineSession)return sec?.__offlineRole',
   'if(offlineSession)return sec?.__offlineTrust',
@@ -247,6 +258,39 @@ async function verifyAuthStartupAndSecret(){
   if((await lockedRequest)!==false||userLocked.state().grants)
     throw new Error('canceled fingerprint reopened a locked session');
 
+  // A delayed RPC from a previous session may arrive after its lock/logout.
+  // Only the matching offline epoch may restore an authorized device.
+  const validationStart=hardening.indexOf('async function revalidateOfflineSession(){');
+  const validationStop=hardening.indexOf('function patchSecurity(){',validationStart);
+  if(validationStart<0||validationStop<=validationStart)throw new Error('offline RPC source missing');
+  const makeRevalidation=vm.runInNewContext('(deps)=>{'
+    +'let offlineSession=true,offlineEpoch=1,offlineRevalidationPending=null,offlineRevalidationEpoch=-1;'
+    +'const {online,window,nativeRequest,SECRET_KEY,currentId,APP_VERSION,normalizeDevice,applyOfflineDevice,seal,lockOffline}=deps;'
+    +hardening.slice(validationStart,validationStop)
+    +';return{check:revalidateOfflineSession,invalidate:()=>{offlineEpoch++;offlineSession=false}}}');
+  let finishRpc=null,rpcCalls=0,roleUpdates=0,reseals=0;
+  const staleResponse=makeRevalidation({
+    online:()=>true,
+    window:{
+      AbuBassamSecurity:{__offlineTrust:verifiedTrust},
+      AbuBassamCloud:{client:{rpc:()=>{
+        rpcCalls++;return new Promise(resolve=>{finishRpc=resolve})
+      }}}
+    },
+    nativeRequest:async()=>'secret',SECRET_KEY:'test-secret',
+    currentId:()=>verifiedTrust.device_id,APP_VERSION:'4.3.2',
+    normalizeDevice:value=>value,applyOfflineDevice:()=>{roleUpdates++},
+    seal:async()=>{reseals++},lockOffline:()=>{}
+  });
+  const firstServerCheck=staleResponse.check(),secondServerCheck=staleResponse.check();
+  for(let attempt=0;attempt<6&&!finishRpc;attempt++)await Promise.resolve();
+  if(!finishRpc)throw new Error('device RPC check never started');
+  staleResponse.invalidate();
+  finishRpc({data:{...verifiedTrust,active:true},error:null});
+  const serverResults=await Promise.all([firstServerCheck,secondServerCheck]);
+  if(serverResults.some(value=>value!==false)||rpcCalls!==1||roleUpdates||reseals)
+    throw new Error('late device RPC reauthorized a locked session');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
@@ -281,5 +325,5 @@ async function verifyAuthStartupAndSecret(){
 }
 verifyAuthStartupAndSecret().then(()=>{
   if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exitCode=1;return}
-  console.log('Security/control checks passed: signed offline secondary privileges outrank stale owner state, legacy biometric bypass is forbidden, device keys survive write faults, and the native security gate initializes.');
+  console.log('Security/control checks passed: secure offline login, concurrent biometric challenges, logout cancellation, stale RPC permissions, SecureStore and startup.');
 }).catch(error=>{failures.push('auth/startup behavior: '+error.message);process.stderr.write(failures.join('\n')+'\n');process.exitCode=1});
