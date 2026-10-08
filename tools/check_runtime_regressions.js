@@ -25,6 +25,19 @@ const device=read('device-name-runtime.js');
 for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
+const secureSync=read('secure-sync-runtime.js');
+for(const marker of [
+  'function init()',
+  'buildOperations();',
+  'wrapActions();',
+  "ready().catch(() => updateStatus('تعذر التحقق من جلسة المزامنة'))"
+])need(secureSync,marker,'offline startup must stay non-blocking');
+const nativeAuth=fs.readFileSync(path.join(root,'index-auth.js'),'utf8');
+for(const marker of [
+  "Linking.getInitialURL().then(captureAuthCallback).catch(() => {});",
+  "require('./index.js');"
+])need(nativeAuth,marker,'native auth must not block offline startup');
+
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
 for(const metadataMarker of ["window.__ABU_APP_META__ =","releaseDate: RELEASE_DATE"])need(native,metadataMarker,'canonical native app metadata');
 for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-center-runtime.js','app-update-runtime.js','app-security-runtime.js','security-hardening-runtime.js','backup-center-runtime.js','settings-corrections-runtime.js']){
@@ -59,7 +72,7 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 }
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, native startup watchdog, and canonical login guards, touch/backdrop cleanup, and reversible secondary-permission UI guards.\n');
+process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, non-blocking offline startup, native startup watchdog, canonical login guards, touch/backdrop cleanup, and reversible secondary-permission UI guards.\n');
 
 for(const [file,marker] of [['customer-documents-runtime.js','closeTop'],['backup-center-runtime.js','open,close,backupNow'],['document-vault-advanced-runtime.js','{open,close}']])need(read(file),marker,'back-close export');
 
