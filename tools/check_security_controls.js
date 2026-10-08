@@ -191,6 +191,62 @@ async function verifyAuthStartupAndSecret(){
   await safeLogout();
   if(trustErases!==1||stateResets!==1)throw new Error('confirmed logout kept offline access');
 
+  // Actual signed offline gate: reconnect, expiration, double click and
+  // locking while a biometric challenge is open must not bypass access checks.
+  const unlockStart=hardening.indexOf('async function secureOfflineUnlock(){');
+  const unlockStop=hardening.indexOf('function effectiveRole(){',unlockStart);
+  if(unlockStart<0||unlockStop<=unlockStart)throw new Error('offline unlock source missing');
+  const makeGate=vm.runInNewContext('(deps)=>{'
+    +'let offlineSession=false,offlineEpoch=0,offlineBackgroundAt=0,offlineUnlockPending=null;'
+    +'const {$,online,loadTrust,biometricCheck,applyOfflineDevice,document,window,CustomEvent,OFFLINE_GRACE_MS}=deps;'
+    +hardening.slice(unlockStart,unlockStop)
+    +';return {unlock:secureOfflineUnlock,invalidate:()=>{offlineEpoch++}}}');
+  const verifiedTrust={device_id:'phone-1',device_name:'Android',role:'secondary',permissions:{cardsPrint:false}};
+  function makeScenario(options={}){
+    let connected=false,grants=0,hidden=false,reads=0;
+    const elements={
+      abuLoginError:{textContent:''},abuLoginDevice:{textContent:''},
+      abuSecurityGate:{classList:{add:()=>{hidden=true}}}
+    };
+    const gate=makeGate({
+      $:id=>elements[id],online:()=>connected,
+      loadTrust:async()=>{reads++;return options.trust?options.trust(reads):verifiedTrust},
+      biometricCheck:options.bio||(async()=>true),
+      applyOfflineDevice:()=>{grants++},document:{dispatchEvent:()=>{}},
+      window:{AbuBassamOps:{add:()=>{}}},
+      CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail}},
+      OFFLINE_GRACE_MS:43200000
+    });
+    return {gate,connect:()=>{connected=true},state:()=>({grants,hidden})}
+  }
+  const acceptedTrust=makeScenario();
+  if((await acceptedTrust.gate.unlock())!==true||acceptedTrust.state().grants!==1)
+    throw new Error('valid signed offline trust rejected after fingerprint');
+  const networkReturns=makeScenario({bio:async()=>{networkReturns.connect()}});
+  if((await networkReturns.gate.unlock())!==false||networkReturns.state().grants||networkReturns.state().hidden)
+    throw new Error('offline session opened after online network restored');
+  const expiredTrust=makeScenario({trust:read=>read===1?verifiedTrust:null});
+  if((await expiredTrust.gate.unlock())!==false||expiredTrust.state().grants)
+    throw new Error('expired offline trust was accepted');
+  let finishBiometric=null,promptCount=0;
+  const doubleTap=makeScenario({bio:()=>{promptCount++;return new Promise(resolve=>{finishBiometric=resolve})}});
+  const firstTap=doubleTap.gate.unlock(),secondTap=doubleTap.gate.unlock();
+  for(let attempt=0;attempt<5&&!finishBiometric;attempt++)await Promise.resolve();
+  if(!finishBiometric)throw new Error('biometric prompt was not started');
+  finishBiometric();
+  const bothTaps=await Promise.all([firstTap,secondTap]);
+  if(promptCount!==1||bothTaps.some(value=>value!==true)||doubleTap.state().grants!==1)
+    throw new Error('concurrent biometric prompts were not deduplicated');
+  let finishLockedBiometric=null;
+  const userLocked=makeScenario({bio:()=>new Promise(resolve=>{finishLockedBiometric=resolve})});
+  const lockedRequest=userLocked.gate.unlock();
+  for(let attempt=0;attempt<5&&!finishLockedBiometric;attempt++)await Promise.resolve();
+  if(!finishLockedBiometric)throw new Error('locking biometric prompt not started');
+  userLocked.gate.invalidate();
+  finishLockedBiometric();
+  if((await lockedRequest)!==false||userLocked.state().grants)
+    throw new Error('canceled fingerprint reopened a locked session');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
