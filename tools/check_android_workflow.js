@@ -52,7 +52,12 @@ for(const marker of [
   'dist/SHA256.txt',
   'dist/SIGNING_CERTIFICATE.txt',
   "if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}",
-  'retention-days: 7'
+  'retention-days: 7',
+  'id: upload_qa_apk',
+  'continue-on-error: true',
+  "steps.upload_qa_apk.outcome == 'failure'",
+  '::warning title=QA APK upload unavailable::',
+  'No downloadable APK was published by this run.'
 ]) need(testWorkflow,marker,'Android test workflow missing safeguard: '+marker);
 
 for(const marker of [
