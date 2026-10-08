@@ -72,6 +72,31 @@ for(const marker of [
 ])need(nativeAuth,marker,'native auth must not block offline startup');
 
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
+// An old renderer can emit webBootReady after its WebView was remounted.
+// Only callbacks associated with the active generation may reveal the UI.
+function testWebViewGenerationRecovery(){
+  const match=native.match(/const isCurrentWebViewGeneration = ([^\n]+);/);
+  if(!match)throw new Error('renderer generation helper missing');
+  const isCurrent=vm.runInNewContext('('+match[1]+')');
+  const ref={current:0};
+  if(!isCurrent(0,ref)||isCurrent(1,ref))
+    throw new Error('first renderer generation invalid');
+  ref.current=1;
+  if(isCurrent(0,ref)||!isCurrent(1,ref))
+    throw new Error('old webBootReady could activate a remounted WebView');
+  ref.current=2;
+  if(isCurrent(1,ref)||!isCurrent(2,ref))
+    throw new Error('prior renderer crash callback could restart the new WebView');
+  for(const marker of [
+    'webViewGenerationRef.current += 1;',
+    'setWebViewKey(webViewGenerationRef.current);',
+    'onMessage={(event) => { if (isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) void onWebMessage(event); }}',
+    'if (!isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) return;',
+    'if (isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) reportBootFailure(',
+    'if (!webReady) return true;'
+  ])need(native,marker,'renderer recovery and back press isolation');
+}
+
 // The native bridge is injected at document-start AND document-end. Reinjection
 // must not replace pending-response callbacks or lose native request state.
 const bridgeMarker='const ANDROID_BRIDGE = '+String.fromCharCode(96);
@@ -816,7 +841,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
