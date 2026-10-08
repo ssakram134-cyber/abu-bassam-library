@@ -21,8 +21,30 @@ for(const marker of [
   'async function tokenMatches','crypto.subtle.digest','MAX_BODY_BYTES','MAX_IMAGE_DATA_URL','MAX_PROMPT_CHARS','ALLOWED_IMAGE',
   "provider === 'openai'","provider === 'gemini'",'Cache-Control','X-Content-Type-Options',"form.append('model', 'gpt-image-2')"
 ])need(photo,marker,'AI photo edge');
+for(const marker of [
+  "async function authenticatedUser(req: Request)",
+  "Deno.env.get('SUPABASE_URL')",
+  "Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')",
+  "/auth/v1/user",
+  "req.headers.get('authorization')",
+  "سجل الدخول بحساب صالح لاستخدام AI PRO"
+])need(photo,marker,'AI photo authenticated gate');
 for(const marker of ["Deno.env.get('AI_APP_TOKEN')",'async function sameToken','crypto.subtle.digest',"req.headers.get('x-pro-token')",'Cache-Control','X-Content-Type-Options'])need(status,marker,'AI status edge');
+for(const marker of [
+  "async function authenticatedUser(req:Request)",
+  "Deno.env.get('SUPABASE_URL')",
+  "Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')",
+  "/auth/v1/user",
+  "req.headers.get('authorization')",
+  "if(!authUser)return json({error:'Unauthorized'},401)"
+])need(status,marker,'AI status authenticated gate');
 for(const marker of ['abu-bassam-ai-photo',"localStorage.removeItem('abuBassamAiProToken')",'x-pro-token'])need(web,marker,'AI client');
+for(const marker of [
+  "window.AbuBassamCloud?.ready?.()",
+  "window.AbuBassamCloud?.session?.()",
+  "access_token",
+  "'Authorization':'Bearer '+accessToken"
+])need(web,marker,'AI client authenticated session');
 for(const marker of ['sk-proj-','sk-live-','AIzaSy','AI_APP_TOKEN=','OPENAI_API_KEY=','GEMINI_API_KEY=']){forbid(photo,marker,'AI photo embedded secret');forbid(status,marker,'AI status embedded secret')}
 forbid(web,"localStorage.setItem('abuBassamAiProToken'",'AI client must not persist PRO token');
 for(const marker of ["status: 410","android build proxy retired","Cache-Control","X-Content-Type-Options"])need(buildProxy,marker,'retired Android build proxy');
@@ -51,4 +73,4 @@ for(const [label,src] of [
   forbid(src,"npm:@supabase/supabase-js@2'",label+' must not use a floating major-only Supabase client');
 }
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-process.stdout.write('AI/Edge checks passed: AI secrets stay environment-only, requests are bounded, PRO tokens are not persisted, provider keys are not embedded, and the retired Android build proxy cannot fetch public upstream artifacts.\n');
+process.stdout.write('AI/Edge checks passed: AI requests require a valid Supabase session plus the non-persisted PRO token, provider secrets stay server-only, requests are bounded, and retired public build paths remain disabled.\n');
