@@ -827,6 +827,56 @@ async function testVaultBatchImportLifecycle(){
     throw Error('partially saved files were not disclosed');
 }
 
+async function testVaultMetadataAndEditorRace(){
+  const source=read('document-vault-runtime.js');
+  const a=source.indexOf('async function dbModifyItem(');
+  const z=source.indexOf('function uploadedSnapshotUnchanged(',a);
+  const p=source.indexOf('async function saveEditor(){');
+  const q=source.indexOf('function editorCanvas(){',p);
+  if(a<0||z<=a||p<0||q<=p)throw Error('safe metadata editor missing');
+  const rows=new Map([['a',{id:'a',name:'photo.jpg',size:30,blob:{data:'original'},
+    favorite:false,folder:'',deleted:false,syncState:'synced',updatedAt:'old',localEditToken:'old'}]]);
+  let seq=0;
+  const database={transaction(){
+    const tx={};tx.objectStore=()=>({
+      get:id=>{const req={};Promise.resolve().then(()=>{
+        req.result=rows.get(id)?{...rows.get(id)}:undefined;
+        req.onsuccess?.();Promise.resolve().then(()=>tx.oncomplete?.())
+      });return req},
+      put:row=>{rows.set(row.id,{...row});Promise.resolve().then(()=>tx.oncomplete?.())}
+    });return tx
+  }};
+  const update=vm.runInNewContext('(openDb,uuid,STORE)=>{'+source.slice(a,z)+';return dbModifyItem}')(
+    async()=>database,()=>String(++seq),'items');
+  await update('a',row=>({...row,name:'renamed.jpg'}));
+  await update('a',row=>({...row,favorite:true}));
+  await update('a',row=>({...row,folder:'documents'}));
+  const current=rows.get('a');
+  if(current.name!=='renamed.jpg'||!current.favorite||current.folder!=='documents'||seq!==3)
+    throw Error('metadata edit used a stale list snapshot');
+  let finish=null;
+  const oldEditor={id:'a',sourceEditToken:current.localEditToken,
+    sourceUpdatedAt:current.updatedAt,sourceName:current.name,sourceSize:current.size};
+  const state={editor:oldEditor,busy:false};
+  const alerts=[],canvas={toBlob:callback=>{finish=callback}};
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {state,drawEditor,dbModifyItem,setBusy,alert,closeModal,refresh,autoSync,navigator,setTimeout,syncNow,requireVault}=deps;'
+    +source.slice(p,q)+';return saveEditor}');
+  const save=factory({state,drawEditor:()=>canvas,dbModifyItem:update,
+    setBusy:v=>{state.busy=v},alert:x=>alerts.push(x),closeModal:()=>{},
+    refresh:async()=>{},autoSync:()=>false,navigator:{onLine:false},
+    setTimeout:()=>{},syncNow:()=>{},requireVault:()=>true});
+  const pending=save();
+  if(!finish)throw Error('editor conversion did not start');
+  await update('a',row=>({...row,name:'newer.jpg',blob:{data:'new image'}}));
+  finish({size:40,data:'stale image'});
+  await pending;
+  const last=rows.get('a');
+  if(last.name!=='newer.jpg'||last.blob.data!=='new image'||!alerts.length)
+    throw Error('stale image editor replaced a newer document');
+  if(state.busy)throw Error('editor busy layer remained active after a conflict');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1115,7 +1165,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
