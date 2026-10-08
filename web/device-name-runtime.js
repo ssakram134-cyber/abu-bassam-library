@@ -115,9 +115,23 @@
   }
   function showBootFailure(error){
     const splash=document.getElementById('splash');
-    if(splash){splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1'}
-    const message=document.getElementById('splashText')||splash?.querySelector?.('p,small,div');
-    if(message)message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.';
+    if(splash){
+      splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1';
+      // The shipped splash contains only an image. Create an accessible error
+      // message instead of leaving the user staring at an unchanged logo.
+      let message=document.getElementById('splashText');
+      if(!message){
+        message=document.createElement('p');
+        message.id='splashText';
+        message.setAttribute('role','alert');
+        Object.assign(message.style,{position:'absolute',zIndex:'2',left:'14px',right:'14px',bottom:'32px',padding:'14px',borderRadius:'12px',background:'#fffaf3',color:'#922d33',textAlign:'center',fontWeight:'700',fontSize:'14px'});
+        splash.appendChild(message);
+      }
+      message.textContent='تعذر تحميل مكونات التطبيق بأمان. استخدم إعادة المحاولة لفتح التطبيق.';
+    }
+    // Alert natively as well: Android's loading layer covers the WebView until
+    // webBootReady, so an error rendered only inside the WebView is invisible.
+    try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootFailed'}))}catch(_){}
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
