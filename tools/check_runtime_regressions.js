@@ -332,7 +332,33 @@ function testImageImportLifecycle(){
   if(app.images()[0]?.src!=='data:application/octet-stream;base64,generic-picture')
     throw new Error('generic Android MIME prevented an otherwise decodable image');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle)]).then(()=>{
+// Barcode native callbacks may arrive several times before React state updates.
+// The scanner must synchronously latch the first code and reset only for a new
+// explicit camera session.
+function testBarcodeScanDeduplication(){
+  const begin=native.indexOf('  const onBarcodeScanned = useCallback((result) => {');
+  const end=native.indexOf('  }, [barcodeLocked, inject]);',begin);
+  if(begin<0||end<=begin)throw new Error('native barcode scan handler not found');
+  const body=native.slice(begin+'  const onBarcodeScanned = useCallback((result) => {'.length,end);
+  const scanRef={current:false},events=[];
+  const create=vm.runInNewContext(`(ref,events)=>{
+    const barcodeScanHandledRef=ref,barcodeLocked=false;
+    const setBarcodeLocked=()=>{},setCameraMode=()=>{},setCameraReady=()=>{},
+      setCameraBusy=()=>{},setTorch=()=>{},setCameraFacing=()=>{},setCameraFrameKind=()=>{};
+    const inject=(name,payload)=>events.push([name,payload]);
+    return result=>{${body}}
+  }`);
+  const scan=create(scanRef,events);
+  scan({data:'TEST-123',type:'qr'});
+  scan({data:'TEST-123',type:'qr'});
+  if(events.length!==1||events[0][1].data!=='TEST-123')throw new Error('duplicate barcode notifications were accepted');
+  scanRef.current=false;
+  scan({data:'NEW-456',type:'qr'});
+  if(events.length!==2||events[1][1].data!=='NEW-456')throw new Error('a new barcode session cannot scan');
+  need(native,'barcodeScanHandledRef.current = false;','barcode scanner reset on camera reopen or close');
+  forbid(native,'setTimeout(() => setBarcodeLocked(false), 500)','old scanner timer cannot reopen after session change');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
