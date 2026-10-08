@@ -899,6 +899,28 @@ async function testVaultDownloadRevisionConsistency(){
     throw Error('matching vault version refused signed download');
 }
 
+async function testRestoreSettingsValidatedBeforeDatabaseCommit(){
+  const source=read('document-vault-hardening-runtime.js');
+  const start=source.indexOf('async function readRestoreSettings(zip){');
+  const end=source.indexOf('function restoreSettings(',start);
+  if(start<0||end<=start)throw Error('ZIP settings preflight handler missing');
+  const parse=vm.runInNewContext('(()=>{'+source.slice(start,end)+';return readRestoreSettings})()');
+  const zip=content=>({file:key=>key==='app-settings.json'
+    ?(content===null?null:{async:async()=>content}):null});
+  if(await parse(zip(null))!==null)throw Error('optional backup settings were not optional');
+  for(const invalid of ['not-json','[]','{"format":"Other","settings":{}}',
+    '{"format":"AbuBassamSettings","settings":[]}']){
+    let rejected=false;
+    try{await parse(zip(invalid))}catch(error){rejected=true}
+    if(!rejected)throw Error('malformed backup settings passed ZIP preflight');
+  }
+  const settings=await parse(zip('{"format":"AbuBassamSettings","settings":{"theme":"dark"}}'));
+  if(settings.settings.theme!=='dark')throw Error('valid backup settings rejected');
+  const verified=source.indexOf('const settingsSnapshot=await readRestoreSettings(zip);');
+  const committed=source.indexOf("await applyAtomic(prepared,{replaceAll:mode==='snapshot'});");
+  if(verified<0||committed<=verified)throw Error('archive DB changes precede ZIP settings validation');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1187,7 +1209,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
