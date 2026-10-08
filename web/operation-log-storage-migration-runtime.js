@@ -18,6 +18,7 @@ function migrate(){
     return true;
   }catch(_){return false}
 }
-let attempts=0;const timer=setInterval(()=>{attempts++;if(migrate()||attempts>120)clearInterval(timer)},100);
+migrate();
+document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='operation-log-corrections-runtime.js'||src==='operation-log-privacy-runtime.js')migrate()});
 window.addEventListener('storage',e=>{if(e.key===OPS_KEY)migrate()});
 })();
