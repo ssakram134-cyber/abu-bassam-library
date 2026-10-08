@@ -946,6 +946,78 @@ async function testVaultStaleDeleteGuard(){
     throw Error('confirmed deletion failed to store a safe local tombstone');
 }
 
+async function testVaultSyncAccountFence(){
+  const source=read('document-vault-runtime.js');
+  const a=source.indexOf('function vaultSyncContextValid(scope){');
+  const b=source.indexOf('function onShow(){',a);
+  if(a<0||b<=a)throw Error('vault sync session fence missing');
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {requireVault,state,syncPolicy,wifiVerified,setSyncStatus,alert,navigator,sessionOk,cloud,window,syncScope,dbAll,uuid,niceName,remoteItem,dbResolvePendingConflict,dbDeleteIfUnchanged,dbCommitUpload,dbReceiveRemoteIfUnchanged,refresh,syncSet,LAST_SYNC_KEY,logOperation,autoSync,automaticDue,vaultScopeOk,vaultAllowed}=deps;'
+    +source.slice(a,b)+';return syncNow}');
+  const sample=[{id:'doc1',name:'photo.jpg',mime:'image/jpeg',size:3,
+    blob:{size:3},syncState:'pending',createdAt:'a',updatedAt:'a'}];
+  function prepare(){
+    let scope='owner:phone',online=true,allowed=true,connected=true,oldGet=null;
+    let writes=0,uploads=0,upserts=0,removes=0,completed=0,badReply=false;
+    const state={syncing:false,items:[]};
+    const service={
+      get:async()=>oldGet?await new Promise(resolve=>{oldGet.resume=resolve}):null,
+      uploadVault:async()=>{uploads++;return 'v/path'},
+      upsert:async()=>{upserts++;if(badReply)throw Error('NETWORK_TIMEOUT');return{updated_at:'v2'}},
+      removeVault:async()=>{removes++},list:async()=>[],
+      downloadVault:async()=>({size:3})
+    };
+    const sync=factory({requireVault:()=>true,state,syncPolicy:()=>({wifiOnly:false}),
+      wifiVerified:()=>true,setSyncStatus:()=>{},alert:()=>{},
+      navigator:{get onLine(){return online}},sessionOk:()=>connected,
+      cloud:()=>service,window:{AbuBassamSecurity:{device:()=>({device_id:'phone'})}},
+      syncScope:()=>scope,dbAll:async()=>sample,uuid:()=> 'unique',
+      niceName:x=>x,remoteItem:x=>x,
+      dbResolvePendingConflict:async()=>{writes++},
+      dbDeleteIfUnchanged:async()=>{writes++},
+      dbCommitUpload:async()=>{writes++},
+      dbReceiveRemoteIfUnchanged:async()=>{writes++},
+      refresh:async()=>{state.items=[]},syncSet:()=>{completed++},
+      LAST_SYNC_KEY:'last',logOperation:()=>{},autoSync:()=>true,
+      automaticDue:()=>true,vaultScopeOk:()=>true,vaultAllowed:()=>allowed});
+    return {
+      sync,state,deferGet:()=>{oldGet={resume:null};return oldGet},
+      change:key=>{if(key==='scope')scope='other:phone';
+        if(key==='offline')online=false;
+        if(key==='permission')allowed=false;
+        if(key==='session')connected=false;
+        if(key==='uncertain')badReply=true},
+      counters:()=>({writes,uploads,upserts,removes,completed})
+    }
+  }
+  for(const change of ['scope','offline','permission','session']){
+    const app=prepare(),hold=app.deferGet(),running=app.sync();
+    for(let i=0;i<8&&!hold.resume;i++)await Promise.resolve();
+    if(!hold.resume)throw Error('vault request did not start');
+    app.change(change);hold.resume(null);
+    if(await running!==false)throw Error('old vault sync session continued after '+change);
+    const c=app.counters();
+    if(c.writes||c.uploads||c.upserts||c.completed)
+      throw Error('vault sync touched data after '+change);
+  }
+  const uncertain=prepare();uncertain.change('uncertain');
+  if(await uncertain.sync()!==false)throw Error('failed upsert was reported successful');
+  const failed=uncertain.counters();
+  if(failed.uploads!==1||failed.upserts!==1||failed.removes!==0||failed.writes)
+    throw Error('ambiguous cloud acknowledgement deleted the uploaded object');
+  const normal=prepare();
+  if(await normal.sync()!==true)throw Error('normal vault sync rejected');
+  const ok=normal.counters();
+  if(ok.upserts!==1||ok.writes!==1||ok.completed!==1)
+    throw Error('normal vault sync lost its acknowledgement');
+  for(const marker of [
+    'function vaultSyncContextValid(scope){',
+    "throw new Error('VAULT_SYNC_CONTEXT_CHANGED')",
+    'tx.abort();return',
+    'await dbCommitUpload(item,saved?.updated_at,runScope);'
+  ])need(source,marker,'vault account and permission fence');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1234,7 +1306,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
