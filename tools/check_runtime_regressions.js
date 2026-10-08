@@ -178,6 +178,57 @@ const securityExtras=read('security-extras-runtime.js');for(const marker of ['pr
 const featureRecovery=read('feature-recovery-runtime.js');for(const marker of ['function closeTool()','close:closeTool',"classList.add('show')"])need(featureRecovery,marker,'feature recovery modal back-close');
 
 const printPresets=read('print-presets-runtime.js');for(const marker of ["classList.add('abu-open')","classList.remove('abu-open')"])need(printPresets,marker,'print presets back state');
+// Validate actual loader behavior: duplicate calls coalesce, an existing
+// script element is not treated as success, and failed loads are retryable.
+async function testRuntimeScriptLoader(){
+  const start=device.indexOf('  const pendingScriptLoads=new Map();');
+  const end=device.indexOf('  const loadFeatureRecovery=',start);
+  if(start<0||end<=start)throw new Error('runtime loader source not found');
+  const loader=device.slice(start,end);
+  const factory=vm.runInNewContext(`(document,window,setTimeout,clearTimeout,CustomEvent)=>{
+    ${loader}
+    return loadScript
+  }`);
+  const scripts=new Map(),appends=[],timers=new Map();
+  let nextTimerId=0;
+  const document={
+    getElementById:id=>scripts.get(id)||null,
+    createElement:()=>({remove(){scripts.delete(this.id)}}),
+    head:{appendChild(el){scripts.set(el.id,el);appends.push(el)}},
+    dispatchEvent:()=>{}
+  };
+  const window={};
+  const load=factory(document,window,fn=>{const id=++nextTimerId;timers.set(id,fn);return id},id=>timers.delete(id),function CustomEvent(){});
+  const first=load('testRuntime','runtime-test.js','__READY_TEST__');
+  const duplicate=load('testRuntime','runtime-test.js','__READY_TEST__');
+  if(first!==duplicate||appends.length!==1)throw new Error('concurrent script load is not deduplicated');
+  window.__READY_TEST__=true;
+  appends[0].onload();
+  if(!(await first)||!(await duplicate))throw new Error('successful script load was not delivered');
+  await Promise.resolve();
+  delete window.__READY_TEST__;
+  let existingFailed=false;
+  try{await load('testRuntime','runtime-test.js','__READY_TEST__')}
+  catch(error){existingFailed=/already exists/.test(String(error.message))}
+  if(!existingFailed)throw new Error('loaded script without runtime flag was treated as ready');
+  const failed=load('failedRuntime','failed-runtime.js','__FAILED_TEST__');
+  appends[1].onerror();
+  let rejected=false;
+  try{await failed}catch(error){rejected=/resource error/.test(String(error.message))}
+  if(!rejected||scripts.has('failedRuntime'))throw new Error('failed script was not cleaned up for retry');
+  await Promise.resolve();
+  const retry=load('failedRuntime','failed-runtime.js','__FAILED_TEST__');
+  window.__FAILED_TEST__=true;
+  appends[2].onload();
+  if(!(await retry))throw new Error('previously failed script could not be retried');
+  const stuck=load('stuckRuntime','stuck-runtime.js','__STUCK_TEST__');
+  const timeout=[...timers.values()][0];
+  if(typeof timeout!=='function')throw new Error('script load watchdog was not armed');
+  timeout();
+  let timedOut=false;
+  try{await stuck}catch(error){timedOut=/script load timeout/.test(String(error.message))}
+  if(!timedOut||scripts.has('stuckRuntime'))throw new Error('script timeout did not clean up stale script');
+}
 // Exercise the real inline MediaPipe operation with an instant fake watchdog:
 // an engine that never emits onResults must not leave #busyOverlay stuck.
 async function testBoundedSegmentation(){
@@ -209,11 +260,11 @@ async function testBoundedSegmentation(){
   const result=await next;
   if(result?.segmentationMask!==true)throw new Error('segmentation remained locked after timeout');
 }
-testBoundedSegmentation().then(()=>{
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader()]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
-  process.stdout.write('Runtime regression checks passed: offline-first secure gate, bounded image segmentation, native bridge boot, touch/backdrop cleanup, and reversible permission guards.\n');
+  process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
-  errors.push('bounded segmentation regression: '+error.message);
+  errors.push('startup/segmentation behavior regression: '+error.message);
   process.stderr.write(errors.join('\n')+'\n');
   process.exitCode=1
 });
