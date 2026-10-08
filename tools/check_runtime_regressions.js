@@ -383,7 +383,54 @@ async function testAiCloudStartupTimeout(){
   const ready=factory({AbuBassamCloud:{ready:()=>Promise.resolve(true)}},()=>2,()=>{});
   if((await ready())!==true)throw new Error('available cloud session did not pass readiness');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout()]).then(()=>{
+// Removing the final photo must invalidate print/PDF canvases. Impossibly
+// large margins must also hide the previous preview, not allow stale exports.
+function testPhotoPreviewClearedWhenEmpty(){
+  const html=read('index.html');
+  const ranges=[
+    [html.indexOf('function removePerson(i){'),html.indexOf('function clearImages(){')],
+    [html.indexOf('function renderPaper(){'),html.indexOf('function showPage(i){')]
+  ];
+  if(ranges.some(([a,b])=>a<0||b<=a))throw new Error('photo preview/render source not found');
+  const source=ranges.map(([a,b])=>html.slice(a,b)).join('\n');
+  const factory=vm.runInNewContext(`(elements,photos,document)=>{
+    let uploadedImages=photos,pageCanvases=[{tag:'previous-private-photo'}],
+      currentPage=2,selectedIndex=photos.length-1;
+    const $=id=>elements[id],updateFooter=()=>{},updatePageNav=()=>{},
+      refreshPeople=()=>{},showPage=()=>{},
+      getPaperSize=()=>({w:100,h:100}),getPhotoSize=()=>({w:40,h:40}),mmToPx=x=>x;
+    ${source}
+    return {removePerson,renderPaper,summary:()=>({
+      pages:pageCanvases.length,currentPage,
+      hidden:elements['preview-canvas'].style.display==='none',
+      zoomHidden:elements.paperZoomOverlay.classList.removed==='show',
+      info:elements['info-text'].textContent
+    })}
+  }`);
+  const create=margin=>{
+    const elements={
+      'preview-canvas':{style:{display:'block'},onclick:()=>{}},
+      paperZoomOverlay:{classList:{remove(value){this.removed=value}}},
+      'info-text':{textContent:'stale page'},
+      photoCount:{value:'2'},marginInput:{value:String(margin)},
+      gapInput:{value:'2'},borderMode:{value:'none'}
+    };
+    const document={createElement:()=>({getContext:()=>({fillRect(){},drawImage(){}})})};
+    return factory(elements,[{}],document)
+  };
+  const single=create(5);
+  single.removePerson(0);
+  const cleared=single.summary();
+  if(cleared.pages!==0||cleared.currentPage!==0||!cleared.hidden||!cleared.zoomHidden)
+    throw new Error('deleting the final photo left a printable stale preview');
+  const invalid=create(40);
+  invalid.renderPaper();
+  const emptyLayout=invalid.summary();
+  if(emptyLayout.pages!==0||!emptyLayout.hidden||!emptyLayout.zoomHidden||
+      !emptyLayout.info.includes('تعذر ترتيب الصور'))
+    throw new Error('unplaceable photos retained a previous printable image');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
