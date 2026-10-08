@@ -1062,6 +1062,51 @@ function testVaultSyncTimerVisibility(){
     throw Error('legacy permanent vault sync interval still active');
 }
 
+async function testVaultTransactionSessionRevocation(){
+  const source=read('document-vault-runtime.js');
+  const a=source.indexOf('async function dbCommitUpload(');
+  const b=source.indexOf('async function dbResolvePendingConflict(',a);
+  if(a<0||b<=a)throw Error('vault atomic commit missing');
+  const uploaded={id:'doc',name:'draft.png',size:10,mime:'image/png',
+    folder:'',favorite:false,deleted:false,updatedAt:'now',
+    localEditToken:'edit1',syncState:'pending'};
+  const records=new Map([['doc',{...uploaded}]]);
+  let allowed=true,aborts=0,writes=0;
+  const database={transaction(){
+    const tx={};
+    tx.abort=()=>{aborts++;Promise.resolve().then(()=>tx.onabort?.())};
+    tx.objectStore=()=>({
+      get:id=>{
+        const req={};Promise.resolve().then(()=>{
+          req.result=records.get(id)?{...records.get(id)}:undefined;
+          req.onsuccess?.();
+          if(!aborts)Promise.resolve().then(()=>tx.oncomplete?.())
+        });return req
+      },
+      put:row=>{writes++;records.set(row.id,{...row})}
+    });
+    return tx
+  }};
+  const commit=vm.runInNewContext('(deps)=>{'
+    +'const {openDb,STORE,vaultSyncContextValid,mergeUploadReceipt}=deps;'
+    +source.slice(a,b)+';return dbCommitUpload}')({
+      openDb:async()=>database,STORE:'items',
+      vaultSyncContextValid:()=>allowed,
+      mergeUploadReceipt:(current,snapshot,version)=>({...current,
+        syncState:'synced',remoteUpdatedAt:version})
+    });
+  const pending=commit(uploaded,'cloud2','owner:phone');
+  allowed=false;
+  let rejected=false;
+  try{await pending}catch(error){rejected=error.message==='VAULT_SYNC_ACK_ABORTED'}
+  if(!rejected||aborts!==1||writes!==0||records.get('doc').syncState!=='pending')
+    throw Error('IndexedDB committed an old session after permission revocation');
+  aborts=0;allowed=true;
+  if(await commit(uploaded,'cloud2','owner:phone')!==true||
+    records.get('doc').syncState!=='synced'||writes!==1)
+    throw Error('active vault session could not acknowledge its own upload');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1350,7 +1395,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
