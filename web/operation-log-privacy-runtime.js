@@ -31,7 +31,7 @@ function cleanSecondaryLocal(){
   return true;
 }
 function forceClean(){cleaned=false;return cleanSecondaryLocal()}
-function delayedClean(){[250,800,1800,3500,7000].forEach(ms=>setTimeout(forceClean,ms))}
+function refreshPrivacy(){const installed=installClientBoundary();forceClean();if(installed){try{window.AbuBassamOps?.sync?.()}catch(_){}}return installed}
 function wrapBuilder(target,state={kind:''}){
   if(!target||typeof target!=='object')return target;
   return new Proxy(target,{
@@ -55,7 +55,7 @@ function wrapBuilder(target,state={kind:''}){
   })
 }
 function installClientBoundary(){const cloud=window.AbuBassamCloud,c=cloud?.client;if(!c||typeof c.from!=='function')return false;if(c.from.__abuOperationPrivacy)return true;const original=c.from.bind(c);const wrapped=function(table){const b=original(table);return String(table)===TABLE?wrapBuilder(b,{kind:''}):b};wrapped.__abuOperationPrivacy=true;wrapped.__abuOriginal=original;c.from=wrapped;return true}
-function boot(){let attempts=0;const timer=setInterval(()=>{attempts++;const a=installClientBoundary();forceClean();if(a){try{window.AbuBassamOps?.sync?.()}catch(_){}if(role()==='owner'||attempts>80)clearInterval(timer)}else if(attempts>120)clearInterval(timer)},120);delayedClean();window.addEventListener('online',()=>{installClientBoundary();forceClean();delayedClean()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')forceClean()})}
+function boot(){refreshPrivacy();window.addEventListener('online',refreshPrivacy);document.addEventListener('abu-bassam-auth-changed',refreshPrivacy);document.addEventListener('abu-bassam-security-state',refreshPrivacy);document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='app-security-runtime.js'||src==='notification-center-runtime.js')refreshPrivacy()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshPrivacy()})}
 window.AbuBassamOperationPrivacy={install:installClientBoundary,clean:forceClean,deviceId};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
