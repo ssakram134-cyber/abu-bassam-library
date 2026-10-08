@@ -71,10 +71,11 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
   try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
 }
 
-if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, non-blocking offline startup, native startup watchdog, canonical login guards, touch/backdrop cleanup, and reversible secondary-permission UI guards.\n');
-
 for(const [file,marker] of [['customer-documents-runtime.js','closeTop'],['backup-center-runtime.js','open,close,backupNow'],['document-vault-advanced-runtime.js','{open,close}']])need(read(file),marker,'back-close export');
+const customerDocs=read('customer-documents-runtime.js');
+for(const lifecycle of ["document.addEventListener('abu-runtime-loaded',inject)","document.addEventListener('abu-settings-ready',inject)"])need(customerDocs,lifecycle,'customer documents lifecycle injection');
+forbid(customerDocs,'setInterval(','customer documents must not poll the DOM');
+forbid(customerDocs,'new MutationObserver','customer documents must not observe the full DOM');
 
 const passwordRecovery=read('password-recovery-runtime.js');need(passwordRecovery,'close:()=>closeResetModal(false)','password reset native-back close');
 const securityExtras=read('security-extras-runtime.js');for(const marker of ['privacyHideTimer','clearTimeout(privacyHideTimer)','abuSecurityExtrasOwnerGuard','abu-settings-ready','abu-runtime-loaded','function scheduleSnapshot()','clearTimeout(snapshotTimer)'])need(securityExtras,marker,'security extras lifecycle restoration');forbid(securityExtras,'new MutationObserver','security extras must use settings lifecycle events');forbid(securityExtras,'setInterval(','security extras must not poll or keep a permanent interval');
@@ -82,3 +83,5 @@ const securityExtras=read('security-extras-runtime.js');for(const marker of ['pr
 const featureRecovery=read('feature-recovery-runtime.js');for(const marker of ['function closeTool()','close:closeTool',"classList.add('show')"])need(featureRecovery,marker,'feature recovery modal back-close');
 
 const printPresets=read('print-presets-runtime.js');for(const marker of ["classList.add('abu-open')","classList.remove('abu-open')"])need(printPresets,marker,'print presets back state');
+if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
+process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, non-blocking offline startup, native startup watchdog, canonical login guards, touch/backdrop cleanup, lifecycle-driven customer documents, and reversible secondary-permission UI guards.\n');
