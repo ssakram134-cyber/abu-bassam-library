@@ -7,30 +7,201 @@ const errors=[];
 const read=p=>fs.readFileSync(p,'utf8');
 const need=(src,marker,label)=>{if(!src.includes(marker))errors.push(`${label}: missing ${marker}`)};
 const no=(src,marker,label)=>{if(src.includes(marker))errors.push(`${label}: forbidden ${marker}`)};
-for(const file of ['settings-corrections-runtime.js','settings-enhancements-runtime.js','device-name-runtime.js','document-vault-runtime.js']){
+for(const file of ['app-settings-runtime.js','settings-corrections-runtime.js','settings-enhancements-runtime.js','typography-runtime.js','device-name-runtime.js','document-vault-runtime.js','document-vault-hardening-runtime.js']){
   const src=read(path.join(web,file));
   try{new vm.Script(src,{filename:file})}catch(e){errors.push(`${file} syntax: ${e.message}`)}
 }
+const appSettings=read(path.join(web,'app-settings-runtime.js'));
+const enhancements=read(path.join(web,'settings-enhancements-runtime.js'));
+const typography=read(path.join(web,'typography-runtime.js'));
+const indexHtml=read(path.join(web,'index.html'));
+need(typography,'src:url("fonts/Cairo-Regular.ttf")','bundled Cairo must use appassets-relative path');
+need(typography,'src:url("fonts/Tajawal-Regular.ttf")','bundled Tajawal must use appassets-relative path');
+need(typography,"const EMBEDDED_FONTS=new Set(['cairo','tajawal'])",'bundled font families must be protected');
+need(typography,"if(EMBEDDED_FONTS.has(name.toLowerCase()))throw new Error",'custom fonts must not override bundled Cairo/Tajawal');
+need(typography,'function normalizeCustomFont(font)','restored custom fonts must use a validation gate');
+need(typography,"function editPermission(scope=currentScope()){return scope==='current'?'cardsEditText':'settingsCardFonts'}",'card typography scopes must map to granular permissions');
+need(typography,"function openEditor(type,role,label){if(!requireSetting('cardsEditText'))return false",'per-card typography editor must require cardsEditText');
+need(typography,"function set(field,value){if(!selected||!requireEditScope())return false",'typography mutations must recheck the active scope');
+need(typography,"function scopeChanged(){if(!requireEditScope())",'changing typography scope must enforce permission');
+need(typography,"function resetBadge(){if(!requireSetting('cardsEditText'))return false",'badge typography reset must require cardsEditText');
+need(typography,"if(!requireEditScope(item.scope))return false",'typography undo/redo must recheck the stored scope');
+need(typography,"const resetAuthorized=skipConfirm&&canSetting('settingsReset')",'authorized settings reset must not leave typography half-reset');
+need(typography,'if(resetAuthorized)custom=[]','authorized full reset must actually clear user-added fonts');
+need(typography,'if(!save()){state=previousState;custom=previousCustom;applyApp();renderGlobal();return false}','typography reset must roll back and report persistence failure');
+need(typography,'const previousState=clone(state),previousCustom=custom.slice()','typography reset must snapshot in-memory state');
+need(typography,'state=previousState;custom=previousCustom;applyApp();renderGlobal();return false','failed typography reset must roll back in-memory state');
+need(typography,'function recordUndo(item)','undo history must be recorded only after a successful edit');
+need(typography,"if(!applyRaw(currentScope(),selected.type,selected.role,raw)){renderEditor();return false}recordUndo(before)",'text edits must not enter undo history when persistence fails');
+need(typography,"if(!save()){if(had)state.typeStyles[type][role]=previous;else delete state.typeStyles[type][role];return false}",'type-level typography edits must roll back failed saves');
+need(typography,"if(!save()){state[field]=previous;applyApp();renderGlobal();return false}",'global font settings must roll back failed saves');
+need(typography,"if(!save()){state.defaultStyles=previous;renderGlobal();return false}",'role defaults must roll back failed saves');
+need(typography,"if(!save()){state.favoriteColors=previous;return false}",'favorite colors must roll back failed saves');
+need(typography,"if(!applyRaw(item.scope,item.type,item.role,item.value))return false",'undo and redo must not move history when persistence fails');
+need(typography,"function deleteFont(index){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'deleting a shared custom font must require both font scopes');
+need(typography,"function importData(data){if(!requireSetting('settingsFonts')||!requireSetting('settingsCardFonts'))return false",'importing shared typography settings must require both font scopes');
+need(typography,'.map(normalizeCustomFont).filter(Boolean)','persisted/restored font arrays must be filtered');
+need(typography,"!['ttf','otf'].includes(format)",'restored fonts must be limited to TTF/OTF');
+need(typography,'data.length>3*1024*1024','restored custom font payloads must be bounded');
+need(typography,"format==='otf'?sig==='OTTO'",'restored custom fonts must verify the font signature');
+need(typography,'normalizeCustomFont({name,data,format:ext})','interactive font imports must pass the same validator as restored fonts');
+need(typography,'return true}catch(e){alert','typography persistence must report success/failure');
+need(typography,'if(!save()){if(exists>=0)custom[exists]=previous;else custom.pop()','font import must roll back after persistence failure');
+need(typography,'const previousCustom=custom.slice(),previousState=clone(state)','font deletion must snapshot state before persistence');
+need(typography,'if(!save()){custom=previousCustom;state=previousState','font deletion must roll back after persistence failure');
+need(typography,'const previousState=clone(state),previousCustom=custom.slice()','typography restore must snapshot existing settings');
+need(typography,'if(!save()){state=previousState;custom=previousCustom;applyApp();return false}','typography restore must roll back after persistence failure');
+for(const marker of ['appScalePreset(85)','appScalePreset(100)','appScalePreset(120)','appScalePreset(140)','صغير','عادي','كبير جدًا'])need(typography,marker,'UI text size preset '+marker);
+need(typography,"const DEFAULT_ROLE_GROUPS={name:{label:'الاسم',roles:['name']},title:{label:'العناوين',roles:['title','institution']},secondary:{label:'المعلومات الثانوية',roles:['secondary','info','details']},footer:{label:'الشريط السفلي',roles:['footer']}}",'badge default role groups');
+for(const marker of ['Regular','Medium','Bold Italic','Sharp','function roleDefault(group,field,value)'])need(typography,marker,'per-role badge typography '+marker);
+need(typography,"window.AbuBassamPermissions?.can?.(key)===true",'font settings must fail closed for secondary devices');
+need(typography,"['appFont','appScale'].includes(field)?'settingsFonts':'settingsCardFonts'",'app and badge font settings must use separate permissions');
+need(typography,"canAnySetting(['settingsFonts','settingsCardFonts'])",'font library access must require at least one font permission');
+need(typography,"document.querySelectorAll('#abuRoleDefaults select,#abuRoleDefaults input').forEach(el=>el.disabled=!cardAllowed)",'badge default controls must disable without settingsCardFonts');
+need(typography,'vnd\\.ms-opentype','Android OTF MIME type must remain supported');
+no(typography,'file:///android_asset/library/fonts/','bundled fonts must not depend on disabled file access');
+need(indexHtml,"blackgold:['أسود وذهبي فاخر","black-gold theme");
+need(indexHtml,'function systemThemeValue()','live system theme resolver');
+need(indexHtml,"addEventListener?.('change'","system theme change listener");
+need(appSettings,'لم يتم إنشاء جهاز افتراضي','base settings device list must fail honestly');
+no(appSettings,"list=[{name:'أكرم'","base settings must not fabricate a device");
+no(appSettings,"SYNC_POLICY_KEY,WA_KEY].forEach(key=>localStorage.removeItem(key))",'base settings reset must preserve sync and WhatsApp');
+need(appSettings,'id="abuWaQuickShare"','WhatsApp enabled setting must expose a real share action');
+need(appSettings,'function applyWhatsAppSetting()','WhatsApp toggle must affect the share UI');
+need(appSettings,'async function shareWhatsApp()','WhatsApp share must await the real backup result');need(appSettings,"const ok=await window.DocumentVault.backup('share');if(!ok)return false",'WhatsApp share must stop when backup/share is cancelled or fails');need(appSettings,"log('مشاركة نسخة عبر WhatsApp','تم فتح شاشة مشاركة Android');return true",'WhatsApp share must log only after a successful share handoff');
+need(appSettings,"if(wa.enabled===false){alert('فعّل مشاركة WhatsApp من الإعدادات أولًا.');return false}",'WhatsApp share action must honor disabled setting');
+need(appSettings,'function normalizePhoneDigits(value)','settings WhatsApp must normalize Arabic/Persian digits');
+need(appSettings,'function iraqiWhatsAppNumber(value)','settings WhatsApp must validate Iraqi number shapes');
+need(appSettings,"if(/^009647\\d{9}$/.test(digits))return digits.slice(2)",'settings WhatsApp must accept Iraqi 00964 format');
+need(appSettings,"if(!international){alert('أدخل رقمًا عراقيًا صحيحًا من 11 رقمًا يبدأ بـ 07.');return false}",'settings WhatsApp must reject malformed local numbers');
+need(appSettings,"let phone='0'+international.slice(3)",'settings WhatsApp must persist canonical Iraqi local form');
+
+need(appSettings,'async function backup(mode)','settings backup must await the real backup result');
+need(appSettings,"ok?'تم إنشاء النسخة الاحتياطية ✓':'لم تُنشأ نسخة احتياطية.'",'settings backup status must reflect the real result');
+need(appSettings,'async function sync()','settings sync must aggregate actual sync results');
+need(appSettings,'const vaultResult=hasVault?await Promise.resolve(DocumentVault.syncNow()).catch(()=>false):null','settings sync must track vault result explicitly');need(appSettings,'settingsResult=hasSettings?await Promise.resolve(AbuBassamOps.sync()).catch(()=>false):null','settings sync must track settings result explicitly');need(appSettings,"if(window.AbuBassamDevices?.heartbeat)Promise.resolve(AbuBassamDevices.heartbeat()).catch(()=>false)",'device heartbeat must be auxiliary only');need(appSettings,"اكتملت مزامنة الإعدادات، لكن أرشيف الملفات لم يكتمل.",'settings sync must distinguish partial completion');
+need(appSettings,'async function google()','Google share must await backup/share preparation');
+need(appSettings,"if(!ok){if(state)state.textContent='لم تبدأ مشاركة Google.';return false}",'Google share must not claim success when backup/share did not start');
+need(appSettings,'id="abuArchiveAutoSync"','automatic archive control must be visible in settings');
+need(appSettings,'function archiveAutoSync(value)','automatic archive control must have real behavior');
+need(appSettings,'function setAutoSyncState(value)','archive and sync toggles must share one canonical state');
+need(appSettings,'DocumentVault?.setAutoSync','automatic archive setting must drive the document vault');
+for(const marker of [
+  "function requirePermission(key,label='')",
+  "function requireAny(keys,label='')",
+  "function open(){if(!requirePermission('settingsView'))return false",
+  "function theme(key){if(!requirePermission('settingsThemes'))",
+  "function fonts(){if(!requireAny(['settingsFonts','settingsCardFonts']",
+  "async function backup(mode){if(!requirePermission('backupCreate'))",
+  "if(mode==='share'&&!requirePermission('backupShare'))",
+  "async function sync(){if(!requirePermission('syncManual'))",
+  "function cloudLogin(){if(!requirePermission('cloudSettings'))",
+  "nextWifi!==!!previous.wifiOnly&&!requirePermission('syncWifiOnly')",
+  "function saveWhatsApp(){if(!requirePermission('settingsWhatsApp'))",
+  "async function shareWhatsApp(){if(!requirePermission('whatsappBackup'))",
+  "async function google(){if(!requirePermission('googleShare'))",
+  "function printSettings(){if(!requirePermission('settingsPrinting'))",
+  "function systemSettings(){if(!requirePermission('settingsPermissions'))",
+  "async function storage(){if(!requirePermission('settingsStorage'))",
+  "function cleanCache(){if(!requirePermission('settingsStorage'))",
+  "function resetDefaults(){if(!requirePermission('settingsReset'))"
+])need(appSettings,marker,'source-level settings permission '+marker);
+need(appSettings,"button.onclick=()=>window.AbuBassamSettings?.open?.()",'settings gear must dispatch through the current public guarded API');
+for(const marker of [
+  "requirePermission('printerDpi')",
+  "requirePermission('printerBorderless')",
+  "requirePermission('printerCalibration')",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerAdd'])",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerDelete'])",
+  "requirePermissions(['settingsPrinting','printerProfiles','printerSetDefault'])",
+  "requirePermissions(['settingsPrinting','printerProfiles'])"
+])need(enhancements,marker,'granular printer permission '+marker);
+need(enhancements,"function savePrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer profile save must require top-level printing and profile permissions');
+need(enhancements,"function newPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerAdd']))return false",'printer creation must require top-level and granular permissions');
+need(enhancements,"function deletePrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerDelete']))return false",'printer deletion must require top-level and granular permissions');
+need(enhancements,"function setDefaultPrinter(){if(!requirePermissions(['settingsPrinting','printerProfiles','printerSetDefault']))return false",'default-printer mutation must require top-level and granular permissions');
+need(enhancements,"function applyPrinterPermissionUi()",'printer controls must mirror granular permissions');
+for(const marker of ["canPermission('printerDpi')","canPermission('printerBorderless')","canPermission('printerCalibration')","canPermission('printerSetDefault')","canPermission('printerAdd')","canPermission('printerDelete')",'abuPrinterApply','abuPrinterSave','abuPrinterDefault','abuPrinterAdd','abuPrinterDelete'])need(enhancements,marker,'printer permission UI '+marker);
+need(enhancements,"function applyPrinter(show=true){if(!requirePermissions(['settingsPrinting','printerProfiles']))return false",'printer apply must expose denied result to later wrappers');
+need(enhancements,"return true}", 'guarded printer apply must expose a successful result');
+need(appSettings,"if(policy.mode==='manual'){policy.mode='daily'",'enabling automatic sync must not remain trapped in manual policy');
+need(appSettings,"function autoSync(value){if(!requirePermission('settingsSync')||!requirePermission('syncAutomatic')",'automatic sync must require settingsSync and syncAutomatic');
+need(appSettings,"function archiveAutoSync(value){if(!requirePermission('settingsArchive')||!requirePermission('syncAutomatic')",'archive auto-sync must require settingsArchive and syncAutomatic');
+need(appSettings,"function syncPolicy(){if(!requirePermission('settingsSync')||!requirePermission('syncSettings')",'sync policy must require settingsSync and syncSettings');
+need(appSettings,"devices();if(canPermission('settingsStorage'))storage();refreshDeviceInfo()",'opening settings must not trigger denied storage access');
+need(appSettings,"const SETTINGS_BACKUP_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamTypographyV5','abuBassamCustomFontsV5']",'base safety backup must use an explicit settings allowlist');
+need(appSettings,'for(const key of SETTINGS_BACKUP_KEYS)','base safety backup must not sweep all localStorage');
+need(appSettings,'if(value===null)continue','base safety backup must include every present resettable value regardless of size');
+need(appSettings,"function saveSettingsBackup(){try{",'base settings backup must report creation failure');
+need(appSettings,"if(!saveSettingsBackup()){alert('تعذر إنشاء نسخة الأمان؛ لم يتم تغيير الإعدادات.');return false}",'base reset must stop before mutation when safety backup fails');
+need(appSettings,'const previous=new Map(SETTINGS_BACKUP_KEYS.map(key=>[key,localStorage.getItem(key)]))','base reset must snapshot resettable values before mutation');
+need(appSettings,"function resetThemeForSettingsReset(){if(!requirePermission('settingsReset'))return false",'theme reset must be authorized by settingsReset itself');
+need(appSettings,"base=current?.__abuOriginal||current",'authorized reset must reach the underlying theme applier without requiring settingsThemes');
+for(const token of [
+  "function telegramPermission(key)",
+  "if(!telegramReady()||!telegramPermission('telegramBackup'))return false",
+  "requireTelegramPermission('settingsTelegram','إعدادات Telegram')",
+  "function saveTelegramSettings()",
+  "function clearTelegramSettings()",
+  "function testTelegram()"
+])need(indexHtml,token,'Telegram permission '+token);
 const fix=read(path.join(web,'settings-corrections-runtime.js'));
+const adminPermissions=read(path.join(web,'admin-permissions-runtime.js'));
+need(adminPermissions,"[/خصوصية|Screenshot/,['securityPrivacyMode']]",'privacy settings UI must use securityPrivacyMode');
+need(adminPermissions,"[/أذونات/,['settingsPermissions']]",'system-permissions UI must keep settingsPermissions separate');
 for(const marker of [
   "nativeSecurity('privacyMode'",'abuPrivacyCapture','navigator.storage?.estimate',
   'لم يتم إنشاء جهاز افتراضي','device_id||device.id','RESET_KEYS=',
   'لا يوجد تسجيل دخول مباشر إلى Google','connectionClass()','wifiOnly()',
 'abuBassamActivePrinterProfileV1',
   'transform:translate(${x}mm,${y}mm)','p.borderless?0',
-  'e.applyPrinter=applyPrinterSafe'
-])need(fix,marker,'settings corrections');
+  ])need(fix,marker,'settings corrections');
+for(const marker of [
+  "function requirePermission(key)",
+  "async function setPrivacy(enabled,quiet=false){if(!quiet&&!requirePermission('securityPrivacyMode'))return false",
+  "input.disabled=!allowed('securityPrivacyMode')",
+  "function resetDefaultsSafe(){if(!requirePermission('settingsReset'))return false",
+  "s.storage=async function(){if(!requirePermission('settingsStorage'))return false",
+  "s.privacyMode=enabled=>setPrivacy(enabled,false)",
+  "if(allowed('settingsStorage'))storageStats()",
+  "apply0=e.applyPrinter?.bind(e)",
+  "if(ok!==true)return false;applyPrinterSafe(show);return true",
+  "window.printDirectly=function(){if(!requirePermission('printGeneral'))return false"
+])need(fix,marker,'settings correction permission preservation '+marker);
+need(fix,'for(const key of RESET_KEYS)','correction safety backup must contain reset settings only');
+need(fix,'if(raw===null)continue','correction safety backup must include every present resettable value regardless of size');
+need(fix,'const previous=new Map(RESET_KEYS.map(k=>[k,localStorage.getItem(k)]))','settings reset must snapshot values before mutation');
+need(fix,"if(typographyResult===false)throw new Error('تعذر حفظ إعدادات الخطوط الافتراضية')",'settings reset must fail if typography persistence fails');
+need(fix,'previous.forEach((value,key)=>','failed settings reset must restore the previous local values');
+need(fix,'window.AbuBassamSettings?.resetThemeForSettingsReset?.()','correction reset must use the settings-reset-authorized theme path');
+no(fix,"window.applyTheme?.('default')",'correction reset must not be blocked by settingsThemes');
+need(fix,"return true}",'successful settings reset must report success');
+no(fix,'s.google=googleShare','settings corrections must not replace the guarded Google share implementation');
+no(fix,'function googleShare()','dead correction-layer Google share code must stay removed');
+no(fix,'s.storage=storageStats','settings corrections must not expose unguarded storage stats');
+no(fix,'e.applyPrinter=applyPrinterSafe','settings corrections must not replace guarded printer apply directly');
 const reset=(fix.match(/const RESET_KEYS=\[([^\]]*)\]/)||[])[1]||'';
 if(/SyncPolicy|WhatsApp|WA_KEY|AUTO_SYNC/i.test(reset))errors.push('settings reset: must not clear sync or WhatsApp settings');
+const vaultHardening=read(path.join(web,'document-vault-hardening-runtime.js'));
+need(vaultHardening,"return true}catch(e){alert('تعذر إنشاء النسخة:",'plain vault backup must report success and failure');
+need(vaultHardening,"if(!confirm('النسخة ZIP العادية غير مشفرة",'plain vault backup must allow explicit cancellation');
+need(vaultHardening,"mode==='share'&&!allowed('backupShare')",'vault backup sharing must require backupShare at source');
 const vault=read(path.join(web,'document-vault-runtime.js'));
 for(const marker of ['function wifiVerified()',"return type==='wifi'",'policy.wifiOnly&&!wifiVerified()','const current=localStorage.getItem(SYNC_POLICY_KEY)'])need(vault,marker,'canonical Wi-Fi-only sync policy');
 no(vault,'knownNonWifi()','obsolete fail-open Wi-Fi detection');
 const enh=read(path.join(web,'settings-enhancements-runtime.js'));
 need(enh,'abu_bassam_owner_device_count','device count RPC');
 need(enh,'AbuBassamDeviceRegistry?.count','device registry count');
+need(enh,"if(section)section.hidden=!isOwner;if(!isOwner){currentCount=0;return false}",'secondary users must not read or view the owner-only device limit');
+need(enh,"#abuDeviceLimitSettings .abu-device-stepper button",'device-limit step controls must remain inside the owner-only section');
 no(enh,".from('abu_bassam_devices')",'device count direct table access');
 const loader=read(path.join(web,'device-name-runtime.js'));
+const deviceReconcile=read(path.join(web,'device-reconcile-runtime.js'));
 for(const marker of ['settings-corrections-runtime.js','loadSettingsCorrections()','await loadSettingsCorrections();'])need(loader,marker,'settings loader');
+
+need(appSettings,"display=firstCopy?'نسختي الأولى باسم (أكرم)':name",'settings must label the owner device as the requested first copy');
+need(appSettings,"original=firstCopy&&name!==display?'اسم الجهاز: '+name+' • ':''",'settings must preserve the real device name as metadata');
+need(deviceReconcile,"shown=isOwner?'نسختي الأولى باسم (أكرم)':name",'device manager must use the same first-copy owner label');
 no(loader,'wifi-sync-guard-runtime.js','obsolete Wi-Fi guard loader');
 no(loader,'loadWifiSyncGuard','obsolete Wi-Fi guard loader function');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}

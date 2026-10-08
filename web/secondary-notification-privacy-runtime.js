@@ -49,12 +49,13 @@ function guardFromOperation(){
   wrapped.__abuSecondaryGuard=true;wrapped.__abuOriginal=original;center.fromOperation=wrapped;return true;
 }
 function boot(){
-  let attempts=0;const timer=setInterval(()=>{attempts++;guardFromOperation();clean();if((window.AbuBassamNotifications&&role())||attempts>120)clearInterval(timer)},120);
-  [100,300,900,1800,3500,7000].forEach(ms=>setTimeout(()=>{guardFromOperation();clean()},ms));
-  setInterval(()=>{if(role()==='secondary'){guardFromOperation();clean()}},1500);
-  window.addEventListener('online',()=>setTimeout(clean,100));
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(clean,100)});
-  window.addEventListener('storage',event=>{if(event.key===STORE||event.key===AUDIT_QUEUE||event.key===SCOPE_KEY)setTimeout(clean,0)});
+  const refresh=()=>{guardFromOperation();clean()};
+  refresh();
+  window.addEventListener('online',refresh);
+  document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='notification-center-runtime.js'||src==='app-security-runtime.js')refresh()});
+  document.addEventListener('abu-bassam-auth-changed',refresh);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh()});
+  window.addEventListener('storage',event=>{if(event.key===STORE||event.key===AUDIT_QUEUE||event.key===SCOPE_KEY)refresh()});
 }
 window.AbuBassamSecondaryNotificationPrivacy={clean,guardFromOperation,deviceId};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();

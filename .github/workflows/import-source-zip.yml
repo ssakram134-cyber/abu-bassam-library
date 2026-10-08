@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       source_zip:
-        description: "ZIP path already uploaded to this repository"
+        description: "Relative .zip path already committed to this repository"
         required: true
-        default: "Abu_Bassam_Library_4.3.2_Source.zip"
+        default: "Abu_Bassam_Library_Source.zip"
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: source-import-${{ github.ref }}
+  group: source-import-main
   cancel-in-progress: false
 
 jobs:
@@ -21,40 +21,89 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      - name: Require trusted main ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || {
+            echo "Source ZIP import may run only from refs/heads/main." >&2
+            exit 1
+          }
+
       - name: Checkout trusted current repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Capture trusted validator before extraction
+      - name: Capture trusted validator and baseline before extraction
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/abu-trusted"
           cp tools/validate_imported_source.js "$RUNNER_TEMP/abu-trusted/validate_imported_source.js"
+          sha256sum "$RUNNER_TEMP/abu-trusted/validate_imported_source.js" > "$RUNNER_TEMP/abu-trusted/validator.sha256"
+          echo "ABU_TRUSTED_APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          echo "ABU_TRUSTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")" >> "$GITHUB_ENV"
 
-      - name: Preflight ZIP without executing imported code
+      - name: Preflight repository ZIP without executing imported code
         env:
-          SOURCE_ZIP: ${{ inputs.source_zip }}
+          SOURCE_ZIP_INPUT: ${{ inputs.source_zip }}
         shell: bash
         run: |
           set -euo pipefail
-          test -f "$SOURCE_ZIP" || { echo "ZIP not found: $SOURCE_ZIP" >&2; exit 1; }
-          python3 - "$SOURCE_ZIP" <<'PY'
+          python3 - "$SOURCE_ZIP_INPUT" "$GITHUB_WORKSPACE" "$GITHUB_ENV" <<'PY'
           import pathlib, stat, sys, zipfile
-          archive=pathlib.Path(sys.argv[1])
+
+          raw_text=sys.argv[1].replace('\\','/').strip()
+          workspace=pathlib.Path(sys.argv[2]).resolve()
+          env_file=pathlib.Path(sys.argv[3])
+          raw=pathlib.PurePosixPath(raw_text)
+
+          if any(ord(ch)<32 or ord(ch)==127 for ch in raw_text):
+              raise SystemExit('Archive rejected: source_zip contains control characters')
+          if not raw_text or raw.is_absolute() or '..' in raw.parts or raw.suffix.lower()!='.zip':
+              raise SystemExit(f'Archive rejected: source_zip must be a relative .zip path inside the repository: {raw_text!r}')
+
+          candidate=workspace
+          for part in raw.parts:
+              candidate=candidate/part
+              if candidate.is_symlink():
+                  raise SystemExit(f'Archive rejected: source_zip path contains symbolic link: {raw_text!r}')
+
+          try:
+              resolved=candidate.resolve(strict=True)
+          except FileNotFoundError:
+              raise SystemExit(f'ZIP not found: {raw_text}')
+          try:
+              resolved.relative_to(workspace)
+          except ValueError:
+              raise SystemExit(f'Archive rejected: source_zip escapes repository workspace: {raw_text!r}')
+          if not resolved.is_file():
+              raise SystemExit(f'Archive rejected: source_zip is not a regular file: {raw_text!r}')
+
           forbidden_names={'.env','.env.local','.env.production','.npmrc','local.properties','google-services.json'}
           forbidden_ext={'.jks','.keystore','.p12','.pfx','.pem','.key'}
           count=0
           total=0
-          with zipfile.ZipFile(archive) as z:
+          normalized_names=set()
+          with zipfile.ZipFile(resolved) as z:
               for item in z.infolist():
                   count+=1
-                  if count>5000: raise SystemExit('Archive rejected: more than 5000 entries')
+                  if count>5000:
+                      raise SystemExit('Archive rejected: more than 5000 entries')
+                  if item.flag_bits & 0x1:
+                      raise SystemExit(f'Archive rejected: encrypted ZIP entry {item.filename!r}')
                   name=item.filename.replace('\\','/')
+                  if any(ord(ch)<32 or ord(ch)==127 for ch in name):
+                      raise SystemExit(f'Archive rejected: control character in path {name!r}')
                   p=pathlib.PurePosixPath(name)
                   if not name or p.is_absolute() or '..' in p.parts:
                       raise SystemExit(f'Archive rejected: unsafe path {name!r}')
+                  normalized=p.as_posix().rstrip('/')
+                  if normalized in normalized_names:
+                      raise SystemExit(f'Archive rejected: duplicate path {name!r}')
+                  normalized_names.add(normalized)
                   mode=(item.external_attr >> 16) & 0o170000
                   if mode==stat.S_IFLNK:
                       raise SystemExit(f'Archive rejected: symbolic link {name!r}')
@@ -67,21 +116,24 @@ jobs:
                   ext=pathlib.PurePosixPath(base).suffix.lower()
                   if base in forbidden_names or ext in forbidden_ext:
                       raise SystemExit(f'Archive rejected: secret/signing file {name!r}')
+
+          with env_file.open('a',encoding='utf-8') as f:
+              f.write(f'SOURCE_ZIP_SAFE={resolved}\n')
           print(f'ZIP preflight passed: {count} entries, {total/1024/1024:.1f} MB')
           PY
 
       - name: Extract into isolated directory
-        env:
-          SOURCE_ZIP: ${{ inputs.source_zip }}
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/abu-import"
           mkdir -p "$RUNNER_TEMP/abu-import"
-          python3 - "$SOURCE_ZIP" "$RUNNER_TEMP/abu-import" <<'PY'
+          python3 - "$SOURCE_ZIP_SAFE" "$RUNNER_TEMP/abu-import" <<'PY'
           import pathlib, sys, zipfile
-          src=pathlib.Path(sys.argv[1]); dst=pathlib.Path(sys.argv[2])
-          with zipfile.ZipFile(src) as z: z.extractall(dst)
+          src=pathlib.Path(sys.argv[1])
+          dst=pathlib.Path(sys.argv[2])
+          with zipfile.ZipFile(src) as z:
+              z.extractall(dst)
           PY
 
       - name: Locate and validate imported source using trusted validator
@@ -110,15 +162,14 @@ jobs:
           cd "$SOURCE_ROOT"
           npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Import source while preserving trusted workflow boundary
-        env:
-          SOURCE_ZIP: ${{ inputs.source_zip }}
+      - name: Import source while preserving trusted workflow and validator boundary
         shell: bash
         run: |
           set -euo pipefail
           rsync -a --delete \
             --exclude '.git/' \
             --exclude '.github/' \
+            --exclude 'tools/validate_imported_source.js' \
             --exclude 'node_modules/' \
             --exclude 'dist/' \
             --exclude 'android/' \
@@ -126,12 +177,19 @@ jobs:
             --exclude '*.jks' --exclude '*.keystore' --exclude '*.p12' --exclude '*.pfx' --exclude '*.pem' --exclude '*.key' \
             "$SOURCE_ROOT/" ./
           rm -rf node_modules dist android ios
-          rm -f "$SOURCE_ZIP"
+          rm -f "$SOURCE_ZIP_SAFE"
+          sha256sum -c "$RUNNER_TEMP/abu-trusted/validator.sha256"
+          cmp -s tools/validate_imported_source.js "$RUNNER_TEMP/abu-trusted/validate_imported_source.js" || {
+            echo "Trusted import validator changed during source import." >&2
+            exit 1
+          }
           node "$RUNNER_TEMP/abu-trusted/validate_imported_source.js" .
 
       - name: Create review branch
         id: branch
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if git diff --quiet && git diff --cached --quiet; then
@@ -145,7 +203,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Review imported Abu Bassam source ZIP"
+          CLEAN_ORIGIN="https://github.com/${GITHUB_REPOSITORY}.git"
+          AUTH_ORIGIN="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote set-url origin "$AUTH_ORIGIN"
           git push --set-upstream origin "$BRANCH"
+          git remote set-url origin "$CLEAN_ORIGIN"
+          unset GH_TOKEN AUTH_ORIGIN
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
@@ -161,4 +224,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Review imported Abu Bassam source" \
-            --body "Automated source import passed archive preflight and trusted static validation. Review the diff and normal project checks before merging. This workflow never writes imported source directly to main."
+            --body "Automated source import passed archive preflight and trusted static validation. The trusted workflow and validator were preserved. Review the diff first, then run npm run check:web against the source locally before merging. APK builds and production signing are disabled in GitHub Actions. This workflow never writes imported source directly to main."

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import math
 import subprocess
 from pathlib import Path
 
@@ -25,6 +24,8 @@ BLUE_DARK = "#063a72"
 SKY = "#eaf8ff"
 BLACK = "#0b0b0c"
 GOLD_LIGHT = "#efd08b"
+DEMO_LOGIN_EMAIL = "user@example.invalid"
+DEMO_LOGIN_PASSWORD = "DEMO-NOT-A-REAL-PASSWORD"
 
 
 def font(size: int, bold: bool = False):
@@ -69,7 +70,7 @@ def logo(im: Image.Image, box):
 
 
 def qr_matrix(payload: str):
-    raw = subprocess.check_output(["node", str(ROOT / "tools" / "qr_matrix.js"), payload, "M"], text=True)
+    raw = subprocess.check_output(["node", str(ROOT / "tools" / "qr_matrix.js"), payload, "M"], text=True, timeout=10)
     return json.loads(raw)
 
 
@@ -179,13 +180,12 @@ def child_back():
     d = ImageDraw.Draw(im)
     for cx, cy, r in [(260, 90, 80), (900, 105, 95), (1450, 100, 110)]:
         d.ellipse((cx-r, cy-r//2, cx+r, cy+r//2), fill="#c9edff")
-    qr(im, "الاسم: زهراء أكرم\nرقم خط النقل: 12\nالسكن: حي القادسية\nرقم هاتف ولي الأمر: 07829667521", (55, 120, 535, 600), border=BLUE)
+    qr(im, "الاسم: زهراء أكرم\nالسكن: حي القادسية\nرقم هاتف ولي الأمر: 07829667521", (55, 120, 535, 600), border=BLUE)
     qr(im, "tel:07829667521", (120, 635, 400, 915), border=BLUE)
     rtl(d, (470, 745), "اتصال طارئ", 36, BLUE_DARK, bold=True, anchor="la")
     info_row(d, 210, "اسم الطفل:", "زهراء أكرم", BLUE_DARK, "#163c59")
-    info_row(d, 355, "رقم خط النقل:", "12", BLUE_DARK, "#163c59")
-    info_row(d, 500, "السكن:", "حي القادسية", BLUE_DARK, "#163c59")
-    info_row(d, 645, "هاتف ولي الأمر:", "07829667521", BLUE_DARK, "#163c59")
+    info_row(d, 400, "السكن:", "حي القادسية", BLUE_DARK, "#163c59")
+    info_row(d, 590, "هاتف ولي الأمر:", "07829667521", BLUE_DARK, "#163c59")
     rtl(d, (1620, 800), "الباركود يضم جميع المعلومات ويتيح الاتصال المباشر", 32, BLUE_DARK, bold=True)
     footer(im, BLUE)
     return im
@@ -222,10 +222,10 @@ def login_front():
     rtl(d, (1145, 343), "معلومات تسجيل الدخول", 39, "#111", bold=True, anchor="mm")
     rtl(d, (1555, 465), "البريد الإلكتروني", 35, GOLD_LIGHT, bold=True)
     d.rounded_rectangle((720, 495, 1560, 585), radius=22, fill="#fffdf5", outline=GOLD, width=4)
-    cap_text(d, 755, 513, "AkramA1992@gmail.com", 38)
+    cap_text(d, 755, 513, DEMO_LOGIN_EMAIL, 38)
     rtl(d, (1555, 675), "كلمة السر", 35, GOLD_LIGHT, bold=True)
     d.rounded_rectangle((720, 705, 1560, 795), radius=22, fill="#fffdf5", outline=GOLD, width=4)
-    cap_text(d, 755, 723, "AbuBassam2026", 42)
+    cap_text(d, 755, 723, DEMO_LOGIN_PASSWORD, 42)
     footer(im, "#2b2117", GOLD_LIGHT)
     return im
 
@@ -237,14 +237,14 @@ def login_back():
     d.rounded_rectangle((18, 18, W-18, H-18), radius=60, outline=GOLD, width=10)
     logo(im, (70, 50, 405, 305))
     rtl(d, (1550, 145), "معلوماتك لتسجيل الدخول إلى فيسبوك", 58, GOLD_LIGHT, bold=True)
-    qr(im, "الخدمة: Facebook\nالبريد: AkramA1992@gmail.com\nكلمة السر: AbuBassam2026\nملاحظات: حساب شخصي", (85, 355, 640, 910), ink="#050505", border=GOLD)
+    qr(im, f"الخدمة: Facebook\nالبريد: {DEMO_LOGIN_EMAIL}\nكلمة السر: {DEMO_LOGIN_PASSWORD}\nملاحظات: بيانات تجريبية غير حقيقية", (85, 355, 640, 910), ink="#050505", border=GOLD)
     d.rounded_rectangle((705, 345, 1605, 840), radius=38, outline=GOLD, width=5)
     rtl(d, (1530, 450), "الخدمة:", 38, GOLD_LIGHT, bold=True)
     rtl(d, (1190, 450), "Facebook", 42, "white", bold=True, anchor="ra")
     rtl(d, (1530, 585), "البريد:", 38, GOLD_LIGHT, bold=True)
-    d.text((760, 585), "AkramA1992@gmail.com", font=font(34, True), fill="white", anchor="la")
+    d.text((760, 585), DEMO_LOGIN_EMAIL, font=font(34, True), fill="white", anchor="la")
     rtl(d, (1530, 720), "كلمة السر:", 38, GOLD_LIGHT, bold=True)
-    d.text((760, 720), "AbuBassam2026", font=font(38, True), fill="white", anchor="la")
+    d.text((760, 720), DEMO_LOGIN_PASSWORD, font=font(38, True), fill="white", anchor="la")
     rtl(d, (1150, 810), "الحروف الكبيرة تظهر بالأحمر في الوجه الأمامي", 28, "#ff9a9a", bold=True, anchor="mm")
     footer(im, "#2b2117", GOLD_LIGHT)
     return im

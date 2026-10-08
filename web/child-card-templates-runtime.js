@@ -238,12 +238,11 @@ function patchCardsStudio(){
 
 function init(){
   installStyle();
-  const tryPatch=()=>{patchCardsStudio();patchTypography();refresh()};
+  const tryPatch=()=>{patchCardsStudio();patchTypography();refresh();if(window.CardsStudio&&window.AbuBassamTypography)document.removeEventListener('abu-runtime-loaded',tryPatch)};
+  const onRendered=event=>{if((event.detail?.type||window.CardsStudio?.currentType?.())==='child'){markCards();if(!document.getElementById('abuChildTemplatePicker'))installPicker()}};
+  document.addEventListener('abu-runtime-loaded',tryPatch);
   tryPatch();
-  let attempts=0;
-  const timer=setInterval(()=>{attempts+=1;tryPatch();if((window.CardsStudio&&window.AbuBassamTypography)||attempts>80)clearInterval(timer)},50);
-  const observer=new MutationObserver(()=>{if(window.CardsStudio?.currentType?.()==='child'){markCards();if(!document.getElementById('abuChildTemplatePicker'))installPicker()}});
-  observer.observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('abu-cards-rendered',onRendered);
 }
 
 window.AbuBassamChildTemplates={select:selectTemplate,current,list:()=>TEMPLATES.map(t=>({...t})),refresh,version:1};

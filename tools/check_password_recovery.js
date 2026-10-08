@@ -6,17 +6,20 @@ const recovery=fs.readFileSync(path.join(root,'web/password-recovery-runtime.js'
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-android-assets.mjs'),'utf8');
 const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
 const requiredRecovery=[
-  "const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com'",
-  "function accountEmail()",
-  "resetPasswordForEmail(accountEmail()",
+  "function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||'').trim().toLowerCase()}",
+  "const email=accountEmail();if(!email)throw new Error('تعذر تحديد بريد الحساب المعتمد')",
+  "resetPasswordForEmail(email,{redirectTo:`${CALLBACK}?flow=${FLOW}`})",
   "exchangeCodeForSession(code)",
   "updateUser({password})",
   "abu-bassam-library://auth/callback",
   "نسيت كلمة المرور؟",
-  "PASSWORD_RECOVERY"
+  "PASSWORD_RECOVERY",
+  "if(!email||email!==accountEmail())throw new Error('تعذر تأكيد أن الحساب المفتوح يطابق البريد المعتمد')",
+  "if(email&&email===accountEmail())openResetModal()"
 ];
 for(const needle of requiredRecovery){if(!recovery.includes(needle))throw new Error(`password recovery missing: ${needle}`)}
 if(recovery.includes('akramag1992@gmail.com'))throw new Error('password recovery contains obsolete incorrect account email');
+if(/DEFAULT_ACCOUNT_EMAIL|akrama1992@gmail\.com/.test(recovery))throw new Error('password recovery must derive the account email from the canonical security identity');
 const requiredPrepare=[
   "const source = resolve(projectRoot, 'web')",
   "await rm(destination, { recursive: true, force: true });",

@@ -1,16 +1,19 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+const vault=read('web/document-vault-runtime.js');
 const advanced=read('web/document-vault-advanced-runtime.js');
 const offline=read('web/document-vault-offline-ocr-runtime.js');
 const encrypted=read('web/document-vault-encrypted-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const startup=read('web/device-name-runtime.js');
 const assets=read('scripts/prepare-android-assets.mjs');
-new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
+new Function(vault);new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
 need(loader,'document-vault-advanced-runtime.js','advanced vault runtime loader');
 need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader');
 need(loader,'document-vault-encrypted-runtime.js','encrypted vault runtime loader');
+
+for(const token of ["async function confirmedOutput(type,payload,fallback)","await confirmedOutput('saveBase64'","await confirmedOutput('saveToGallery'","await confirmedOutput('printPages'","await confirmedOutput('printBase64'","await confirmedOutput('printHtml'","await confirmedOutput('savePdfHtml'"])need(vault,token,'vault outputs must wait for native confirmation '+token);
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
@@ -23,6 +26,7 @@ need(advanced,'avaSaturation','saturation control');
 need(advanced,'function homography','true projective homography');
 need(advanced,'MAX_SOURCE_PIXELS','source memory guard');
 need(advanced,'MAX_OUTPUT_PIXELS','output memory guard');
+need(vault,"abu-vault-rendered",'vault grid must emit explicit render lifecycle');need(advanced,"abu-vault-rendered",'advanced vault must follow explicit render lifecycle');if(advanced.includes('new MutationObserver'))throw new Error('document vault advanced check failed: advanced vault must not observe the grid DOM');
 need(advanced,"syncState='pending'",'edited image must re-enter sync queue');
 need(offline,"createWorker('ara+eng'",'Arabic and English OCR');
 need(offline,"workerPath:'vendor/tesseract/worker.min.js'",'local OCR worker');

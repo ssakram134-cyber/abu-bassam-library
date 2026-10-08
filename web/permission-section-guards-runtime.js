@@ -2,26 +2,93 @@
 'use strict';
 if(window.__ABU_PERMISSION_SECTION_GUARDS_V1__)return;
 window.__ABU_PERMISSION_SECTION_GUARDS_V1__=true;
-let opsPatched=false,notifyPatched=false,securityPatched=false,settingsPatched=false,printPatched=false;
+let opsPatched=false,notifyPatched=false,securityPatched=false,settingsPatched=false,printPatched=false,themePatched=false;
 const $=id=>document.getElementById(id);
-const can=k=>window.AbuBassamPermissions?.can?.(k)!==false;
+const customerPhoneHtml=new WeakMap();
+function setGuardDisabled(el,denied){
+  if(!el)return;
+  if(denied){
+    if(el.dataset.abuSectionPermissionDisabled!=='1'){
+      el.dataset.abuSectionPermissionDisabled='1';
+      el.dataset.abuSectionPermissionPrevDisabled=el.disabled?'1':'0';
+      el.dataset.abuSectionPermissionPrevOpacity=el.style.opacity||''
+    }
+    el.disabled=true;el.style.opacity='.45'
+  }else if(el.dataset.abuSectionPermissionDisabled==='1'){
+    el.disabled=el.dataset.abuSectionPermissionPrevDisabled==='1';
+    if(el.dataset.abuSectionPermissionPrevOpacity)el.style.opacity=el.dataset.abuSectionPermissionPrevOpacity;
+    else el.style.removeProperty('opacity');
+    delete el.dataset.abuSectionPermissionDisabled;
+    delete el.dataset.abuSectionPermissionPrevDisabled;
+    delete el.dataset.abuSectionPermissionPrevOpacity
+  }
+}
+function setGuardHidden(el,hidden){
+  if(!el)return;
+  if(hidden){
+    if(el.dataset.abuSectionPermissionHidden!=='1'){
+      el.dataset.abuSectionPermissionHidden='1';
+      el.dataset.abuSectionPermissionPrevDisplay=el.style.display||''
+    }
+    el.style.display='none'
+  }else if(el.dataset.abuSectionPermissionHidden==='1'){
+    if(el.dataset.abuSectionPermissionPrevDisplay)el.style.display=el.dataset.abuSectionPermissionPrevDisplay;
+    else el.style.removeProperty('display');
+    delete el.dataset.abuSectionPermissionHidden;
+    delete el.dataset.abuSectionPermissionPrevDisplay
+  }
+}
+function setGuardPointer(el,denied){
+  if(!el)return;
+  if(denied){
+    if(el.dataset.abuSectionPermissionPointer!=='1'){
+      el.dataset.abuSectionPermissionPointer='1';
+      el.dataset.abuSectionPermissionPrevPointer=el.style.pointerEvents||'';
+      el.dataset.abuSectionPermissionPrevOpacity=el.style.opacity||''
+    }
+    el.style.pointerEvents='none';el.style.opacity='.45'
+  }else if(el.dataset.abuSectionPermissionPointer==='1'){
+    if(el.dataset.abuSectionPermissionPrevPointer)el.style.pointerEvents=el.dataset.abuSectionPermissionPrevPointer;
+    else el.style.removeProperty('pointer-events');
+    if(el.dataset.abuSectionPermissionPrevOpacity)el.style.opacity=el.dataset.abuSectionPermissionPrevOpacity;
+    else el.style.removeProperty('opacity');
+    delete el.dataset.abuSectionPermissionPointer;
+    delete el.dataset.abuSectionPermissionPrevPointer;
+    delete el.dataset.abuSectionPermissionPrevOpacity
+  }
+}
+const secondary=()=>window.AbuBassamSecurity?.role?.()==='secondary';
+const can=k=>!secondary()||window.AbuBassamPermissions?.can?.(k)===true;
 function deny(k){const item=window.AbuBassamPermissions?.items?.find?.(x=>x.key===k);alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+(item?.label||k));return false}
 function wrap(obj,name,key){const f=obj?.[name];if(typeof f!=='function'||f.__abuSectionPermissionGuard)return;const w=function(...args){if(!can(key))return deny(key);return f.apply(this,args)};w.__abuSectionPermissionGuard=true;w.__abuOriginal=f;obj[name]=w}
 function patchOps(){const a=window.AbuBassamOps;if(!a||opsPatched)return;opsPatched=true;wrap(a,'open','logsViewOwn');wrap(a,'sync','syncManual');const oldOpen=window.openOps;if(typeof oldOpen==='function')window.openOps=function(...args){if(!can('logsViewOwn'))return deny('logsViewOwn');return a.open(...args)}}
 function patchNotifications(){const a=window.AbuBassamNotifications;if(!a||notifyPatched)return;notifyPatched=true;wrap(a,'open','notificationsView');wrap(a,'read','notificationsMarkRead');wrap(a,'markAll','notificationsMarkRead');wrap(a,'remove','notificationsDelete');wrap(a,'clearRead','notificationsDelete');if(window.AbuBassamSecurity?.role?.()!=='owner'){wrap(a,'loadAdminReport','notificationsViewBranches');wrap(a,'exportAdmin','notificationsViewBranches');wrap(a,'pullOwnerActivity','notificationsViewBranches')}}
 function patchSecurity(){const s=window.AbuBassamSecurity;if(!s||securityPatched)return;securityPatched=true;wrap(s,'toggleBiometric','securityBiometric');wrap(s,'setLockMinutes','securityAutoLock');wrap(s,'appearanceSync','settingsAppearance');wrap(s,'restorePreviousTheme','settingsAppearance')}
-function patchSettings(){const s=window.AbuBassamSettings;if(!s||settingsPatched)return;settingsPatched=true;wrap(s,'privacyMode','securityPrivacyMode');wrap(s,'syncPolicy','syncSettings');wrap(s,'autoSync','syncAutomatic');wrap(s,'google','googleShare');wrap(s,'resetDefaults','settingsReset');wrap(s,'storage','settingsStorage')}
+function patchSettings(){const s=window.AbuBassamSettings;if(!s||settingsPatched)return;settingsPatched=true;wrap(s,'privacyMode','securityPrivacyMode');wrap(s,'theme','settingsThemes');wrap(s,'syncPolicy','syncSettings');wrap(s,'autoSync','syncAutomatic');wrap(s,'archiveAutoSync','syncAutomatic');wrap(s,'backup','backupCreate');wrap(s,'sync','syncManual');wrap(s,'cloudLogin','cloudSettings');wrap(s,'saveWhatsApp','settingsWhatsApp');wrap(s,'shareWhatsApp','whatsappBackup');wrap(s,'google','googleShare');wrap(s,'printSettings','settingsPrinting');wrap(s,'systemSettings','settingsPermissions');wrap(s,'resetDefaults','settingsReset');wrap(s,'storage','settingsStorage');wrap(s,'cleanCache','settingsStorage')}
+function patchTheme(){if(themePatched)return;const f=window.applyTheme;if(typeof f!=='function')return;wrap(window,'applyTheme','settingsThemes');themePatched=window.applyTheme!==f}
 function patchPrint(){if(printPatched)return;printPatched=true;const globals=[['printDirectly','printGeneral'],['downloadPDF','pdfSave'],['downloadJPG','imageExport'],['openOptions','settingsPrinting']];globals.forEach(([n,k])=>{const f=window[n];if(typeof f!=='function'||f.__abuSectionPermissionGuard)return;const w=function(...args){if(!can(k))return deny(k);return f.apply(this,args)};w.__abuSectionPermissionGuard=true;w.__abuOriginal=f;window[n]=w})}
 function forceHide(id,key){const el=$(id);if(!el)return;if(!can(key))el.style.setProperty('display','none','important');else if(el.style.getPropertyPriority('display')==='important'&&el.style.display==='none')el.style.removeProperty('display')}
-function guardTopButtons(){const rules=[[/سجل العمليات/, 'logsViewOwn'],[/الإشعار/, 'notificationsView'],[/مستمسكات الزبائن/, 'customerView']];document.querySelectorAll('button').forEach(b=>{const t=String(b.textContent||b.title||'');for(const [re,k] of rules)if(re.test(t)&&!can(k)){b.disabled=true;b.style.opacity='.4';b.title='معطل من الأدمن';break}})}
-function guardCustomerPrivacy(){const btn=$('custBtn');if(btn){btn.style.display=can('customerView')?'':'none';btn.disabled=!can('customerView')}const add=$('custAdd'),save=$('custSave');if(add){add.disabled=!can('customerAdd');add.style.opacity=can('customerAdd')?'1':'.45'}if(save){save.disabled=!can('customerAdd');save.style.opacity=can('customerAdd')?'1':'.45'}if(!can('customerPhoneView'))document.querySelectorAll('#custGrid .cu small,#custDetail small').forEach(el=>{el.innerHTML=String(el.innerHTML||'').replace(/(?:\+?964|0)?7\d{9}/g,'[هاتف محجوب]')})}
+function guardTopButtons(){const rules=[[/سجل العمليات/, 'logsViewOwn'],[/الإشعار/, 'notificationsView'],[/مستمسكات الزبائن/, 'customerView']];document.querySelectorAll('button').forEach(b=>{const t=String(b.textContent||b.title||'');let denied=false;for(const [re,k] of rules){if(re.test(t)&&!can(k)){denied=true;break}}if(denied){if(b.dataset.abuSectionGuarded!=='1'){b.dataset.abuSectionGuarded='1';b.dataset.abuSectionPrevDisabled=b.disabled?'1':'0';b.dataset.abuSectionPrevOpacity=b.style.opacity||'';b.dataset.abuSectionPrevTitle=b.title||''}b.disabled=true;b.style.opacity='.4';b.title='معطل من الأدمن'}else if(b.dataset.abuSectionGuarded==='1'){b.disabled=b.dataset.abuSectionPrevDisabled==='1';if(b.dataset.abuSectionPrevOpacity)b.style.opacity=b.dataset.abuSectionPrevOpacity;else b.style.removeProperty('opacity');if(b.dataset.abuSectionPrevTitle)b.title=b.dataset.abuSectionPrevTitle;else b.removeAttribute('title');delete b.dataset.abuSectionGuarded;delete b.dataset.abuSectionPrevDisabled;delete b.dataset.abuSectionPrevOpacity;delete b.dataset.abuSectionPrevTitle}})}
+function guardCustomerPrivacy(){
+  const viewAllowed=can('customerView'),addAllowed=can('customerAdd'),phoneAllowed=can('customerPhoneView');
+  const btn=$('custBtn');setGuardHidden(btn,!viewAllowed);setGuardDisabled(btn,!viewAllowed);
+  setGuardDisabled($('custAdd'),!addAllowed);setGuardDisabled($('custSave'),!addAllowed);
+  document.querySelectorAll('#custGrid .cu small,#custDetail small').forEach(el=>{
+    if(!phoneAllowed){
+      if(!customerPhoneHtml.has(el))customerPhoneHtml.set(el,el.innerHTML);
+      el.innerHTML=String(customerPhoneHtml.get(el)||'').replace(/(?:\+?964|0)?7\d{9}/g,'[هاتف محجوب]')
+    }else if(customerPhoneHtml.has(el)){
+      el.innerHTML=customerPhoneHtml.get(el);customerPhoneHtml.delete(el)
+    }
+  })
+}
 function inferCardPermission(text){text=String(text||'');if(/طبع|Print/i.test(text))return'cardsPrint';if(/PDF/i.test(text))return'cardsExportPdf';if(/حفظ.*صورة|تنزيل.*صورة|Export.*Image/i.test(text))return'cardsExportImage';if(/باركود|Barcode/i.test(text))return'cardsBarcode';if(/QR/i.test(text))return'cardsQr';if(/قالب|Template/i.test(text))return/cardsManage|مخصص/i.test(text)?'cardsManageCustomTemplates':'cardsTemplatesEdit';if(/حذف|Delete/i.test(text))return'cardsDelete';if(/نسخ|Duplicate/i.test(text))return'cardsDuplicate';if(/صورة|Image|Photo/i.test(text))return'cardsEditImage';if(/نص|Text|خط|Font/i.test(text))return'cardsEditText';return'cardsEdit'}
-function isCardContext(el){return !!el?.closest?.('[id*="card" i],[id*="badge" i],[class*="card" i],[class*="badge" i]')||/باج|كارت|بطاقة/.test(String(el?.closest?.('section,div')?.querySelector?.('h1,h2,h3,b')?.textContent||''))}
+function isCardContext(el){return !!el?.closest?.('#cardsCenter,.cs-modal,#abuRecoveryModal')}
 function clickGuard(e){const t=e.target?.closest?.('button,a,label,[role="button"]');if(!t)return;const text=String(t.textContent||t.title||'').trim();if(isCardContext(t)){const k=inferCardPermission(text);if(!can(k)){e.preventDefault();e.stopImmediatePropagation();deny(k);return}}if(/إعادة ضبط المصنع|Factory Reset/i.test(text)&&!can('settingsFactoryReset')){e.preventDefault();e.stopImmediatePropagation();deny('settingsFactoryReset');return}if(/تغيير كلمة المرور/i.test(text)&&!can('securityChangePassword')){e.preventDefault();e.stopImmediatePropagation();deny('securityChangePassword');return}if(/بصمة/.test(text)&&!can('securityBiometric')){e.preventDefault();e.stopImmediatePropagation();deny('securityBiometric');return}}
-function guardMainPhotoUi(){const map=[['imageInput','imageExport'],['paperSize','settingsPrinting'],['photoSize','settingsPrinting']];map.forEach(([id,k])=>{const el=$(id);if(el){el.disabled=!can(k);if(!can(k))el.style.opacity='.45'}});document.querySelectorAll('label[for="imageInput"]').forEach(el=>{el.style.pointerEvents=can('imageExport')?'':'none';el.style.opacity=can('imageExport')?'1':'.45'})}
+function guardMainPhotoUi(){const map=[['imageInput','edit'],['paperSize','settingsPrinting'],['photoSize','settingsPrinting']];map.forEach(([id,k])=>setGuardDisabled($(id),!can(k)));document.querySelectorAll('label[for="imageInput"]').forEach(el=>setGuardPointer(el,!can('edit')))}
 function guardSections(){forceHide('questionsCenter','questionsView');forceHide('compressorCenter','compressUse');guardTopButtons();guardCustomerPrivacy();guardMainPhotoUi()}
-function tick(){patchOps();patchNotifications();patchSecurity();patchSettings();patchPrint();guardSections()}
-let tickQueued=false;function scheduleTick(){if(tickQueued)return;tickQueued=true;requestAnimationFrame(()=>{tickQueued=false;tick()})}function boot(){document.addEventListener('click',clickGuard,true);document.addEventListener('abu-runtime-loaded',scheduleTick);document.addEventListener('abu-bassam-auth-changed',scheduleTick);document.addEventListener('abu-settings-ready',scheduleTick);document.addEventListener('abu-cards-rendered',scheduleTick);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleTick()});tick()}
+function tick(){patchOps();patchNotifications();patchSecurity();patchSettings();patchTheme();patchPrint();guardSections()}
+let tickQueued=false;function scheduleTick(){if(tickQueued)return;tickQueued=true;requestAnimationFrame(()=>{tickQueued=false;tick()})}function boot(){document.addEventListener('click',clickGuard,true);document.addEventListener('abu-runtime-loaded',scheduleTick);document.addEventListener('abu-bassam-auth-changed',scheduleTick);document.addEventListener('abu-bassam-security-state',scheduleTick);document.addEventListener('abu-settings-ready',scheduleTick);document.addEventListener('abu-cards-rendered',scheduleTick);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleTick()});tick()}
 window.AbuPermissionSectionGuards={tick};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

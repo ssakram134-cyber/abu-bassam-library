@@ -10,7 +10,31 @@ function cells(){return [...document.querySelectorAll('#abuReportRows .abu-repor
 function col(n){let s='';for(n++;n>0;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s}
 function cell(ref,value,style=0){return `<c r="${ref}" t="inlineStr"${style?` s="${style}"`:''}><is><t xml:space="preserve">${xml(value)}</t></is></c>`}
 function row(index,values,style=0){return `<row r="${index}">${values.map((v,i)=>cell(`${col(i)}${index}`,v,style)).join('')}</row>`}
-function loadZip(){if(window.JSZip)return Promise.resolve(window.JSZip);return new Promise((resolve,reject)=>{const found=document.querySelector('script[data-abu-jszip]');if(found){found.addEventListener('load',()=>window.JSZip?resolve(window.JSZip):reject(new Error('JSZip unavailable')),{once:true});found.addEventListener('error',()=>reject(new Error('JSZip load failed')),{once:true});return}const s=document.createElement('script');s.src='jszip.min.js';s.async=false;s.dataset.abuJszip='1';s.onload=()=>window.JSZip?resolve(window.JSZip):reject(new Error('JSZip unavailable'));s.onerror=()=>reject(new Error('JSZip load failed'));document.head.appendChild(s)})}
+let zipLoadPending=null;
+function loadZip(){
+  if(window.JSZip)return Promise.resolve(window.JSZip);
+  if(zipLoadPending)return zipLoadPending;
+  zipLoadPending=new Promise((resolve,reject)=>{
+    // Never wait for a second load event from a failed script tag.
+    document.querySelector('script[data-abu-jszip]')?.remove();
+    const script=document.createElement('script');
+    script.src='jszip.min.js';script.async=false;script.dataset.abuJszip='1';
+    let settled=false;
+    const fail=message=>{
+      if(settled)return;
+      settled=true;clearTimeout(watchdog);script.remove();reject(new Error(message))
+    };
+    const watchdog=setTimeout(()=>fail('JSZip load timeout'),15000);
+    script.onload=()=>{
+      if(!window.JSZip)return fail('JSZip unavailable');
+      if(settled)return;
+      settled=true;clearTimeout(watchdog);resolve(window.JSZip)
+    };
+    script.onerror=()=>fail('JSZip load failed');
+    try{document.head.appendChild(script)}catch(error){fail(String(error?.message||error))}
+  }).finally(()=>{zipLoadPending=null});
+  return zipLoadPending
+}
 async function makeWorkbook(reportRows,from,to){
   const JSZip=await loadZip(),zip=new JSZip();
   const rows=[['تقرير عمليات الأجهزة الفرعية — مكتبة أبو بسام','',''],[`الفترة: ${from||'—'} إلى ${to||'—'}`,`عدد العمليات: ${reportRows.length}`,''],['التاريخ / الجهاز','العملية / التفاصيل','النوع / المستوى'],...reportRows];
@@ -31,7 +55,7 @@ async function exportExcel(){
   try{const base64=await makeWorkbook(reportRows,from,to),mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',name=`Abu_Bassam_Branch_Report_${Date.now()}.xlsx`,data=`data:${mime};base64,${base64}`;if(window.Android?.saveBase64){Android.saveBase64(name,mime,data);return}const a=document.createElement('a');a.download=name;a.href=data;a.click()}catch(e){alert('تعذر إنشاء ملف Excel: '+String(e?.message||e))}
 }
 function install(){const actions=document.querySelector('#abuAdminContent .abu-report-actions');if(!actions||$('abuReportExcel'))return false;const b=document.createElement('button');b.id='abuReportExcel';b.type='button';b.textContent='Excel (.xlsx)';b.onclick=exportExcel;actions.appendChild(b);return true}
-function boot(){if(install())return;let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>120)clearInterval(timer)},250);new MutationObserver(()=>install()).observe(document.documentElement,{childList:true,subtree:true})}
+function boot(){install();document.addEventListener('abu-runtime-loaded',event=>{if(String(event.detail?.src||'')==='notification-center-runtime.js')install()});document.addEventListener('abu-bassam-auth-changed',install)}
 window.AbuBassamExcelReport={export:exportExcel,install};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

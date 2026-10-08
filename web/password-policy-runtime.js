@@ -70,6 +70,8 @@ function install(){
   return true;
 }
 document.addEventListener('click',enforceSignup,true);
-let tries=0,timer=setInterval(()=>{tries++;decorateSignup();if(install()||tries>120)clearInterval(timer)},50);
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,20));else setTimeout(install,20);
+function boot(){decorateSignup();install()}
+document.addEventListener('abu-bassam-security-state',boot);
+document.addEventListener('abu-settings-ready',boot);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

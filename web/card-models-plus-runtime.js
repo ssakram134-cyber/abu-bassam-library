@@ -49,6 +49,6 @@ function patch(){const api=window.AbuBassamCardModels;if(!api||api.__abuPlusPatc
  api.current=function(type){return EXTRA[type]?.includes(selected[type])?selected[type]:original.current(type)};
  api.models=function(type){return [...original.models(type),...(EXTRA[type]||[])];};api.__abuPlusPatched=true;apply();return true}
 function patchTypography(){const t=window.AbuBassamTypography;if(!t||t.__abuCardModelsPlusPrint||typeof t.printCss!=='function')return false;const original=t.printCss.bind(t);t.printCss=function(){return original()+css()};t.__abuCardModelsPlusPrint=true;return true}
-function init(){let tries=0,t=setInterval(()=>{tries++;patch();patchTypography();apply();if((window.AbuBassamCardModels&&window.AbuBassamTypography)||tries>160)clearInterval(t)},50);new MutationObserver(()=>{patch();patchTypography();apply()}).observe(document.documentElement,{childList:true,subtree:true})}
+function init(){const tryPatch=()=>{patch();patchTypography();apply();if(window.AbuBassamCardModels?.__abuPlusPatched&&window.AbuBassamTypography?.__abuCardModelsPlusPrint)document.removeEventListener('abu-runtime-loaded',tryPatch)};document.addEventListener('abu-runtime-loaded',tryPatch);tryPatch()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();

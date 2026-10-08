@@ -10,6 +10,7 @@ for(const f of files)if(!fs.existsSync(path.join(web,f)))errors.push(`Missing ad
 if(!errors.length){
   const p=read('photo-print-advanced-runtime.js');
   for(const m of ['بوستر / صورة كبيرة','abuPosterOverlap','abuPosterBorderless','abuPosterMarks','abuPosterLabels','buildPoster','testPoster','sharpen','temperature','abuDenoise','جودة الطباعة الحالية','abu-photo-handle'])need(p,m,'photo-print-advanced-runtime.js');
+  need(p,'abu-cards-rendered','card photo handles must follow explicit card render events');need(p,'abu-runtime-loaded','card photo handles must handle runtime load events');if(p.includes('new MutationObserver'))errors.push('photo-print-advanced-runtime.js: global DOM observer must not return');
   const project=read('poster-project-runtime.js');for(const m of ['معاينة البوستر بعد التجميع','حفظ مشروع','فتح مشروع','imageDataUrl','abuPosterAssemblyCanvas','abuPosterProjectInput','abuPosterOrientation','advanced-completion-runtime.js'])need(project,m,'poster-project-runtime.js');
   const g=read('photo-geometry-runtime.js');for(const m of ['قص حر / منظور','تصحيح منظور 4 زوايا','warpFull','abu-geo-handle','معاينة القياسات','abu-ruler-safe'])need(g,m,'photo-geometry-runtime.js');
   const d=read('design-studio-advanced-runtime.js');for(const m of ["['nw','n','ne','e','se','s','sw','w']",'ds-adv-rotate','dsAdvAspect','dsAdvGrid','dsAdvSnap','dsAdvX','dsAdvY','dsAdvW','dsAdvH','snapGeom'])need(d,m,'design-studio-advanced-runtime.js');

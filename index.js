@@ -6,6 +6,7 @@ import {
   BackHandler,
   Linking,
   Platform,
+  requireNativeComponent,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -23,24 +24,65 @@ import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 
-const APP_URL = 'file:///android_asset/library/index.html';
-const APP_VERSION = '4.3.2';
-const BUILD_NUMBER = '432';
+const APP_ORIGIN = 'https://appassets.androidplatform.net';
+const APP_URL = `${APP_ORIGIN}/library/index.html`;
+const RCTAbuBassamWebView = requireNativeComponent('RCTAbuBassamWebView');
+const APP_CONFIG = require('./app.json').expo;
+const APP_VERSION = String(APP_CONFIG.version || '');
+const BUILD_NUMBER = String(APP_CONFIG.android?.versionCode || '');
+const RELEASE_DATE = String(APP_CONFIG.extra?.releaseDate || '');
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
 ];
-const SECURE_KEY = /^abu_bassam_[a-z0-9_]{3,80}$/i;
+const SECURE_KEYS = new Set([
+  'abu_bassam_auth_session_v1',
+  'abu_bassam_auth_callback_v1',
+  'abu_bassam_device_secret_v1',
+  'abu_bassam_device_id_v1',
+  'abu_bassam_biometric_enabled_v1',
+  'abu_bassam_offline_trust_v2',
+  'abu_bassam_danger_pin_hash_v1',
+  'abu_bassam_danger_pin_failures_v1',
+  'abu_bassam_danger_pin_lock_until_v1',
+  'abu_bassam_recovery_pending_secret_v1',
+]);
 
 const ANDROID_BRIDGE = `
 (function () {
+  // The bridge is injected both before and after content load. Keep pending
+  // native requests and their callbacks intact across the second injection.
+  if (window.__ABU_NATIVE_BRIDGE_INSTALLED_V1__) return;
+  window.__ABU_NATIVE_BRIDGE_INSTALLED_V1__ = true;
+  window.__ABU_APP_META__ = ${JSON.stringify({ version: APP_VERSION, buildNumber: BUILD_NUMBER, releaseDate: RELEASE_DATE })};
   function send(type, payload) {
     try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
     catch (error) {}
   }
+  var outputPending = Object.create(null), outputSequence = 0;
+  function requestOutput(type, payload) {
+    return new Promise(function (resolve, reject) {
+      var requestId = 'out-' + Date.now() + '-' + (++outputSequence);
+      var timer = setTimeout(function () {
+        delete outputPending[requestId];
+        reject(new Error('OUTPUT_TIMEOUT'));
+      }, 300000);
+      outputPending[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      send(type, Object.assign({ requestId: requestId }, payload || {}));
+    });
+  }
+  window.AbuBassamNativeOutputResult = function (result) {
+    var requestId = String(result && result.requestId || ''), pending = outputPending[requestId];
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    delete outputPending[requestId];
+    if (result && result.ok) pending.resolve(result.value);
+    else pending.reject(new Error(String(result && result.error || 'OUTPUT_FAILED')));
+  };
   window.Android = {
+    requestOutput: function (type, payload) { return requestOutput(type, payload); },
     saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
     saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
@@ -107,6 +149,8 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
+  const barcodeScanHandledRef = useRef(false);
+  const bootFailureAlertShown = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -116,6 +160,7 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [webViewKey, setWebViewKey] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -124,18 +169,39 @@ function App() {
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
+  const replyOutput = useCallback((requestId, ok, value, error) => {
+    if (!requestId) return;
+    inject('AbuBassamNativeOutputResult', { requestId: String(requestId), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
+  }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    barcodeScanHandledRef.current = false;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
+  const restartWebView = useCallback((notice = '') => {
+    closeCamera();
+    bootFailureAlertShown.current = false;
+    setWebReady(false);
+    setWebViewKey((value) => value + 1);
+    if (notice) Alert.alert('استعادة واجهة التطبيق', notice);
+  }, [closeCamera]);
+  const reportBootFailure = useCallback((title, description) => {
+    if (bootFailureAlertShown.current) return;
+    bootFailureAlertShown.current = true;
+    setWebReady(false);
+    Alert.alert(title, description, [
+      { text: 'إعادة المحاولة', onPress: () => restartWebView() },
+      { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
+    ]);
+  }, [restartWebView]);
 
   useEffect(() => {
     if (webReady) return undefined;
     const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
+      reportBootFailure('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة.');
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [reportBootFailure, webReady]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -159,6 +225,7 @@ function App() {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      barcodeScanHandledRef.current = false;
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
@@ -178,49 +245,59 @@ function App() {
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+    if (barcodeScanHandledRef.current || barcodeLocked || !result?.data) return;
+    // Scanner callbacks can fire twice in one native frame before React
+    // commits barcodeLocked. The ref closes that race synchronously.
+    barcodeScanHandledRef.current = true;
     setBarcodeLocked(true);
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
+  const saveBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      replyOutput(requestId, true, true);
       Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر الحفظ', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const saveToGallery = useCallback(async ({ name, mime, data }) => {
+  const saveToGallery = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime;
       if (!String(finalMime).startsWith('image/')) throw new Error('هذا الملف ليس صورة');
       const finalName = safeName(name || `Abu_Bassam_${Date.now()}.png`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      replyOutput(requestId, true, true);
       Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
-    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const savePagesToGallery = useCallback(async ({ prefix, pages, mime }) => {
+  const savePagesToGallery = useCallback(async ({ prefix, pages, mime, requestId }) => {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صور للحفظ');
       if (imagePages.length > 20) throw new Error('عدد الصور أكبر من الحد المسموح');
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { replyOutput(requestId, false, null, 'CANCELLED'); return; }
       let saved = 0, failed = 0;
       for (let index = 0; index < imagePages.length; index += 1) {
         try {
@@ -244,11 +321,15 @@ function App() {
         } catch (_) { failed += 1; }
       }
       if (!saved) throw new Error('تعذر حفظ الصور المحددة');
+      replyOutput(requestId, true, { saved, failed });
       Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
-    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر حفظ الصفحات', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const printPages = useCallback(async ({ pages, paper }) => {
+  const printPages = useCallback(async ({ pages, paper, requestId }) => {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
@@ -256,29 +337,49 @@ function App() {
       const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, []);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const printHtml = useCallback(async ({ html }) => {
-    try { if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة'); await Print.printAsync({ html: String(html) }); }
-    catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, []);
+  const printHtml = useCallback(async ({ html, requestId }) => {
+    try {
+      if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة');
+      await Print.printAsync({ html: String(html) });
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
-  const savePdfHtml = useCallback(async ({ name, html }) => {
+  const savePdfHtml = useCallback(async ({ name, html, requestId }) => {
+    let result = null;
     try {
       if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
-      const result = await Print.printToFileAsync({ html: String(html), base64: true });
+      result = await Print.printToFileAsync({ html: String(html), base64: true });
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) {
+        if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+        replyOutput(requestId, false, null, 'CANCELLED');
+        return;
+      }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      replyOutput(requestId, true, true);
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
-  }, []);
+    } catch (error) {
+      if (result?.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذر حفظ PDF', String(error?.message || error));
+    }
+  }, [replyOutput]);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
     const parsed = splitDataUrl(data), finalName = safeName(name), uri = `${FileSystem.cacheDirectory}abu_bassam_${Date.now()}_${finalName}`;
@@ -286,17 +387,24 @@ function App() {
     return { uri, name: finalName, type: mime || parsed.mime };
   }, []);
 
-  const printBase64 = useCallback(async ({ name, mime, data }) => {
+  const printBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       const finalMime = String(mime || 'application/octet-stream');
       if (finalMime.startsWith('image/')) {
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
-        await Print.printAsync({ html }); return;
+        await Print.printAsync({ html });
+        replyOutput(requestId, true, true);
+        return;
       }
+      if (finalMime !== 'application/pdf') throw new Error('الطباعة المباشرة من الملف تدعم PDF أو الصور فقط. احفظ الملف أو افتحه بالتطبيق المناسب.');
       const file = await writeTemporaryFile(name, finalMime, data);
       try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
-  }, [writeTemporaryFile]);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت الطباعة', String(error?.message || error));
+    }
+  }, [replyOutput, writeTemporaryFile]);
 
   const openExternal = useCallback(async ({ url }) => {
     try {
@@ -307,14 +415,18 @@ function App() {
     } catch (error) { Alert.alert('تعذر فتح الرابط', String(error?.message || error)); }
   }, []);
 
-  const shareBase64 = useCallback(async ({ name, mime, data }) => {
+  const shareBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error('المشاركة غير متاحة على هذا الجهاز');
       const file = await writeTemporaryFile(name, mime, data);
       try { await Sharing.shareAsync(file.uri, { mimeType: file.type, dialogTitle: 'حفظ أو مشاركة الملف' }); }
       finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت المشاركة', String(error?.message || error)); }
-  }, [writeTemporaryFile]);
+      replyOutput(requestId, true, true);
+    } catch (error) {
+      replyOutput(requestId, false, null, error?.message || error);
+      Alert.alert('تعذرت المشاركة', String(error?.message || error));
+    }
+  }, [replyOutput, writeTemporaryFile]);
 
   const openAppSettings = useCallback(async () => {
     try { await Linking.openSettings(); }
@@ -333,7 +445,7 @@ function App() {
 
   const handleSecurity = useCallback(async (message) => {
     const action = String(message.action || ''), requestId = String(message.requestId || ''), payload = message.payload && typeof message.payload === 'object' ? message.payload : {};
-    const safeKey = () => { const key = String(payload.key || ''); if (!SECURE_KEY.test(key)) throw new Error('مفتاح التخزين الآمن غير مسموح'); return key; };
+    const safeKey = () => { const key = String(payload.key || ''); if (!SECURE_KEYS.has(key)) throw new Error('مفتاح التخزين الآمن غير مسموح'); return key; };
     try {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
       if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
@@ -360,8 +472,14 @@ function App() {
   }, [cameraPermission, replySecurity]);
 
   const onWebMessage = useCallback(async (event) => {
-    let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    let message; try { message = JSON.parse(event?.nativeEvent?.data); } catch (_) { return; }
+    // A valid JSON primitive (including null) is not a native bridge command.
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
+    if (message.type === 'webBootReady') { bootFailureAlertShown.current = false; setWebReady(true); return; }
+    if (message.type === 'webBootFailed') {
+      reportBootFailure('تعذر فتح مكتبة أبو بسام', 'فشل تحميل أحد مكونات التطبيق بأمان. يمكنك إعادة المحاولة دون فقدان البيانات المحفوظة.');
+      return;
+    }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -377,24 +495,30 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, reportBootFailure, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
-        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
-        allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
+        key={`abu-web-${webViewKey}`}
+        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={[APP_ORIGIN,'about:*']} javaScriptEnabled domStorageEnabled
+        nativeConfig={{ component: RCTAbuBassamWebView }}
+        allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false} mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
         onShouldStartLoadWithRequest={(request) => {
           const url = String(request?.url || '');
-          if (url.startsWith('file:///android_asset/library/') || url === 'about:blank') return true;
+          if (url.startsWith(`${APP_ORIGIN}/library/`) || url === 'about:blank') return true;
           if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url)) Linking.openURL(url).catch(() => {});
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onRenderProcessGone={(event) => {
+          const crashed = !!event?.nativeEvent?.didCrash;
+          restartWebView(crashed ? 'تعطلت عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.' : 'أوقف Android عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.');
+        }}
+        onError={() => reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.')}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (

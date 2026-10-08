@@ -6,11 +6,10 @@ const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const SECRET_KEY='abu_bassam_device_secret_v1';
 const PENDING_SECRET_KEY='abu_bassam_recovery_pending_secret_v1';
-const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';
 const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
 const DEVICE_CREATED_KEY='abuBassamLockedDeviceCreatedV3';
 const VAULT_SCOPE_KEY='abuBassamVaultLocalScopeV1';
-const APP='4.3.2';
+const APP=String(window.__ABU_APP_META__?.version||'');
 let googleBusy=false,recoveryBusy=false;
 const $=id=>document.getElementById(id);
 function setMsg(text,bad=false){const e=$('acctMsg');if(e){e.textContent=String(text||'');e.style.color=bad?'#a52e3b':'#087f72'}}
@@ -92,7 +91,7 @@ async function guardedRecovery(){
     serverRecovered=true;
     await native('secureSet',{key:SECRET_KEY,value:secret});
     if(String(await native('secureGet',{key:SECRET_KEY})||'')!==secret)throw new Error('تعذر تثبيت سر الجهاز الجديد في التخزين الآمن');
-    localStorage.setItem(DEVICE_ID_KEY,String(recovered.device_id||''));
+    const recoveredId=String(recovered.device_id||'').trim();if(!recoveredId||!window.AbuBassamDevices?.adopt)throw new Error('تعذر تثبيت هوية الجهاز المستعاد');await window.AbuBassamDevices.adopt(recoveredId);
     localStorage.setItem(DEVICE_NAME_KEY,String(recovered.device_name||'جهاز المكتبة'));
     localStorage.setItem(DEVICE_CREATED_KEY,String(recovered.first_seen||new Date().toISOString()));
     localStorage.setItem(VAULT_SCOPE_KEY,String(recovered.device_id||''));

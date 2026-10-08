@@ -1,6 +1,6 @@
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type, x-pro-token',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-pro-token',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const MAX_BODY_BYTES = 30 * 1024 * 1024;
@@ -21,6 +21,23 @@ function json(body: unknown, status = 200) {
     },
   });
 }
+async function authenticatedUser(req: Request) {
+  const header = req.headers.get('authorization') || '';
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const url = Deno.env.get('SUPABASE_URL') || '';
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  if (!match?.[1] || !url || !serviceKey) return null;
+  const response = await fetch(`${url}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${match[1]}`,
+      apikey: serviceKey,
+    },
+  });
+  if (!response.ok) return null;
+  const user = await response.json().catch(() => null);
+  return user && typeof user.id === 'string' ? user : null;
+}
+
 async function sha256(value: string) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
 }
@@ -93,6 +110,8 @@ async function runOpenAI(imageDataUrl: string, prompt: string, key: string) {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  const authUser = await authenticatedUser(req);
+  if (!authUser) return json({ error: 'سجل الدخول بحساب صالح لاستخدام AI PRO' }, 401);
   const contentLength = Number(req.headers.get('content-length') || 0);
   if (contentLength > MAX_BODY_BYTES) return json({ error: 'حجم الطلب أكبر من الحد المسموح' }, 413);
 

@@ -5,10 +5,13 @@ window.__ABU_SECURITY_EXTRAS_V1__=true;
 
 const $=id=>document.getElementById(id);
 const PIN_KEY='abu_bassam_danger_pin_hash_v1';
+const PIN_FAIL_KEY='abu_bassam_danger_pin_failures_v1';
+const PIN_LOCK_KEY='abu_bassam_danger_pin_lock_until_v1';
 const SNAPSHOT_KEY='abuBassamEmergencySnapshotV1';
 const PRIVACY_KEY='abuBassamPrivacyModeV1';
 let bypassTarget=null;
 let snapshotTimer=null;
+let privacyHideTimer=null;
 
 function log(title,details=''){try{window.AbuBassamOps?.add?.({type:'settings',title,section:'الأمان',details})}catch(e){}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -23,16 +26,43 @@ async function digest(value){
   return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('')
 }
 async function pinHash(){return String(await nativeRequest('secureGet',{key:PIN_KEY})||'')}
-function validPin(value){return /^\d{4,8}$/.test(String(value||''))}
+async function pinThrottleState(){
+  const failures=Math.max(0,Number(await nativeRequest('secureGet',{key:PIN_FAIL_KEY})||0)||0);
+  const lockUntil=Math.max(0,Number(await nativeRequest('secureGet',{key:PIN_LOCK_KEY})||0)||0);
+  if(lockUntil&&lockUntil<=Date.now()){await nativeRequest('secureDelete',{key:PIN_LOCK_KEY}).catch(()=>{});return{failures,lockUntil:0}}
+  return{failures,lockUntil}
+}
+async function clearPinFailures(){await nativeRequest('secureDelete',{key:PIN_FAIL_KEY}).catch(()=>{});await nativeRequest('secureDelete',{key:PIN_LOCK_KEY}).catch(()=>{})}
+async function recordPinFailure(){
+  const state=await pinThrottleState(),failures=state.failures+1;
+  if(failures<5){await nativeRequest('secureSet',{key:PIN_FAIL_KEY,value:String(failures)});return{failures,lockUntil:0}}
+  const blocks=Math.max(1,Math.floor(failures/5)),duration=Math.min(15*60*1000,30000*(2**Math.min(5,blocks-1))),lockUntil=Date.now()+duration;
+  await nativeRequest('secureSet',{key:PIN_FAIL_KEY,value:String(failures)});
+  await nativeRequest('secureSet',{key:PIN_LOCK_KEY,value:String(lockUntil)});
+  return{failures,lockUntil}
+}
+function pinWaitText(ms){const seconds=Math.max(1,Math.ceil(ms/1000));return seconds<60?`${seconds} ثانية`:`${Math.ceil(seconds/60)} دقيقة`}
+async function verifyStoredPin(reason){
+  const state=await pinThrottleState();
+  if(state.lockUntil>Date.now()){alert(`تم إيقاف محاولات الرمز مؤقتًا. حاول بعد ${pinWaitText(state.lockUntil-Date.now())}.`);return false}
+  const hash=await pinHash();if(!hash)return false;
+  const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
+  if(await digest(value)===hash){await clearPinFailures();return true}
+  const failed=await recordPinFailure();
+  if(failed.lockUntil>Date.now())alert(`رمز العمليات الحساسة غير صحيح. تم إيقاف المحاولات مؤقتًا لمدة ${pinWaitText(failed.lockUntil-Date.now())}.`);
+  else alert(`رمز العمليات الحساسة غير صحيح. المتبقي قبل الإيقاف المؤقت: ${Math.max(0,5-(failed.failures%5))}.`);
+  log('فشل تحقق رمز العمليات الحساسة',reason);return false
+}
+function validPin(value){return /^\d{6,8}$/.test(String(value||''))}
 async function setDangerPin(){
   if(!isOwner())return alert('رمز العمليات الحساسة يضبطه الجهاز الرئيسي فقط.');
   if(!requireNativeSecurity())return;
   try{
     const existing=await pinHash();
-    if(existing){const old=String(prompt('أدخل رمز العمليات الحساسة الحالي:')||'');if(await digest(old)!==existing)return alert('الرمز الحالي غير صحيح.')}
-    const first=String(prompt('اختر رمزًا رقميًا من ٤ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز يجب أن يتكون من ٤ إلى ٨ أرقام.');
+    if(existing&&!(await verifyStoredPin('تغيير رمز العمليات الحساسة')))return;
+    const first=String(prompt('اختر رمزًا رقميًا من ٦ إلى ٨ أرقام للعمليات الحساسة:')||'');if(!validPin(first))return alert('الرمز الجديد يجب أن يتكون من ٦ إلى ٨ أرقام.');
     const second=String(prompt('أعد كتابة الرمز للتأكيد:')||'');if(first!==second)return alert('الرمزان غير متطابقين.');
-    await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
+    await nativeRequest('secureSet',{key:PIN_KEY,value:await digest(first)});await clearPinFailures();log(existing?'تغيير رمز العمليات الحساسة':'إنشاء رمز العمليات الحساسة');alert('تم حفظ رمز العمليات الحساسة داخل التخزين الآمن لهذا الجهاز.');render()
   }catch(e){alert('تعذر حفظ رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function removeDangerPin(){
@@ -40,8 +70,8 @@ async function removeDangerPin(){
   if(!requireNativeSecurity())return;
   try{
     const hash=await pinHash();if(!hash)return;
-    const value=String(prompt('أدخل رمز العمليات الحساسة لإلغائه:')||'');if(await digest(value)!==hash)return alert('الرمز غير صحيح.');
-    await nativeRequest('secureDelete',{key:PIN_KEY});log('إلغاء رمز العمليات الحساسة');render()
+    if(!(await verifyStoredPin('إلغاء رمز العمليات الحساسة')))return;
+    await nativeRequest('secureDelete',{key:PIN_KEY});await clearPinFailures();log('إلغاء رمز العمليات الحساسة');render()
   }catch(e){alert('تعذر إلغاء رمز العمليات الحساسة: '+String(e?.message||e))}
 }
 async function verifyDangerPin(reason='هذه عملية حساسة'){
@@ -50,9 +80,7 @@ async function verifyDangerPin(reason='هذه عملية حساسة'){
   try{
     let hash=await pinHash();
     if(!hash){if(!confirm(`${reason}\nلم يتم إنشاء رمز مستقل للعمليات الحساسة بعد. سيتم إنشاؤه الآن قبل المتابعة.`))return false;await setDangerPin();hash=await pinHash();if(!hash)return false}
-    const value=String(prompt(`${reason}\nأدخل رمز العمليات الحساسة:`)||'');if(!value)return false;
-    if(await digest(value)!==hash){alert('رمز العمليات الحساسة غير صحيح.');log('فشل تحقق رمز العمليات الحساسة',reason);return false}
-    return true
+    return verifyStoredPin(reason)
   }catch(e){alert('تعذر التحقق من رمز العمليات الحساسة: '+String(e?.message||e));return false}
 }
 
@@ -115,16 +143,16 @@ async function applyPrivacy(enabled){
   }catch(e){localStorage.setItem(PRIVACY_KEY,'0');privacyCover().style.display='none';if(enabled)alert('تعذر تفعيل حماية لقطة الشاشة/المعاينة الحديثة: '+String(e?.message||e));render();return false}
 }
 function privacyEnabled(){return localStorage.getItem(PRIVACY_KEY)==='1'}
-function visibilityPrivacy(){const cover=privacyCover();if(document.visibilityState==='hidden'&&privacyEnabled())cover.style.display='flex';else setTimeout(()=>cover.style.display='none',60)}
+function visibilityPrivacy(){const cover=privacyCover();clearTimeout(privacyHideTimer);privacyHideTimer=null;if(document.visibilityState==='hidden'&&privacyEnabled()){cover.style.display='flex';return}privacyHideTimer=setTimeout(()=>{if(document.visibilityState!=='hidden')cover.style.display='none'},60)}
 
 function extrasHtml(){return `<section id="abuSecurityExtrasSettings" class="abu-setting-card" data-settings-keywords="خصوصية نقطة أمان استعادة رمز حساس حماية recent apps لقطة شاشة كلمة مرور خروج"><div class="abu-setting-title">🛡️ حماية إضافية واستعادة طوارئ</div><label class="abu-security-line"><span>خصوصية عالية ومنع لقطات الشاشة/المعاينة الحديثة</span><input id="abuPrivacyMode" type="checkbox" onchange="AbuBassamSecurityExtras.privacy(this.checked)"></label><div class="abu-security-setting-grid"><button onclick="AbuBassamSecurityExtras.setPin()">🔢 إنشاء/تغيير رمز العمليات الحساسة</button><button onclick="AbuBassamSecurityExtras.removePin()">إلغاء الرمز</button><button onclick="AbuBassamSecurityExtras.changePassword()">🔑 تغيير كلمة مرور الحساب</button><button onclick="AbuBassamSecurityExtras.logout()">⇥ تسجيل الخروج</button><button onclick="AbuBassamSecurityExtras.snapshot()">🛟 نقطة أمان الآن</button><button onclick="AbuBassamSecurityExtras.restore()">♻️ استعادة نقطة الأمان</button></div><div id="abuSnapshotInfo" class="abu-setting-note" style="margin-top:7px">آخر نقطة أمان: ${esc(snapshotInfo())}</div><div class="abu-setting-note">يُطلب الرمز المستقل قبل العمليات الخطرة مثل مسح السجل، إعادة ضبط الإعدادات، حذف جهاز موثوق أو استعادة نقطة أمان. لا تُخزن كلمات المرور داخل نقطة الأمان.</div></section>`}
 async function render(){
   const body=document.querySelector('#abuSettingsModal .abu-settings-body');if(!body)return;
   let old=$('abuSecurityExtrasSettings');if(old)old.outerHTML=extrasHtml();else{const security=$('abuSecuritySettings');if(security)security.insertAdjacentHTML('afterend',extrasHtml());else body.insertAdjacentHTML('afterbegin',extrasHtml())}
   const privacy=$('abuPrivacyMode');if(privacy)privacy.checked=privacyEnabled();const info=$('abuSnapshotInfo');if(info)info.textContent='آخر نقطة أمان: '+snapshotInfo();
-  const owner=isOwner();document.querySelectorAll('#abuSecurityExtrasSettings button:not([onclick*="logout"])').forEach(button=>{if(!owner){button.disabled=true;button.style.opacity='.45'}})
+  const owner=isOwner();document.querySelectorAll('#abuSecurityExtrasSettings button:not([onclick*="logout"])').forEach(button=>{if(!owner){if(button.dataset.abuSecurityExtrasOwnerGuard!=='1'){button.dataset.abuSecurityExtrasOwnerGuard='1';button.dataset.abuSecurityExtrasPrevDisabled=button.disabled?'1':'0';button.dataset.abuSecurityExtrasPrevOpacity=button.style.opacity||''}button.disabled=true;button.style.opacity='.45'}else if(button.dataset.abuSecurityExtrasOwnerGuard==='1'){button.disabled=button.dataset.abuSecurityExtrasPrevDisabled==='1';button.style.opacity=button.dataset.abuSecurityExtrasPrevOpacity||'';delete button.dataset.abuSecurityExtrasOwnerGuard;delete button.dataset.abuSecurityExtrasPrevDisabled;delete button.dataset.abuSecurityExtrasPrevOpacity}})
 }
-function inject(){render();new MutationObserver(()=>{if(document.querySelector('#abuSettingsModal .abu-settings-body')&&!$('abuSecurityExtrasSettings'))render()}).observe(document.body,{childList:true,subtree:true})}
+function inject(){void render();document.addEventListener('abu-settings-ready',()=>void render());document.addEventListener('abu-bassam-auth-changed',()=>void render())}
 
 function dangerousTarget(target){
   if(!target)return'';const onclick=String(target.getAttribute?.('onclick')||'');
@@ -133,11 +161,10 @@ function dangerousTarget(target){
 }
 function guardDanger(){document.addEventListener('click',async event=>{const target=event.target?.closest?.('button,[role="button"]');if(!target||target===bypassTarget)return;const reason=dangerousTarget(target);if(!reason)return;if(!isOwner())return;event.preventDefault();event.stopImmediatePropagation();if(await verifyDangerPin(reason)){bypassTarget=target;try{target.click()}finally{setTimeout(()=>{bypassTarget=null},0)}}},true)}
 
-function installTypographyApplyShim(){
-  const timer=setInterval(()=>{const t=window.AbuBassamTypography;if(!t)return;if(typeof t.applyApp!=='function')t.applyApp=()=>{let state={};try{state=JSON.parse(localStorage.getItem('abuBassamTypographyV5')||'{}')}catch(e){}if(state.appFont)t.global('appFont',state.appFont);if(state.appScale)t.global('appScale',state.appScale)};clearInterval(timer)},400);
-  setTimeout(()=>clearInterval(timer),15000)
-}
-function startSnapshots(){createSnapshot(false);clearInterval(snapshotTimer);snapshotTimer=setInterval(()=>{if(document.visibilityState!=='hidden')createSnapshot(false)},10*60*1000);window.addEventListener('pagehide',()=>createSnapshot(false));document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden')createSnapshot(false)})}
+function ensureTypographyApplyShim(){const t=window.AbuBassamTypography;if(!t)return false;if(typeof t.applyApp!=='function')t.applyApp=()=>{let state={};try{state=JSON.parse(localStorage.getItem('abuBassamTypographyV5')||'{}')}catch(e){}if(state.appFont)t.global('appFont',state.appFont);if(state.appScale)t.global('appScale',state.appScale)};return true}
+function installTypographyApplyShim(){ensureTypographyApplyShim();document.addEventListener('abu-runtime-loaded',ensureTypographyApplyShim);document.addEventListener('abu-settings-ready',ensureTypographyApplyShim)}
+function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTimer=null;if(document.visibilityState!=='hidden')createSnapshot(false);scheduleSnapshot()},10*60*1000)}
+function startSnapshots(){createSnapshot(false);scheduleSnapshot();window.addEventListener('pagehide',()=>{clearTimeout(snapshotTimer);snapshotTimer=null;createSnapshot(false)});document.addEventListener('visibilitychange',()=>{visibilityPrivacy();if(document.visibilityState==='hidden'){clearTimeout(snapshotTimer);snapshotTimer=null;createSnapshot(false)}else scheduleSnapshot()})}
 
 async function boot(){privacyCover();inject();guardDanger();installTypographyApplyShim();startSnapshots();await applyPrivacy(privacyEnabled());render()}
 window.AbuBassamSecurityExtras={setPin:setDangerPin,removePin:removeDangerPin,verifyDangerPin,changePassword,passwordWeakness,logout,snapshot:()=>createSnapshot(true),restore:restoreSnapshot,privacy:applyPrivacy,render};

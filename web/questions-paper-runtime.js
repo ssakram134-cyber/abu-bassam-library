@@ -50,7 +50,7 @@ function readCustom(){
   state.h=clamp($('abuPaperH')?.value,80,500,state.h||297);
   if($('abuPaperW'))$('abuPaperW').value=String(state.w);if($('abuPaperH'))$('abuPaperH').value=String(state.h);
 }
-function deletePage(btn){const page=btn?.closest?.('.a4-page');if(!page)return;const pages=document.querySelectorAll('.a4-page');if(pages.length<=1){alert('يجب أن تبقى صفحة واحدة على الأقل.');return}try{window.saveState?.()}catch(e){}page.remove();try{window.fitToScreen?.();window.scheduleQuestionDraft?.()}catch(e){}}
+function deletePage(btn){const page=btn?.closest?.('.a4-page');if(!page)return;const pages=document.querySelectorAll('.a4-page');if(pages.length<=1){alert('يجب أن تبقى صفحة واحدة على الأقل.');return}try{window.saveState?.()}catch(e){}page.remove();try{window.fitToScreen?.();window.scheduleQuestionDraft?.()}catch(e){}document.dispatchEvent(new CustomEvent('abu-question-content-changed',{detail:{source:'delete-page'}}))}
 function tagPages(){document.querySelectorAll('.a4-page').forEach(p=>{p.dataset.paperPreset=state.preset;p.dataset.paperW=String(state.w);p.dataset.paperH=String(state.h)})}
 function installFit(){
   window.fitToScreen=function(){
@@ -90,7 +90,7 @@ function apply(closeAfter=true){
 function loadSupport(){
   [['abuQuestionTemplateToolsExternal','questions-template-tools-runtime.js'],['abuQuestionCompletionExternal','questions-completion-runtime.js'],['abuQuestionMaintenanceExternal','questions-maintenance-runtime.js'],['abuQuestionCustomLibraryExternal','questions-custom-library-runtime.js']].forEach(([id,src])=>{if(document.getElementById(id))return;let s=document.createElement('script');s.id=id;s.src=src;s.async=false;s.onerror=()=>console.warn(src+' failed to load');document.head.appendChild(s)})
 }
-function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();new MutationObserver(()=>{tagPages()}).observe($('pages-container')||document.body,{childList:true,subtree:true})}
+function init(){ensure();sync();window.deletePage=deletePage;apply(false);loadSupport();document.addEventListener('abu-question-content-changed',tagPages)}
 window.AbuQuestionPaper={open,close,preset,apply,deletePage,state:()=>({...state})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

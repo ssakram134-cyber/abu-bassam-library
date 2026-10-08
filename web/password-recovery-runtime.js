@@ -3,8 +3,7 @@
 if(window.__ABU_PASSWORD_RECOVERY_V1__)return;
 window.__ABU_PASSWORD_RECOVERY_V1__=true;
 
-const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com';
-function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||DEFAULT_ACCOUNT_EMAIL).trim().toLowerCase()}
+function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||'').trim().toLowerCase()}
 const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const FLOW='password-recovery';
@@ -64,7 +63,8 @@ async function requestPasswordReset(){
   try{
     await cloud()?.ready?.();
     const c=client();if(!c?.auth?.resetPasswordForEmail)throw new Error('خدمة استعادة كلمة المرور غير جاهزة');
-    const {error}=await c.auth.resetPasswordForEmail(accountEmail(),{redirectTo:`${CALLBACK}?flow=${FLOW}`});
+    const email=accountEmail();if(!email)throw new Error('تعذر تحديد بريد الحساب المعتمد');
+    const {error}=await c.auth.resetPasswordForEmail(email,{redirectTo:`${CALLBACK}?flow=${FLOW}`});
     if(error)throw error;
     setLoginMessage(`تم إرسال رابط الاستعادة إلى ${accountEmail()}. افتح الرسالة واضغط الرابط ثم ارجع إلى التطبيق.`);
   }catch(error){
@@ -124,8 +124,8 @@ async function saveNewPassword(){
     const c=client();if(!c?.auth?.updateUser)throw new Error('خدمة تغيير كلمة المرور غير جاهزة');
     const {data,error}=await c.auth.updateUser({password});
     if(error)throw error;
-    const email=String(data?.user?.email||'').toLowerCase();
-    if(email&&email!==accountEmail())throw new Error('الحساب المفتوح لا يطابق البريد المعتمد');
+    const email=String(data?.user?.email||'').trim().toLowerCase();
+    if(!email||email!==accountEmail())throw new Error('تعذر تأكيد أن الحساب المفتوح يطابق البريد المعتمد');
     await c.auth.signOut({scope:'local'}).catch(()=>{});
     await closeResetModal(false);
     setLoginMessage('تم تغيير كلمة المرور بنجاح ✓ سجّل الدخول الآن بكلمة المرور الجديدة.');
@@ -140,8 +140,9 @@ function installAuthListener(){
   authListenerInstalled=true;
   c.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){
-      const email=String(session?.user?.email||'').toLowerCase();
-      if(!email||email===accountEmail())openResetModal();
+      const email=String(session?.user?.email||'').trim().toLowerCase();
+      if(email&&email===accountEmail())openResetModal();
+      else setLoginMessage('تم رفض جلسة استعادة لا تطابق حساب مكتبة أبو بسام المعتمد.',true);
     }
   });
 }
@@ -164,6 +165,6 @@ async function boot(){
   [300,900,1800,3500].forEach(ms=>setTimeout(()=>{addUi();installAuthListener();consumeRecoveryCallback()},ms));
 }
 
-window.AbuBassamPasswordRecovery={email:accountEmail,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword};
+window.AbuBassamPasswordRecovery={email:accountEmail,request:requestPasswordReset,consume:consumeRecoveryCallback,save:saveNewPassword,close:()=>closeResetModal(false)};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

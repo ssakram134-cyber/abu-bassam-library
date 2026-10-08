@@ -15,7 +15,7 @@ function scrub(v){return String(v??'')
  .replace(/(?:\+?964|0)?7\d{9}\b/g,'[هاتف محجوب]')
  .replace(/\b\d{8,}\b/g,'[رقم محجوب]')
  .slice(0,600)}
-function cleanOne(n={}){const d=identity(),out={...n};out.id=String(out.id||'');out.title=scrub(out.title||'إشعار');out.section=scrub(out.section||'');out.deviceId=String(out.deviceId||d.id||'').trim();out.deviceName=scrub(out.deviceName||d.name||'هذا الجهاز');const context=`${n.section||''} ${n.title||''}`;if(sensitiveContext(context)){out.details=n.details?'[تفاصيل زبون محجوبة]':'';out.title=out.title.replace(/[:\-–—]\s*.+$/,'').trim()||'عملية مستمسكات'}else out.details=scrub(n.details||'');return out}
+function cleanOne(n={}){const d=identity(),out={...n};out.id=String(out.id||'');out.title=scrub(out.title||'إشعار');out.section=scrub(out.section||'');out.deviceId=String(out.deviceId||d.id||'').trim();out.deviceName=scrub(out.deviceName||d.name||'هذا الجهاز');const context=`${n.section||''} ${n.title||''}`;if(sensitiveContext(context)){out.details=n.details?'[تفاصيل زبون محجوبة]':'';out.title='عملية مستمسكات';out.section='مستمسكات الزبائن'}else out.details=scrub(n.details||'');return out}
 function operationIds(){try{return new Set((window.AbuBassamOps?.list?.()||[]).map(x=>String(x?.id||'').trim()).filter(Boolean))}catch(_){return new Set()}}
 function operationTime(n){const t=Date.parse(n?.createdAt||n?.uploadedAt||n?.printedAt||0);return Number.isFinite(t)?t:0}
 function sameOperation(a,b){return a&&b&&a.source==='operations'&&b.source==='operations'&&String(a.title||'')===String(b.title||'')&&String(a.details||'')===String(b.details||'')&&String(a.section||'')===String(b.section||'')&&String(a.deviceId||'')===String(b.deviceId||'')&&Math.abs(operationTime(a)-operationTime(b))<=5000}
@@ -31,12 +31,12 @@ function patchCenter(){const c=window.AbuBassamNotifications;if(!c||c.__abuCorre
  if(list0)c.list=function(){cleanStore();return list0().map(cleanOne)};
  if(open0)c.open=function(){cleanStore();const out=open0();setTimeout(fixUi,0);return out};
  if(refresh0)c.refresh=function(){cleanStore();const out=refresh0();setTimeout(()=>{cleanStore();fixUi()},150);return out};
- if(remove0)c.remove=function(id){const n=(read(STORE,[])||[]).find(x=>String(x.id)===String(id));if(n?.severity==='critical'&&!confirm('هذا إشعار حرج. سيُحذف من هذا الجهاز فقط، بينما يبقى سجل التدقيق محفوظًا للأدمن. هل تريد المتابعة؟'))return;const out=remove0(id);cleanStore();return out};
+ if(remove0)c.remove=function(id){const out=remove0(id);cleanStore();return out};
  if(mark0)c.markAll=function(){const out=mark0();cleanStore();return out};
  if(clear0)c.clearRead=function(){const out=clear0();cleanStore();return out};
  return true}
 function fixUi(){document.querySelectorAll('#abuNotificationTabs button').forEach(b=>{if((b.textContent||'').trim()==='تقارير الفرعين')b.textContent='تقارير الأجهزة الفرعية'});const s=document.getElementById('abuNotifyStatus');if(s&&role()==='secondary')s.title='يعرض هذا الجهاز فقط؛ لا تظهر إشعارات الأجهزة الفرعية الأخرى.'}
-function boot(){cleanStore();let tries=0;const t=setInterval(()=>{tries++;patchCenter();cleanStore();fixUi();if(tries>100)clearInterval(t)},100);[300,800,1600,3500,7000].forEach(ms=>setTimeout(()=>{patchCenter();cleanStore();fixUi()},ms));setInterval(()=>{if(document.visibilityState!=='hidden'){patchCenter();cleanStore();fixUi()}},5000);window.addEventListener('online',()=>setTimeout(cleanStore,100));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(cleanStore,50)})}
+function refreshGuards(){patchCenter();cleanStore();fixUi()}function boot(){refreshGuards();window.addEventListener('online',refreshGuards);document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='notification-center-runtime.js'||src==='app-security-runtime.js')refreshGuards()});document.addEventListener('abu-bassam-auth-changed',refreshGuards);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshGuards()});window.addEventListener('storage',event=>{if(event.key===STORE||event.key===QUEUE||event.key===SCOPE)refreshGuards()})}
 window.AbuBassamNotificationCorrections={clean:cleanStore,scrub:safeInput,patch:patchCenter};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

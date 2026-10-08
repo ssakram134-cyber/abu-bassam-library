@@ -3,26 +3,78 @@
   const DEVICE_ID_KEY = 'abuBassamLockedDeviceIdV3';
   const DEVICE_NAME_KEY = 'abuBassamLockedDeviceNameV3';
   const DEVICE_CREATED_KEY = 'abuBassamLockedDeviceCreatedV3';
-  const APP_VERSION = '4.3.2';
-  function uuid(){return globalThis.crypto?.randomUUID?.()||`device-${Date.now()}-${Math.random().toString(36).slice(2)}`}
+  const SECURE_DEVICE_ID_KEY = 'abu_bassam_device_id_v1';
+  const APP_VERSION = String(window.__ABU_APP_META__?.version || '');
+  function uuid(){const id=globalThis.crypto?.randomUUID?.();if(!id)throw new Error('SECURE_DEVICE_ID_RANDOM_REQUIRED');return id}
   function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'}
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
   function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
   function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true')}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
-  function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
-  async function heartbeat(){return ensureIdentity()}
+  function validIdentityId(value){return /^[A-Za-z0-9._:-]{8,180}$/.test(String(value||''))}
+  function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_DEVICE_ID_STORE_REQUIRED'));return api.request(action,payload)}
+  function writeLocalIdentity(identity){localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
+  function ensureIdentity(){let identity=current();if(validIdentityId(identity.id))return identity;identity={id:uuid(),name:identity.name||'جهاز المكتبة',createdAt:identity.createdAt||new Date().toISOString()};return writeLocalIdentity(identity)}
+  async function stabilizeIdentity(){
+    let identity=current(),secureId=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(secureId&&!validIdentityId(secureId))throw new Error('SECURE_DEVICE_ID_INVALID');
+    if(secureId){
+      if(identity.id!==secureId)identity=writeLocalIdentity({id:secureId,name:identity.name||'جهاز المكتبة',createdAt:identity.createdAt||new Date().toISOString()});
+      return identity
+    }
+    identity=ensureIdentity();
+    await native('secureSet',{key:SECURE_DEVICE_ID_KEY,value:identity.id});
+    const verified=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(verified!==identity.id)throw new Error('SECURE_DEVICE_ID_PERSIST_FAILED');
+    return identity
+  }
+  async function heartbeat(){return stabilizeIdentity()}
+  // Boot must fail closed; periodic identity checks are best-effort and must
+  // never create unhandled Promise rejections during offline/background use.
+  function heartbeatSafely(){
+    if(document.visibilityState==='hidden')return;
+    void heartbeat().catch(error=>console.warn('Abu Bassam background device check failed',error));
+  }
+  async function adoptIdentity(id){
+    const value=String(id||'').trim();if(!validIdentityId(value))throw new Error('SECURE_DEVICE_ID_INVALID');
+    await native('secureSet',{key:SECURE_DEVICE_ID_KEY,value});
+    const verified=String(await native('secureGet',{key:SECURE_DEVICE_ID_KEY})||'').trim();
+    if(verified!==value)throw new Error('SECURE_DEVICE_ID_PERSIST_FAILED');
+    const old=current();return writeLocalIdentity({id:value,name:old.name||'جهاز المكتبة',createdAt:old.createdAt||new Date().toISOString()})
+  }
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
+  const pendingScriptLoads=new Map();
   function loadScript(id,src,guard){
-    return new Promise((resolve,reject)=>{
-      if(document.getElementById(id)||(guard&&window[guard])){resolve(true);return}
-      const script=document.createElement('script');
-      script.id=id;script.src=src;script.async=false;
-      script.onload=()=>{document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-      script.onerror=()=>reject(new Error(src+' failed to load'));
-      (document.head||document.documentElement).appendChild(script)
-    })
+    // A script element alone does not prove that its code loaded successfully.
+    // Reentrant callers must await the same load, rather than run ahead.
+    if(guard&&window[guard])return Promise.resolve(true);
+    if(pendingScriptLoads.has(id))return pendingScriptLoads.get(id);
+    if(document.getElementById(id))return Promise.reject(new Error(src+' already exists but its runtime is not ready'));
+    const script=document.createElement('script');
+    script.id=id;script.src=src;script.async=false;
+    const task=new Promise((resolve,reject)=>{
+      let finished=false;
+      const fail=(reason)=>{
+        if(finished)return;
+        finished=true;clearTimeout(watchdog);
+        script.remove();
+        reject(new Error(src+' failed to load: '+reason))
+      };
+      const watchdog=setTimeout(()=>fail('script load timeout'),10000);
+      script.onload=()=>{
+        if(guard&&!window[guard])return fail('runtime initialization flag missing');
+        if(finished)return;
+        finished=true;clearTimeout(watchdog);
+        document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));
+        resolve(true)
+      };
+      script.onerror=()=>fail('resource error');
+      try{(document.head||document.documentElement).appendChild(script)}catch(error){fail(error.message||error)}
+    });
+    pendingScriptLoads.set(id,task);
+    void task.then(()=>pendingScriptLoads.delete(id),()=>pendingScriptLoads.delete(id));
+    return task
   }
   const loadFeatureRecovery=()=>loadScript('abuFeatureRecoveryRuntime','feature-recovery-runtime.js','__ABU_FEATURE_RECOVERY_V1__');
   const loadChildTemplates=()=>loadScript('abuChildTemplatesRuntime','child-card-templates-runtime.js','__ABU_CHILD_TEMPLATES_V1__');
@@ -38,7 +90,7 @@
   const loadCustomerPermissionsHardening=()=>loadScript('abuCustomerPermissionsHardeningRuntime','customer-permissions-hardening-runtime.js','__ABU_CUSTOMER_PERMISSIONS_HARDENING_V1__');
   const loadLoginInputDirection=()=>loadScript('abuLoginInputDirectionRuntime','login-input-direction-runtime.js','__ABU_LOGIN_INPUT_DIRECTION_V1__');
   const loadPasswordPolicy=()=>loadScript('abuPasswordPolicyRuntime','password-policy-runtime.js','__ABU_PASSWORD_POLICY_V1__');
-  const loadMediaPipePin=()=>loadScript('abuMediaPipePinRuntime','mediapipe-pin-runtime.js','__ABU_MEDIAPIPE_PIN_V1__');
+  const loadMediaPipePin=()=>loadScript('abuMediaPipePinRuntime','mediapipe-pin-runtime.js','__ABU_MEDIAPIPE_PIN_V2__');
   const loadSettingsCorrections=()=>loadScript('abuSettingsCorrectionsRuntime','settings-corrections-runtime.js','__ABU_SETTINGS_CORRECTIONS_V1__');
   const loadSecurityBootstrapGuard=()=>loadScript('abuSecurityBootstrapGuardRuntime','security-bootstrap-guard-runtime.js','__ABU_SECURITY_BOOTSTRAP_GUARD_V1__');
   const loadSecurityHardening=()=>loadScript('abuSecurityHardeningRuntime','security-hardening-runtime.js','__ABU_SECURITY_HARDENING_V2__');
@@ -91,22 +143,49 @@
   }
   function showBootFailure(error){
     const splash=document.getElementById('splash');
-    if(splash){splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1'}
-    const message=document.getElementById('splashText')||splash?.querySelector?.('p,small,div');
-    if(message)message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.';
+    if(splash){
+      splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1';
+      // The shipped splash contains only an image. Create an accessible error
+      // message instead of leaving the user staring at an unchanged logo.
+      let message=document.getElementById('splashText');
+      if(!message){
+        message=document.createElement('p');
+        message.id='splashText';
+        message.setAttribute('role','alert');
+        Object.assign(message.style,{position:'absolute',zIndex:'2',left:'14px',right:'14px',bottom:'32px',padding:'14px',borderRadius:'12px',background:'#fffaf3',color:'#922d33',textAlign:'center',fontWeight:'700',fontSize:'14px'});
+        splash.appendChild(message);
+      }
+      message.textContent='تعذر تحميل مكونات التطبيق بأمان. استخدم إعادة المحاولة لفتح التطبيق.';
+    }
+    // Alert natively as well: Android's loading layer covers the WebView until
+    // webBootReady, so an error rendered only inside the WebView is invisible.
+    try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootFailed'}))}catch(_){}
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
-    ensureIdentity();
     try{
+      await stabilizeIdentity();
       await loadApprovedUi();
+      const securityBoot=window.__ABU_SECURITY_BOOT_PROMISE__;
+      if(!securityBoot||typeof securityBoot.then!=='function')throw new Error('APP_SECURITY_BOOT_PROMISE_REQUIRED');
+      await securityBoot;
+      if(!document.getElementById('abuSecurityGate'))throw new Error('APP_SECURITY_GATE_REQUIRED');
+      window.__ABU_APPROVED_UI_READY__=true;
+      document.dispatchEvent(new CustomEvent('abu-bassam-approved-ui-ready'));
       signalBootReady();
       dismissSplash();
-      setTimeout(heartbeat,200)
+      setTimeout(heartbeatSafely,200)
     }catch(error){showBootFailure(error)}
   }
-  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
+  window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,adopt:adoptIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
-  setInterval(()=>{if(document.visibilityState!=='hidden')heartbeat()},120000);
-  window.addEventListener('online',heartbeat);document.addEventListener('abu-bassam-auth-changed',()=>{heartbeat();window.AbuBassamSecurity?.onSessionChanged?.()});
+  setInterval(heartbeatSafely,120000);
+  window.addEventListener('online',heartbeatSafely);
+  document.addEventListener('abu-bassam-auth-changed',()=>{
+    heartbeatSafely();
+    try{
+      const recheck=window.AbuBassamSecurity?.onSessionChanged?.();
+      if(recheck&&typeof recheck.catch==='function')void recheck.catch(error=>console.warn('Abu Bassam session device refresh failed',error));
+    }catch(error){console.warn('Abu Bassam session device refresh failed',error)}
+  });
 })();

@@ -1,29 +1,150 @@
 const fs=require('fs');
 const path=require('path');
 const root=path.resolve(__dirname,'..');
+
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(label)}
 function reject(src,token,label){if(src.includes(token))throw new Error(label)}
-const workflow=read(path.join(root,'.github','workflows','android.yml'));
+
+const testWorkflow=read(path.join(root,'.github','workflows','android.yml'));
+const productionWorkflow=read(path.join(root,'.github','workflows','android-production.yml'));
 const pkgText=read(path.join(root,'package.json'));
 const pkg=JSON.parse(pkgText);
 const native=read(path.join(root,'index.js'));
 const local=read(path.join(root,'scripts','build-android-local.mjs'));
 const assets=read(path.join(root,'scripts','prepare-android-assets.mjs'));
+const certDigest=read(path.join(root,'config','release-signing-certificate.sha256')).trim().toLowerCase();
 
 for(const marker of [
-  'permissions:\n  contents: read','workflow_dispatch:','production:',
-  'Require production signing only when explicitly requested',
-  "github.event_name == 'workflow_dispatch' && inputs.production",
-  'Production signing was requested, but one or more Android release signing secrets are missing.',
-  'uses: actions/checkout@v7','uses: actions/setup-node@v7','node-version: 24','uses: actions/setup-java@v6','verify-signature: true','uses: actions/upload-artifact@v7',
-  'npm ci --no-audit --no-fund','./gradlew assembleRelease --no-daemon',
-  'assets/index.android.bundle','apksigner" verify --verbose','apksigner" verify --print-certs',
-  'SIGNING_CERTIFICATE.txt','dist/Abu_Bassam_Library_4.3.2.apk',
-  'sha256sum dist/Abu_Bassam_Library_4.3.2.apk','Upload APK artifacts','retention-days: 14'
-])need(workflow,marker,'Android workflow missing safeguard: '+marker);
-for(const marker of ['./gradlew assembleDebug --no-daemon','contents: write','git push','npm install --no-audit --no-fund','actions/checkout@v4','actions/setup-node@v4','actions/setup-java@v4','actions/upload-artifact@v4','node-version: 20'])
-  reject(workflow,marker,'Android workflow contains unsafe behavior: '+marker);
+  'name: Android build disabled - source repairs only',
+  'workflow_dispatch:',
+  'permissions:\n  contents: read',
+  'group: android-test-${{ github.event.pull_request.number || github.ref }}',
+  "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+  'runs-on: ubuntu-24.04',
+  'uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1',
+  'persist-credentials: false',
+  'uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0',
+  'node-version: 24',
+  'uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1',
+  'uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4',
+  "packages: 'platform-tools'",
+  'name: Ensure pinned Android NDK',
+  'NDK_VERSION: 27.1.12297006',
+  'for attempt in 1 2 3; do',
+  'sdkmanager --install "ndk;$NDK_VERSION" --channel=0',
+  'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+  'rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"',
+
+  'if: ${{ false }}',
+  'java-version: 17',
+  'verify-signature: true',
+  'npm ci --no-audit --no-fund',
+  'npm run build:apk:local',
+  "grep -qx 'test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES' dist/BUILD_TYPE.txt",
+  'uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0',
+  'name: abu-bassam-android-test-${{ github.event.pull_request.head.sha || github.sha }}',
+  'dist/*.apk',
+  'dist/BUILD_TYPE.txt',
+  'dist/SHA256.txt',
+  'dist/SIGNING_CERTIFICATE.txt',
+  "if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}",
+  'retention-days: 7',
+  'id: upload_qa_apk',
+  'continue-on-error: true',
+  "steps.upload_qa_apk.outcome == 'failure'",
+  '::warning title=QA APK upload unavailable::',
+  'No downloadable APK was published by this run.'
+]) need(testWorkflow,marker,'Android test workflow missing safeguard: '+marker);
+
+for(const marker of [
+  'contents: write','git push','secrets.','ANDROID_KEYSTORE_','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD',
+  'npm run build:apk:release','./gradlew','npm run android:prebuild',
+  'actions/checkout@v','actions/setup-node@v','actions/setup-java@v','actions/upload-artifact@v',
+  'npm install --no-audit --no-fund'
+]) reject(testWorkflow,marker,'Android test workflow contains production/duplicate/unsafe behavior: '+marker);
+
+for(const marker of [
+  'name: Android production build disabled',
+  'workflow_dispatch:',
+  'permissions:\n  contents: read',
+  'group: android-production-main',
+  'cancel-in-progress: false',
+  'EXPECTED_RELEASE_CERT_SHA256:',
+  'build:',
+  'Build and verify APK with no production secrets',
+  'npm run build:apk:local',
+  'Enforce non-production build input',
+  'Upload verified production-signing input',
+  'abu-bassam-production-input-${{ github.sha }}',
+  'sign:',
+  'needs: build',
+  'permissions:\n      contents: read\n      actions: read',
+  'Set up Java for apksigner',
+  'uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1',
+  'Download verified APK input',
+  'Validate isolated signing input',
+  'Decode production signing key',
+  'ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}',
+  'Sign and verify production APK',
+  'ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}',
+  'ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}',
+  'ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}',
+  '--ks-pass env:ANDROID_KEYSTORE_PASSWORD',
+  '--key-pass env:ANDROID_KEY_PASSWORD',
+  'Production signing certificate mismatch.',
+  "grep -qx 'signed-production-release-with-embedded-js' dist/BUILD_TYPE.txt",
+  'sha256sum -c dist/SHA256.txt',
+  "if: ${{ always() }}",
+  'rm -f "$RUNNER_TEMP/abu-bassam-release-key.p12"',
+  'Upload production APK artifacts'
+]) need(productionWorkflow,marker,'Android production workflow missing safeguard: '+marker);
+
+for(const marker of [
+  'uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4',
+  "packages: 'platform-tools'",
+  'name: Ensure pinned Android NDK',
+  'NDK_VERSION: 27.1.12297006',
+  'for attempt in 1 2 3; do',
+  'sdkmanager --install "ndk;$NDK_VERSION" --channel=0',
+  'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+  'rm -rf "$NDK_DIR" "$SDK_ROOT/.temp" "$HOME/.android/cache"'
+]) need(productionWorkflow,marker,'production build must pin Android SDK setup and NDK retry: '+marker);
+
+for(const marker of [
+  'pull_request:','push:','contents: write','git push','npm run build:apk:release',
+  'actions/checkout@v','actions/setup-node@v','actions/setup-java@v','actions/upload-artifact@v',
+  'actions/download-artifact@v','npm install --no-audit --no-fund'
+]) reject(productionWorkflow,marker,'Android production workflow contains obsolete/unsafe behavior: '+marker);
+
+
+// Both Android build jobs are intentionally disabled, including manual runs.
+if(/\n  (?:push|pull_request):/.test(testWorkflow))
+  throw new Error('Android test workflow must never start automatically');
+if(!/\n  build:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(testWorkflow))
+  throw new Error('Android test APK build job must remain disabled');
+if(!/\n  build:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(productionWorkflow))
+  throw new Error('production APK build job must remain disabled');
+if(!/\n  sign:\n(?:[^\n]*\n){0,5}?    if: \$\{\{ false \}\}/.test(productionWorkflow))
+  throw new Error('production signing job must remain disabled');
+
+if(!/^[0-9a-f]{64}$/.test(certDigest))throw new Error('release signing certificate digest must be exactly 64 hex characters');
+const certMatch=productionWorkflow.match(/EXPECTED_RELEASE_CERT_SHA256:\s*([0-9a-fA-F]{64})/);
+if(!certMatch)throw new Error('production workflow must pin the expected certificate digest');
+if(certMatch[1].toLowerCase()!==certDigest)throw new Error('production workflow certificate digest must match config/release-signing-certificate.sha256');
+
+const buildJobAt=productionWorkflow.indexOf('\n  build:\n');
+const signJobAt=productionWorkflow.indexOf('\n  sign:\n');
+if(buildJobAt<0||signJobAt<0||signJobAt<=buildJobAt)throw new Error('production workflow must separate build and signing jobs');
+const buildBlock=productionWorkflow.slice(buildJobAt,signJobAt);
+const signBlock=productionWorkflow.slice(signJobAt);
+if(/secrets\.ANDROID_KEY|ANDROID_KEYSTORE_PASSWORD|ANDROID_KEY_ALIAS|ANDROID_KEY_PASSWORD/.test(buildBlock))
+  throw new Error('production build job must not receive production signing secrets');
+if(/actions\/checkout|setup-node|npm |npx |node |gradle|expo /.test(signBlock))
+  throw new Error('isolated signing job must not checkout or execute project/package tooling');
+if(!/actions\/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/.test(signBlock))
+  throw new Error('isolated signing job must consume only the verified build artifact');
+if(!/actions: read/.test(signBlock))throw new Error('isolated signing job needs actions: read only for artifact download');
 
 const checkWeb=String(pkg.scripts?.['check:web']||'');
 if(!checkWeb.startsWith('node tools/check_project.js'))throw new Error('check:web must begin with read-only project checks');
@@ -40,50 +161,51 @@ for(const marker of [
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
   'await download(urls,resolve(vendorRoot,relative),minBytes);',
   'async function fetchWithTimeout(url)',
-  'https://cdn.jsdelivr.net/npm/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
-  'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'Required offline OCR asset is missing or incomplete',
   'canonical web source remains unchanged'
-])need(assets,marker,'Android asset preparation missing safeguard: '+marker);
+]) need(assets,marker,'Android asset preparation missing safeguard: '+marker);
 for(const marker of ['TOUCH_RUNTIME','injectTouchStabilityRuntime','patchAccountEmail','LEGACY_ACCOUNT_EMAIL','ACCOUNT_EMAIL ='])
   reject(assets,marker,'Android asset preparation must not rewrite canonical source: '+marker);
-const copyAt=assets.indexOf('await cp(source, destination');
-const downloadAt=assets.indexOf('for(const [relative,urls,minBytes] of OCR_ASSETS)');
-if(copyAt<0||downloadAt<0||copyAt>downloadAt)throw new Error('Android assets must copy canonical web source before generating OCR assets');
 
 need(native,"message.type === 'webBootReady'",'native shell must wait for explicit webBootReady');
 need(native,'const STARTUP_WATCHDOG_MS = 12000;','startup watchdog must be 12 seconds and fail closed');
-need(native,'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة','startup timeout must report failure instead of unlocking');
-for(const marker of [
-  'onLoad={() => setWebReady(true)}',
-  'onLoadEnd={() => setWebReady(true)}',
-  'onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}',
-  'setTimeout(() => setWebReady(true), STARTUP_WATCHDOG_MS)'
-])reject(native,marker,'WebView must not become ready before canonical runtime boot: '+marker);
-for(const marker of [
-  "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"',
-  'onShouldStartLoadWithRequest',"if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url))",
-  "const [cameraFrameKind, setCameraFrameKind] = useState('paper');",
-  "openCamera(message.mode, message.frameKind)",
-  'cameraFrameKind === \'card\' ? styles.cardDocumentFrame'
-])need(native,marker,'native Android shell missing source-level safeguard: '+marker);
+for(const marker of ['onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}','setTimeout(() => setWebReady(true), STARTUP_WATCHDOG_MS)'])
+  reject(native,marker,'WebView must not become ready before canonical runtime boot: '+marker);
 
 for(const [marker,label] of [
   ['"build:apk:local": "node scripts/build-android-local.mjs"','local test build command'],
-  ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"','strict release build command']
-])need(pkgText,marker,'package missing '+label);
+  ['"build:apk:release": "node scripts/build-android-local.mjs --require-release-key"','strict local release build command']
+]) need(pkgText,marker,'package missing '+label);
+
 for(const [marker,label] of [
   ["process.argv.includes('--require-release-key')",'strict local release switch'],
-  ["['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD']",'complete signing variable set'],
-  ['Production release signing is required.','missing production key rejection'],
-  ["['run', 'check:web']",'local build web checks'],
-  ["['run', 'android:prebuild']",'local Android prebuild'],
-  ["['assembleRelease', '--no-daemon']",'local release build'],
+  ["['ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD']",'complete local signing variable set'],
+  ['Incomplete Android signing configuration.','partial local signing rejection'],
+  ['Production release signing is required.','missing local production key rejection'],
+  ["['run', 'check:web']",'central build web checks'],
+  ["['run', 'android:prebuild']",'central Android prebuild'],
+  ["['assembleRelease', '--no-daemon']",'central release build'],
   ['assets/index.android.bundle','embedded JS verification'],
-  ["['verify', '--verbose', apk]",'APK signature verification'],
-  ["['verify', '--print-certs', apk]",'APK signing certificate verification'],
-  ['Abu_Bassam_Library_4.3.2.apk','distribution APK name'],
+  ["['verify', '--verbose', '--print-certs', apk]",'APK signature and certificate verification'],
+  ["return [stdout, stderr].filter(Boolean).join('\\n');",'combined apksigner output capture'],
+  ['expectedReleaseCertificateDigest','local expected release certificate validation'],
+  ['certificateDigest(certificate)','local actual release certificate validation'],
+  ['Production signing certificate mismatch.','local certificate mismatch rejection'],
+  ['function buildEnvironment()','local sanitized build environment'],
+  ["for (const name of [...signingVars, 'ANDROID_KEYSTORE_TYPE', 'ANDROID_KEYSTORE_BASE64']) delete env[name];",'signing secrets removed from project subprocess environment'],
+  ["run(win ? 'npm.cmd' : 'npm', ['run', 'check:web'], root, cleanBuildEnv)",'check:web runs without signing secrets'],
+  ["run(gradle, ['assembleRelease', '--no-daemon'], androidDir, cleanBuildEnv)",'Gradle build runs without signing secrets'],
+  ["'--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD'",'local apksigner password uses environment'],
+  ['Expected exactly one release APK','deterministic APK selection'],
+  ["const apkFileName = `Abu_Bassam_Library_${appVersion}.apk`",'dynamic distribution APK name'],
+  ['test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES','explicit non-production marker'],
+  ['signed-production-release-with-embedded-js','explicit production marker'],
   ['SHA256.txt','SHA-256 output'],
   ['SIGNING_CERTIFICATE.txt','signing certificate output']
-])need(local,marker,'Android local build missing '+label);
-console.log('Android workflow check passed: builds copy canonical web source without patching it, runtime readiness is explicit/fail-closed, OCR assets are generated separately, and APK signing/bundle verification remain enforced.');
+]) need(local,marker,'Android central build missing '+label);
+reject(local,'Abu_Bassam_Library_4.3.2.apk','central build must derive the APK name from package.json version');
+if(fs.existsSync(path.join(root,'scripts','android-release-signing.gradle')))throw new Error('obsolete Gradle release signing hook must not return');
+reject(local,'ensureReleaseSigningHook','local release signing must not inject a Gradle signing hook');
+reject(local,'apply from: file("../../scripts/android-release-signing.gradle")','local release signing must not use Gradle secret injection');
+
+console.log('Android workflow check passed: no automatic Android jobs, APK build and production signing disabled in Actions; local build safeguards remain documented.');

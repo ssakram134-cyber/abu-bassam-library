@@ -6,7 +6,7 @@ window.__ABU_APP_SECURITY_V1__=true;
 const $=id=>document.getElementById(id);
 const MAIN_USERNAME='akrama1992';
 const MAIN_EMAIL='akrama1992@gmail.com';
-const APP_VERSION='4.3.2';
+const APP_VERSION=String(window.__ABU_APP_META__?.version||'');
 const MAX_DEVICES=5;
 const DEVICE_ID_KEY='abuBassamLockedDeviceIdV3';
 const DEVICE_NAME_KEY='abuBassamLockedDeviceNameV3';
@@ -26,11 +26,13 @@ const pending=new Map();
 let requestSeq=0;
 let currentDevice=null;
 let deviceSecret='';
+let deviceSecretPending=null;
 let unlocked=false;
 let busy=false;
 let lastBackgroundAt=0;
 let exitArmedAt=0;
 let appearanceStamp='';
+let maintenanceTimer=null;
 let deviceInfo={name:'Android',model:'Android',os:'Android',androidVersion:'',appVersion:APP_VERSION};
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -64,9 +66,22 @@ function randomSecret(){
 }
 async function getSecret(){
   if(deviceSecret)return deviceSecret;
-  deviceSecret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
-  if(!deviceSecret){deviceSecret=randomSecret();await nativeRequest('secureSet',{key:SECRET_KEY,value:deviceSecret})}
-  return deviceSecret
+  if(deviceSecretPending)return deviceSecretPending;
+  // A failed SecureStore write must never be cached as a registered device key.
+  // Coalesce concurrent callers so they cannot generate competing secrets.
+  const pending=(async()=>{
+    let stored=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+    if(!stored){
+      const generated=randomSecret();
+      await nativeRequest('secureSet',{key:SECRET_KEY,value:generated});
+      stored=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+      if(stored!==generated)throw new Error('SECURE_DEVICE_SECRET_PERSIST_FAILED');
+    }
+    deviceSecret=stored;
+    return stored
+  })();
+  deviceSecretPending=pending;
+  try{return await pending}finally{if(deviceSecretPending===pending)deviceSecretPending=null}
 }
 async function getBiometricEnabled(){return String(await nativeRequest('secureGet',{key:BIO_KEY})||'')==='1'}
 async function setBiometricEnabled(value){if(value)await nativeRequest('secureSet',{key:BIO_KEY,value:'1'});else await nativeRequest('secureDelete',{key:BIO_KEY});renderSecurityCard()}
@@ -106,12 +121,21 @@ function loginRemaining(){return Math.max(0,Number(localStorage.getItem(LOGIN_LO
 function formatWait(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
 function clearCredentialFailures(){localStorage.removeItem(ATTEMPT_KEY);localStorage.removeItem(LOGIN_LOCK_KEY);localStorage.removeItem(BLOCK_COUNT_KEY)}
 function recordCredentialFailure(message){const attempts=Number(localStorage.getItem(ATTEMPT_KEY)||0)+1;if(attempts<5){localStorage.setItem(ATTEMPT_KEY,String(attempts));setError(String(message||'بيانات الدخول غير صحيحة')+' • المتبقي قبل الانتظار: '+(5-attempts));return}const blocks=Number(localStorage.getItem(BLOCK_COUNT_KEY)||0)+1,duration=Math.min(300000,30000*Math.max(1,blocks));localStorage.setItem(ATTEMPT_KEY,'0');localStorage.setItem(BLOCK_COUNT_KEY,String(blocks));localStorage.setItem(LOGIN_LOCK_KEY,String(Date.now()+duration));setError('محاولات كلمة مرور غير صحيحة كثيرة. انتظر '+formatWait(duration)+' ثم حاول مرة أخرى.')}
+function isCredentialFailure(error){
+  const code=String(error?.code||'').toLowerCase();
+  const message=String(error?.message||error||'');
+  return code==='invalid_credentials'||/invalid login credentials/i.test(message)
+}
 function authError(error){const m=String(error?.message||error||'تعذر تسجيل الدخول');if(/invalid login credentials/i.test(m))return 'اسم المستخدم أو كلمة المرور غير صحيحة.';if(/DEVICE_LIMIT_REACHED/i.test(m))return 'وصل الحساب إلى الحد الأقصى: ٥ أجهزة. احذف جهازًا فرعيًا من الجهاز الرئيسي أولاً.';if(/DEVICE_DISABLED/i.test(m))return 'هذا الجهاز موقوف من الجهاز الرئيسي.';if(/network|fetch/i.test(m))return 'تعذر الاتصال بالإنترنت.';return m.replace(/^.*?error:\s*/i,'')}
 async function login(){
   if(busy)return;const wait=loginRemaining();if(wait>0)return setError('الدخول متوقف مؤقتًا بسبب محاولات بيانات اعتماد غير صحيحة. حاول بعد '+formatWait(wait)+'.');const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME){recordCredentialFailure('اسم المستخدم غير صحيح.');return}if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;setError('جاري التحقق...');let authenticated=false;
   try{
     const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});
-    if(result.error){recordCredentialFailure(authError(result.error));return}
+    if(result.error){
+      if(isCredentialFailure(result.error))recordCredentialFailure(authError(result.error));
+      else setError(authError(result.error));
+      return
+    }
     authenticated=!!result.data?.session;clearCredentialFailures();if($('abuLoginPass'))$('abuLoginPass').value='';
     await fetchDeviceInfo();await registerDevice();hideGate();await pullAppearanceIfNeeded();log('تسجيل دخول ناجح',MAIN_USERNAME+' • '+roleLabel())
   }catch(e){
@@ -143,7 +167,8 @@ function securityCardHtml(){const owner=currentDevice?.role==='owner';return `<s
 async function renderSecurityCard(){const body=document.querySelector('#abuSettingsModal .abu-settings-body');if(!body)return;let old=$('abuSecuritySettings');if(old)old.outerHTML=securityCardHtml();else body.insertAdjacentHTML('afterbegin',securityCardHtml());const bio=$('abuSecurityBio');if(bio)bio.checked=await getBiometricEnabled().catch(()=>false);const lockSel=$('abuSecurityLock');if(lockSel)lockSel.value=String(localStorage.getItem(LOCK_MINUTES_KEY)||5);const sync=$('abuAppearanceSync');if(sync)sync.checked=localStorage.getItem(APPEARANCE_SYNC_KEY)==='1';applySecondaryGuards()}
 function injectSecurityCard(){renderSecurityCard();document.addEventListener('abu-settings-ready',()=>renderSecurityCard());document.addEventListener('abu-bassam-auth-changed',()=>renderSecurityCard())}
 
-function applySecondaryGuards(){if(currentDevice?.role==='owner')return;document.querySelectorAll('#abuSettingsModal button[onclick*="resetDefaults"],#opsClear').forEach(btn=>{btn.disabled=true;btn.title='متاح للحساب الرئيسي فقط';btn.style.opacity='.45'})}
+function setSecondaryOwnerOnly(btn,denied){if(!btn)return;if(denied){if(btn.dataset.abuSecurityOwnerGuard!=='1'){btn.dataset.abuSecurityOwnerGuard='1';btn.dataset.abuSecurityPrevDisabled=btn.disabled?'1':'0';btn.dataset.abuSecurityPrevTitle=btn.title||'';btn.dataset.abuSecurityPrevOpacity=btn.style.opacity||''}btn.disabled=true;btn.title='متاح للحساب الرئيسي فقط';btn.style.opacity='.45';return}if(btn.dataset.abuSecurityOwnerGuard==='1'){btn.disabled=btn.dataset.abuSecurityPrevDisabled==='1';if(btn.dataset.abuSecurityPrevTitle)btn.title=btn.dataset.abuSecurityPrevTitle;else btn.removeAttribute('title');btn.style.opacity=btn.dataset.abuSecurityPrevOpacity||'';delete btn.dataset.abuSecurityOwnerGuard;delete btn.dataset.abuSecurityPrevDisabled;delete btn.dataset.abuSecurityPrevTitle;delete btn.dataset.abuSecurityPrevOpacity}}
+function applySecondaryGuards(){const denied=currentDevice?.role!=='owner';document.querySelectorAll('#abuSettingsModal button[onclick*="resetDefaults"],#opsClear').forEach(btn=>setSecondaryOwnerOnly(btn,denied))}
 function permissionForTarget(target){if(!target)return'';const onclick=String(target.getAttribute?.('onclick')||'');if(/resetDefaults|resetData/.test(onclick))return'reset';if(target.id==='opsClear'||/clearOperations/.test(onclick))return'security';if(/cloudLogin/.test(onclick))return'security';return''}
 function guardClicks(){document.addEventListener('click',event=>{if(!unlocked||currentDevice?.role==='owner')return;const target=event.target?.closest?.('button,[role="button"]');const need=permissionForTarget(target);if(need&&!can(need)){event.preventDefault();event.stopImmediatePropagation();toast('هذه العملية متاحة للحساب الرئيسي فقط')}},true)}
 
@@ -154,7 +179,8 @@ async function appearanceSync(enabled){localStorage.setItem(APPEARANCE_SYNC_KEY,
 function installAppearanceHooks(){if(window.AbuBassamSettings?.theme&&!window.AbuBassamSettings.theme.__securityWrapped){const original=window.AbuBassamSettings.theme;const wrapped=function(key){localStorage.setItem(PREVIOUS_THEME_KEY,localStorage.getItem('theme')||'default');const out=original.apply(this,arguments);setTimeout(pushAppearance,80);return out};wrapped.__securityWrapped=true;window.AbuBassamSettings.theme=wrapped}if(window.AbuBassamTypography?.global&&!window.AbuBassamTypography.global.__securityWrapped){const original=window.AbuBassamTypography.global;const wrapped=function(){const out=original.apply(this,arguments);setTimeout(pushAppearance,100);return out};wrapped.__securityWrapped=true;window.AbuBassamTypography.global=wrapped}}function wrapAppearance(){installAppearanceHooks();document.addEventListener('abu-runtime-loaded',installAppearanceHooks);document.addEventListener('abu-settings-ready',installAppearanceHooks)}
 function restorePreviousTheme(){const prev=localStorage.getItem(PREVIOUS_THEME_KEY);if(!prev)return toast('لا يوجد مظهر سابق محفوظ');const current=localStorage.getItem('theme')||'default';localStorage.setItem(PREVIOUS_THEME_KEY,current);localStorage.setItem('theme',prev);if(typeof window.applyTheme==='function')window.applyTheme(prev);window.AbuBassamSettings?.open?.();setTimeout(()=>window.AbuBassamSettings?.theme?.(prev),30);toast('تمت استعادة المظهر السابق')}
 
-function closeTopLayer(){const ordered=['#abuDeviceModal.show','#abuTextEditor.show','#abuTypographySettings.show','#abuSettingsModal.show','#opsSheet.show','.v-modal.show','.cs-modal.show','.nat-modal.show','.sheet.show','.ds-sheet.show'];for(const sel of ordered){const el=document.querySelector(sel);if(!el)continue;if(el.id==='abuDeviceModal')closeDevices();else if(el.id==='abuSettingsModal')window.AbuBassamSettings?.close?.();else if(el.id==='opsSheet')window.AbuBassamOps?.close?.();else el.classList.remove('show');return true}return false}
+function clearOrphanInteractionLayers(){const backdrop=$('sheetBackdrop');if(backdrop&&!document.querySelector('.sheet.show'))backdrop.classList.remove('show')}
+function closeTopLayer(){const ordered=['#paperZoomOverlay.show','#abuA4EditorV2.show','#abuPosterAssemblyModal.show','#abuEnhanceModal.show','#abuPosterModal.show','#abuGeoModal.show','#abuRulerModal.show','#abuPresetModal.abu-open','#abuPasswordResetModal.show','#natZoom.show','#custView.on','#custPick.on','#custModal.on','#abuBackupModal.on','#abuVaultAdvancedModal.show','#abuRecoveryModal.show','#abuAccountModal.on','#abuNotificationSheet.show','#abuDeviceModal.show','#abuTextEditor.show','#abuTypographySettings.show','#abuSettingsModal.show','#abuOpsV2.show','#opsSheet.show','.v-modal.show','.cs-modal.show','.nat-modal.show','.sheet.show','.ds-sheet.show'];for(const sel of ordered){const el=document.querySelector(sel);if(!el)continue;if(el.id==='paperZoomOverlay'&&typeof window.closePaperZoom==='function')window.closePaperZoom();else if(el.id==='abuA4EditorV2')window.AbuA4CardSheetEditorV2?.close?.();else if(el.id==='abuPosterAssemblyModal')window.AbuPosterProject?.closePreview?.();else if(el.id==='abuEnhanceModal'||el.id==='abuPosterModal')window.AbuPhotoAdvanced?.close?.(el.id);else if(el.id==='abuGeoModal'||el.id==='abuRulerModal')window.AbuPhotoGeometry?.close?.(el.id);else if(el.id==='abuPresetModal')window.AbuPrintPresets?.close?.();else if(el.id==='abuPasswordResetModal')window.AbuBassamPasswordRecovery?.close?.();else if(el.id==='natZoom')window.Nat?.zoomClose?.();else if(el.id==='custView'||el.id==='custPick'||el.id==='custModal')window.AbuCustomerDocs?.closeTop?.();else if(el.id==='abuBackupModal')window.AbuBackupCenter?.close?.();else if(el.id==='abuVaultAdvancedModal')window.AbuDocumentVaultAdvanced?.close?.();else if(el.id==='abuRecoveryModal')window.AbuFeatureRecovery?.close?.();else if(el.id==='abuAccountModal')window.AbuBassamAccount?.close?.();else if(el.id==='abuNotificationSheet')window.AbuBassamNotifications?.close?.();else if(el.id==='abuDeviceModal')closeDevices();else if(el.id==='abuSettingsModal')window.AbuBassamSettings?.close?.();else if(el.id==='abuOpsV2')window.AbuBassamOperationLogV2?.close?.();else if(el.id==='opsSheet')window.AbuBassamOps?.close?.();else if(el.classList.contains('sheet')&&typeof window.closeSheets==='function')window.closeSheets();else el.classList.remove('show');clearOrphanInteractionLayers();return true}clearOrphanInteractionLayers();return false}
 function home(){if(closeTopLayer()){}try{if(typeof window.switchTab==='function')window.switchTab('photos')}catch(e){}document.body.classList.remove('abu-focus-mode');window.scrollTo({top:0,behavior:'smooth'});toast('الرئيسية')}
 function focus(){document.body.classList.toggle('abu-focus-mode');toast(document.body.classList.contains('abu-focus-mode')?'وضع تكبير مساحة العمل':'الوضع العادي')}
 function back(fromHardware=false){if(!unlocked)return true;if(closeTopLayer())return true;if(document.body.classList.contains('abu-focus-mode')){document.body.classList.remove('abu-focus-mode');return true}const active=document.querySelector('#abuMainTabs .abu-tab.active');if(active&&active.id!=='tabPhotos'){home();return true}if(window.scrollY>40){window.scrollTo({top:0,behavior:'smooth'});return true}return exit(fromHardware)}
@@ -164,12 +190,30 @@ window.AbuBassamNativeBackPress=function(){back(true)};
 async function logout(){if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;try{await cloud()?.client?.auth?.signOut?.({scope:'local'})}catch(e){}currentDevice=null;unlocked=false;showGate('تم تسجيل الخروج.');log('تسجيل خروج')}
 function lockNow(){lock('تم قفل التطبيق يدويًا')}
 
+function scheduleMaintenance(delay=60000){clearTimeout(maintenanceTimer);maintenanceTimer=null;if(document.visibilityState==='hidden')return;maintenanceTimer=setTimeout(()=>void maintenanceTick(),Math.max(1000,delay))}
+async function maintenanceTick(){maintenanceTimer=null;if(document.visibilityState==='hidden')return;try{if(unlocked)await touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')await Promise.resolve(pushAppearance());else await Promise.resolve(pullAppearanceIfNeeded())}}catch(e){}finally{scheduleMaintenance()}}
+function installMaintenance(){scheduleMaintenance();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(maintenanceTimer);maintenanceTimer=null}else scheduleMaintenance(1000)})}
 async function boot(){
-  buildUi();guardClicks();injectSecurityCard();wrapAppearance();await fetchDeviceInfo();if(!localStorage.getItem(LOCK_MINUTES_KEY))localStorage.setItem(LOCK_MINUTES_KEY,'5');
-  const trust=localTrust();if(offlineAllowed())$('abuOfflineBtn').style.display='block';
-  try{await cloud()?.ready?.()}catch(e){}
-  const bio=await getBiometricEnabled().catch(()=>false);if(bio&&((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed())){setTimeout(unlockWithBiometric,180)}else showGate('أدخل بيانات الدخول لفتح التطبيق.');
-  setInterval(()=>{if(unlocked)touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')pushAppearance();else pullAppearanceIfNeeded()}},60000)
+  // Critical startup is local: construct and lock the gate before notifying
+  // Android. Cloud/session restoration must not make offline startup hang.
+  buildUi();guardClicks();injectSecurityCard();wrapAppearance();
+  if(!localStorage.getItem(LOCK_MINUTES_KEY))localStorage.setItem(LOCK_MINUTES_KEY,'5');
+  if(offlineAllowed())$('abuOfflineBtn').style.display='block';
+  showGate('أدخل بيانات الدخول لفتح التطبيق.');
+  installMaintenance();
+  void fetchDeviceInfo().catch(error=>console.warn('Device information unavailable',error));
+  try{
+    const cloudReady=cloud()?.ready?.();
+    if(cloudReady&&typeof cloudReady.catch==='function')void cloudReady.catch(()=>{});
+  }catch(error){console.warn('Cloud session initialization unavailable',error)}
+  void getBiometricEnabled().then(bio=>{
+    if(!bio||unlocked||!((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed()))return;
+    // Never display the biometric prompt before the approved UI is booted.
+    if(window.__ABU_APPROVED_UI_READY__)setTimeout(()=>{if(!unlocked)void unlockWithBiometric()},180);
+    else document.addEventListener('abu-bassam-approved-ui-ready',()=>{
+      if(!unlocked)void unlockWithBiometric()
+    },{once:true})
+  }).catch(()=>{});
 }
 
 window.AbuBassamSecurity={
@@ -181,5 +225,21 @@ window.AbuBassamSecurity={
   onSessionChanged:async()=>{if(unlocked&&cloud()?.isConnected?.())try{await registerDevice()}catch(e){}},
 };
 
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+// Export the *completion* of async login-gate initialization, not the moment
+// its script finishes evaluating. The native shell must not reveal the UI
+// before the gate has been constructed and boot has finished safely.
+let resolveSecurityBoot,rejectSecurityBoot;
+window.__ABU_SECURITY_BOOT_PROMISE__=new Promise((resolve,reject)=>{
+  resolveSecurityBoot=resolve;rejectSecurityBoot=reject
+});
+// Attach a rejection observer immediately; the device loader also awaits the
+// original promise and receives the actual error after loading all guards.
+window.__ABU_SECURITY_BOOT_PROMISE__.catch(()=>{});
+function startSecurityBoot(){
+  Promise.resolve().then(boot).then(()=>{
+    if(!document.getElementById('abuSecurityGate'))throw new Error('SECURITY_GATE_NOT_READY');
+    resolveSecurityBoot(true)
+  }).catch(rejectSecurityBoot)
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startSecurityBoot,{once:true});else startSecurityBoot();
 })();

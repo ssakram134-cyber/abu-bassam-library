@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..'),web=path.join(root,'web'),errors=[];
 const read=f=>fs.readFileSync(path.join(web,f),'utf8'),rootRead=f=>fs.readFileSync(path.join(root,f),'utf8');
 const need=(s,m,l)=>{if(!s.includes(m))errors.push(`${l}: missing ${m}`)};
 const forbid=(s,m,l)=>{if(s.includes(m))errors.push(`${l}: forbidden ${m}`)};
-const files=['device-name-runtime.js','feature-recovery-runtime.js','productivity-tools-runtime.js','card-template-library.js','child-card-templates-runtime.js','card-models-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','login-input-direction-runtime.js','ration-card.html','mawkib-cards.html','thanks-letter.html','certificates.html','envelopes.html','design-studio-runtime.js','envelope-agreement-runtime.js','standalone-card-layouts-plus-runtime.js','app-security-runtime.js'];
+const files=['device-name-runtime.js','feature-recovery-runtime.js','productivity-tools-runtime.js','card-template-library.js','child-card-templates-runtime.js','card-models-runtime.js','card-models-plus-runtime.js','standalone-card-models-runtime.js','strict-workflow-runtime.js','login-input-direction-runtime.js','ration-card.html','mawkib-cards.html','thanks-letter.html','certificates.html','envelopes.html','design-studio-runtime.js','envelope-agreement-runtime.js','standalone-card-layouts-plus-runtime.js','app-security-runtime.js'];
 for(const f of files)if(!fs.existsSync(path.join(web,f)))errors.push('Missing latest feature asset: '+f);
 for(const f of ['login-throttle-fix-runtime.js','cards-section-upgrades-runtime.js','cards-hardening-runtime.js','cards-hardening-fixes-runtime.js','cards-final-audit-runtime.js','touch-stability-runtime.js'])if(fs.existsSync(path.join(web,f)))errors.push('Obsolete patch runtime returned: '+f);
 
@@ -20,8 +20,11 @@ for(const m of ["envelope:{title:'صناعة الظرف',file:'envelopes.html'}"
 forbid(recovery,'new MutationObserver(scheduleRecovery)','recovery host');
 
 const lib=read('card-template-library.js'),sandbox={window:{}};vm.runInNewContext(lib,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
-const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
+const expected={personal:10,child:10,login:10,wifi:10,qr:10,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
 for(const [id,n] of Object.entries(expected)){const g=groups?.find?.(x=>x.id===id);if(!g||g.models?.length!==n)errors.push(`${id}: expected ${n}, got ${g?.models?.length??'missing'}`)}
+const cardPlus=read('card-models-plus-runtime.js');
+for(const id of ['personal-6','personal-7','personal-8','personal-9','personal-10','wifi-4','wifi-5','wifi-6','wifi-7','wifi-8','wifi-9','wifi-10','qr-5','qr-6','qr-7','qr-8','qr-9','qr-10'])need(cardPlus,id,'extended card model '+id);
+need(cardPlus,'api.models=function(type){return [...original.models(type),...(EXTRA[type]||[])]','extended card model API');
 
 const ration=read('ration-card.html');for(let i=1;i<=10;i++)need(ration,`value="t${i}"`,`ration model ${i}`);
 const mawkib=read('mawkib-cards.html');for(let i=1;i<=4;i++)need(mawkib,`value="t${i}"`,`mawkib model ${i}`);
@@ -32,7 +35,7 @@ const layouts=read('standalone-card-layouts-plus-runtime.js');for(const m of ['a
 const appSecurity=read('app-security-runtime.js');for(const m of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','recordCredentialFailure','clearCredentialFailures','signOut({scope:\'local\'})'])need(appSecurity,m,'core login security');
 const direction=read('login-input-direction-runtime.js');for(const m of ["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"])need(direction,m,'login LTR');
 
-const native=rootRead('index.js');for(const m of ["message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"','onShouldStartLoadWithRequest'])need(native,m,'native startup');
+const native=rootRead('index.js');for(const m of ["message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"const APP_ORIGIN = 'https://appassets.androidplatform.net';","originWhitelist={[APP_ORIGIN,'about:*']}",'nativeConfig={{ component: RCTAbuBassamWebView }}','allowFileAccess={false}','allowFileAccessFromFileURLs={false}','allowUniversalAccessFromFileURLs={false}','mixedContentMode="never"','onShouldStartLoadWithRequest','onRenderProcessGone'])need(native,m,'native startup');
 for(const m of ['onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}','onLoadProgress={(event) => { if ((event.nativeEvent?.progress || 0) >= 0.35) setWebReady(true); }}'])forbid(native,m,'native startup');
 for(const f of files.filter(x=>x.endsWith('.js'))){try{new vm.Script(read(f),{filename:f})}catch(e){errors.push(`${f}: ${e.message}`)}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}

@@ -9,7 +9,10 @@
     "android": {
       "package": "com.abubassam.librarycamera3",
       "versionCode": 432,
-      "permissions": ["CAMERA", "INTERNET"],
+      "permissions": [
+        "CAMERA",
+        "INTERNET"
+      ],
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -25,22 +28,22 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "يحتاج تطبيق مكتبة أبو بسام إلى الكاميرا للمسح الضوئي وقراءة الباركود وتصوير المستندات."
+          "recordAudioAndroid": false
         }
       ],
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "يستخدم تطبيق مكتبة أبو بسام المصادقة الحيوية لحماية تسجيل الدخول والبيانات."
-        }
-      ],
+      "expo-local-authentication",
       [
         "expo-secure-store",
         {
-          "configureAndroidBackup": true,
-          "faceIDPermission": "يستخدم تطبيق مكتبة أبو بسام المصادقة الحيوية لحماية بيانات تسجيل الدخول على هذا الجهاز."
+          "configureAndroidBackup": true
         }
       ]
-    ]
+    ],
+    "platforms": [
+      "android"
+    ],
+    "extra": {
+      "releaseDate": "2026-09-20"
+    }
   }
 }

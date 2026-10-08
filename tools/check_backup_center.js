@@ -7,6 +7,8 @@ new vm.Script(runtime,{filename:'backup-center-runtime.js'});new vm.Script(loade
 for(const m of ['__ABU_BACKUP_CENTER_V1__','CHUNK=5*1024*1024','MAX_ZIP=120*1024*1024','crypto.subtle.digest','backupItems()','stateScope()','scopedKey(key)','part_count:parts','uploadToSignedUrl','backup_kind:kind','pre_restore','backupCreate','backupRestore','backupDelete','AbuBassamNativeSecurity',"kind==='pre_restore'?'backupRestore':'backupCreate'","const d=await downloadBytes(id)","await backupNow('pre_restore',true)","restore(file,{mode:'snapshot',silentConfirm:true})","await api('cleanup','POST',{retention:retention()})",'15*60*1000'])need(runtime,m,m);
 forbid(runtime,'__dev_secure_','device secret must never use web storage');
 forbid(runtime,'window.AbuBassamNativeSecurityResult','Backup Center must not install another native callback');
+forbid(runtime,'setInterval(','automatic backup must not keep a permanent background interval');for(const m of ['function scheduleAutoCheck(delay=15*60*1000)','document.visibilityState===\'hidden\'','clearTimeout(autoTimer)'])need(runtime,m,'visibility-aware automatic backup '+m);
+
 for(const m of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','await loadBackupCenter();'])need(loader,m,'deterministic loader '+m);
 
 for(const m of ["const TABLE='abu_bassam_backups'","const MAX_BYTES=512*1024*1024","MAX_PARTS=120",'sha256','verifyParts','hasher.update(bytes)','BACKUP_PART_MISSING','BACKUP_SIZE_MISMATCH','BACKUP_SHA256_MISMATCH','sha256_verified:true','cleanupReady','backup_kind===\'pre_restore\'','createSignedUploadUrl','createSignedUrl','backupCreate','backupRestore','backupDelete','branch_device_id',"ready:true"])need(edge,m,'edge '+m);

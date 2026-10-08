@@ -17,6 +17,8 @@ for(const m of [
   'blob.size>=file.size','imageSmoothingQuality','overflow-y:auto','currentBytes()+incomingBytes',
   'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
 ])need(html,m,'image compressor');
+const host=read(path.join(web,'productivity-tools-runtime.js'));
+for(const m of ["await confirmedOutput('savePagesToGallery'","أُلغي حفظ الصور المضغوطة","تعذر حفظ الصور المضغوطة"])need(host,m,'compressor host confirmation');
 const index=read(path.join(root,'index.js'));
 for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(index,m,'canonical Android image saving');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
