@@ -477,6 +477,43 @@ function testBackLayerFallback(){
   delete active['.sheet.show'];
 }
 
+// Crop guide choice is a non-sensitive print preference: it must survive a
+// renderer crash/reload without serializing user photos into localStorage.
+function testGuidePreferenceSurvivesWebViewReload(){
+  const html=read('index.html');
+  const saveStart=html.indexOf('function saveAppSettings(){');
+  const loadStart=html.indexOf('function loadAppSettings(){',saveStart);
+  const photoStart=html.indexOf('function onImageSelect(',loadStart);
+  const toggleStart=html.indexOf('function toggleGuides(fromCrop=false){');
+  const toggleEnd=html.indexOf('\n</script>',toggleStart);
+  if([saveStart,loadStart,photoStart,toggleStart,toggleEnd].some(x=>x<0))
+    throw new Error('print settings and guide lifecycle source missing');
+  const source=html.slice(saveStart,photoStart)+'\n'+html.slice(toggleStart,toggleEnd);
+  const factory=vm.runInNewContext('(storage)=>{'
+    +'let guideEnabled=true;'
+    +'const keys=["paperSize","photoSize","paperCustomW","paperCustomH","customW","customH",'
+    +'"mediaType","dpiInput","photoCount","borderMode","gapInput","marginInput","aiBgMode"];'
+    +'const nodes=Object.fromEntries(keys.map(key=>[key,{tagName:"INPUT",value:"1"}]));'
+    +'const $=id=>nodes[id]||null;'
+    +'const localStorage={setItem:(key,val)=>storage.set(key,val),getItem:key=>storage.get(key)||null};'
+    +'const drawCrop=()=>{},alert=()=>{};'
+    +source
+    +';return {toggle:toggleGuides,restore:loadAppSettings,guide:()=>guideEnabled,'
+    +'reset:()=>{guideEnabled=true}}}');
+  const storage=new Map(),session=factory(storage);
+  session.toggle(true);
+  const saved=JSON.parse(storage.get('abuBassamPrintSettingsV1')||'{}');
+  if(saved.guideEnabled!==false||'uploadedImages' in saved)
+    throw new Error('guide choice was not saved as a safe print preference');
+  session.reset();
+  session.restore();
+  if(session.guide()!==false)throw new Error('guide visibility did not survive WebView reload');
+  session.toggle(true);
+  session.reset();
+  session.restore();
+  if(session.guide()!==true)throw new Error('guide visibility was not restored after re-enabling');
+}
+
 // File-reader failures must not strand a batch. Clearing images must
 // invalidate callbacks from previous file selections, even after load.
 function testImageImportLifecycle(){
@@ -888,7 +925,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
