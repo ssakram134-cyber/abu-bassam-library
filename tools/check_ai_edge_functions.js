@@ -47,6 +47,10 @@ for(const marker of [
 ])need(web,marker,'AI client authenticated session');
 for(const marker of ['sk-proj-','sk-live-','AIzaSy','AI_APP_TOKEN=','OPENAI_API_KEY=','GEMINI_API_KEY=']){forbid(photo,marker,'AI photo embedded secret');forbid(status,marker,'AI status embedded secret')}
 forbid(web,"localStorage.setItem('abuBassamAiProToken'",'AI client must not persist PRO token');
+need(web,"if(prompt.length<3)return alert('اكتب طلب تعديل واضح');",'AI client must validate the raw user prompt before sending');
+forbid(web,"prompt='تعليمات إلزامية: حافظ على هوية الشخص",'AI client must not duplicate the server identity guard');
+need(photo,'const IDENTITY_GUARD =','AI photo edge must own the canonical identity guard');
+need(photo,'const guardedPrompt = `${IDENTITY_GUARD}\\n\\n${prompt}`;','AI photo edge must prepend the identity guard server-side');
 for(const marker of ["status: 410","android build proxy retired","Cache-Control","X-Content-Type-Options"])need(buildProxy,marker,'retired Android build proxy');
 for(const marker of ["bootstrap disabled","status: 410","cache-control"])need(bootstrap,marker,'disabled owner bootstrap');
 for(const marker of [
