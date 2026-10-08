@@ -921,6 +921,31 @@ async function testRestoreSettingsValidatedBeforeDatabaseCommit(){
   if(verified<0||committed<=verified)throw Error('archive DB changes precede ZIP settings validation');
 }
 
+async function testVaultStaleDeleteGuard(){
+  const source=read('document-vault-runtime.js');
+  const a=source.indexOf('async function deleteItem(id){');
+  const b=source.indexOf('async function editItem(id){',a);
+  if(a<0||b<=a)throw Error('vault deletion handler missing');
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'const {requireVault,findItem,confirm,dbModifyItem,refresh,alert,logOperation,autoSync,navigator,setTimeout,syncNow}=deps;'
+    +source.slice(a,b)+';return deleteItem}');
+  const shown={id:'photo',name:'original.png',size:10,updatedAt:'t1',
+    localEditToken:'rev1',folder:'school',blob:{data:'old'}};
+  let current={...shown,name:'new-photo.png',localEditToken:'rev2'};
+  const warnings=[];let writes=0,refreshes=0;
+  const remove=factory({requireVault:()=>true,findItem:()=>shown,confirm:()=>true,
+    dbModifyItem:async(id,change)=>{const result=change({...current});if(result){current=result;writes++}return result},
+    refresh:async()=>{refreshes++},alert:message=>warnings.push(message),
+    logOperation:()=>{},autoSync:()=>false,navigator:{onLine:false},setTimeout:()=>{},syncNow:()=>{}});
+  const rejected=await remove('photo');
+  if(rejected!==false||writes||current.name!=='new-photo.png'||warnings.length!==1)
+    throw Error('stale vault delete erased a recently changed document');
+  current={...shown};
+  if(await remove('photo')!==true||!current.deleted||current.blob!==null||
+    current.size!==0||current.folder!=='school'||writes!==1||refreshes!==2)
+    throw Error('confirmed deletion failed to store a safe local tombstone');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -1209,7 +1234,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
