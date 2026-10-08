@@ -101,6 +101,7 @@ for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-c
 for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
 for(const marker of ["message.type === 'webBootFailed'","bootFailureAlertShown.current = true;","if (bootFailureAlertShown.current) return;","reportBootFailure('تعذر فتح مكتبة أبو بسام'","onError={() => reportBootFailure("])
   need(native,marker,'native boot failure must be visible once and provide retry');
+need(native,"if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;",'WebView bridge must reject JSON primitives before property access');
 for(const marker of ['webViewKey','restartWebView','onRenderProcessGone','nativeConfig={{ component: RCTAbuBassamWebView }}'])need(native,marker,'native WebView recovery');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
