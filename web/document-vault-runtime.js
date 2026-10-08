@@ -222,6 +222,17 @@ function modalHtml(){return `
 <div id="vBusy" class="v-busy"><div class="v-busy-card"><div class="v-spinner"></div><div id="vBusyText">جاري العمل...</div></div></div>
 `}
 
+let vaultSyncTimer=null;
+function scheduleVaultSyncTimer(delay=900000){
+  clearTimeout(vaultSyncTimer);
+  vaultSyncTimer=null;
+  if(document.visibilityState==='hidden')return;
+  vaultSyncTimer=setTimeout(()=>{
+    vaultSyncTimer=null;
+    if(automaticDue())void syncNow(false);
+    scheduleVaultSyncTimer()
+  },Math.max(1000,delay))
+}
 async function build(){
   if($('vaultCenter'))return;
   addCss();let app=document.querySelector('.app'),preview=document.querySelector('.app .preview');if(!app)return;
@@ -236,8 +247,16 @@ async function build(){
   await refresh();
   window.addEventListener('online',()=>{setSyncStatus('عاد الإنترنت • فحص جدول المزامنة');if(automaticDue())syncNow(false)});
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
-  setTimeout(()=>{if(automaticDue())syncNow(false)},5000);
-  setInterval(()=>{if(automaticDue())syncNow(false)},900000);document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  scheduleVaultSyncTimer(5000);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden'){
+      clearTimeout(vaultSyncTimer);vaultSyncTimer=null
+    }else{
+      if(automaticDue())void syncNow(false);
+      scheduleVaultSyncTimer()
+    }
+  });
+  document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
