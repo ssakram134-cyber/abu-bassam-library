@@ -430,7 +430,56 @@ function testPhotoPreviewClearedWhenEmpty(){
       !emptyLayout.info.includes('تعذر ترتيب الصور'))
     throw new Error('unplaceable photos retained a previous printable image');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+// The optional Questions / image-compressor module loader must not remain
+// blocked by a failed script tag, nor treat onload without runtime as success.
+async function testAdvancedRuntimeLoader(){
+  const source=read('productivity-tools-runtime.js');
+  const start=source.indexOf('const pendingAdvancedScripts=new Map();');
+  const end=source.indexOf('async function loadAdvancedRuntime()',start);
+  if(start<0||end<=start)throw new Error('advanced script loader missing');
+  const factory=vm.runInNewContext(`(document,window,setTimeout,clearTimeout,CustomEvent)=>{
+    ${source.slice(start,end)}
+    return loadOne
+  }`);
+  const appended=[],nodes=new Map(),timers=new Map(),window={};
+  let counter=0;
+  const document={
+    getElementById:id=>nodes.get(id)||null,
+    createElement:()=>({dataset:{},remove(){nodes.delete(this.id)}}),
+    body:{appendChild(node){appended.push(node);nodes.set(node.id,node)}},
+    dispatchEvent:()=>{}
+  };
+  const load=factory(document,window,fn=>{let id=++counter;timers.set(id,fn);return id},id=>timers.delete(id),function CustomEvent(){});
+  const p1=load('demo','demo.js','__DEMO__');
+  const p2=load('demo','demo.js','__DEMO__');
+  if(p1!==p2||appended.length!==1)throw new Error('duplicate advanced scripts were appended');
+  window.__DEMO__=true;appended[0].onload();
+  await Promise.all([p1,p2]);
+  await Promise.resolve();
+  delete window.__DEMO__;
+  let refused=false;
+  try{await load('demo','demo.js','__DEMO__')}catch(error){refused=/present without/.test(error.message)}
+  if(!refused)throw new Error('missing advanced runtime readiness flag was accepted');
+  const broken=load('broken','broken.js','__BROKEN__');
+  appended[1].onerror();
+  let failure=false;
+  try{await broken}catch(error){failure=/resource error/.test(error.message)}
+  if(!failure||nodes.has('broken'))throw new Error('failed advanced script was not cleaned up');
+  await Promise.resolve();
+  const retry=load('broken','broken.js','__BROKEN__');
+  window.__BROKEN__=true;appended[2].onload();
+  await retry;
+  const hung=load('hung','hung.js','__HUNG__');
+  const watchdog=[...timers.values()][0];
+  if(typeof watchdog!=='function')throw new Error('advanced script missing load timeout');
+  watchdog();
+  let timedOut=false;
+  try{await hung}catch(error){timedOut=/timeout/.test(error.message)}
+  if(!timedOut||nodes.has('hung'))throw new Error('advanced script timeout left a blocked script tag');
+  need(source,"script.onerror=()=>{script.remove();console.warn(src+' failed to load')}","Arabic question retries after iframe script failure");
+  need(source,"script.remove();console.warn('questions-en-fixes-runtime.js failed to load')","English question retries after iframe script failure");
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
