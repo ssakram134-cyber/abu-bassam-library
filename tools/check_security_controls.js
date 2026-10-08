@@ -15,6 +15,18 @@ forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","ups
 need('web/secure-sync-runtime.js',['abu-runtime-loaded','abu-settings-ready',"document.visibilityState==='visible'"]);
 
 need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity']);
+need('web/app-security-runtime.js',[
+  'function isCredentialFailure(error){',"code==='invalid_credentials'","if(isCredentialFailure(result.error))recordCredentialFailure(authError(result.error));",
+  'let deviceSecretPending=null;', 'if(deviceSecretPending)return deviceSecretPending;',
+  "if(stored!==generated)throw new Error('SECURE_DEVICE_SECRET_PERSIST_FAILED');",
+  'deviceSecret=stored;', 'window.__ABU_SECURITY_BOOT_PROMISE__=new Promise(', 'startSecurityBoot',
+  "if(!document.getElementById('abuSecurityGate'))throw new Error('SECURITY_GATE_NOT_READY');"
+]);
+need('web/device-name-runtime.js',[
+  'const securityBoot=window.__ABU_SECURITY_BOOT_PROMISE__;',
+  'await securityBoot;', "if(!document.getElementById('abuSecurityGate'))throw new Error('APP_SECURITY_GATE_REQUIRED');"
+]);
+
 forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
 
 need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLegacySecretStorage','installLegacySecretStorageBlock','localStorage.removeItem(LEGACY_TRUST_KEY)','stopImmediatePropagation']);
@@ -35,5 +47,72 @@ if(nativeOwners.length!==1||nativeOwners[0]!=='secure-sync-runtime.js')failures.
 
 for(const file of ['web/secure-sync-runtime.js','web/app-security-runtime.js','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js'])try{new vm.Script(read(file),{filename:file})}catch(e){failures.push(file+': syntax '+e.message)}
 for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-capture'])if(!JSON.parse(read('package.json')).dependencies?.[dep])failures.push('package.json missing '+dep);
-if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
-console.log('Security/control checks passed: one native security dispatcher, SecureStore-backed auth/device secrets, fail-closed device and vault authorization, deterministic startup, core login throttling, HMAC offline trust, and no legacy patch runtimes.');
+// Behavior tests, not just source markers: reject network errors from the
+// credential lockout counter and verify secure-device-key persistence.
+const authSource=read('web/app-security-runtime.js');
+async function verifyAuthStartupAndSecret(){
+  const credentialStart=authSource.indexOf('function isCredentialFailure(error){');
+  const credentialEnd=authSource.indexOf('function authError(error){',credentialStart);
+  if(credentialStart<0||credentialEnd<0)throw new Error('credential classifier not found');
+  const classify=vm.runInNewContext('('+authSource.slice(credentialStart,credentialEnd).trim()+')');
+  const cases=[
+    [{code:'invalid_credentials',message:'Invalid login credentials'},true],
+    [{message:'Invalid login credentials'},true],
+    [{code:'network_error',message:'Failed to fetch'},false],
+    [{code:'over_request_rate_limit',message:'Too many requests'},false],
+    [{code:'email_not_confirmed',message:'Email not confirmed'},false]
+  ];
+  for(const [error,expected] of cases)if(classify(error)!==expected)
+    throw new Error('credential classifier miscounted '+String(error.code||error.message));
+
+  const secretStart=authSource.indexOf('async function getSecret(){');
+  const secretEnd=authSource.indexOf('async function getBiometricEnabled()',secretStart);
+  if(secretStart<0||secretEnd<0)throw new Error('secure device secret routine not found');
+  const secretTest=`
+    let deviceSecret='',deviceSecretPending=null;
+    const SECRET_KEY='test-key';
+    let store='',failWrite=true,writes=0;
+    function randomSecret(){return 'verified-device-secret'}
+    async function nativeRequest(action,payload){
+      if(action==='secureGet')return store;
+      if(action==='secureSet'){
+        writes+=1;
+        if(failWrite)throw new Error('WRITE_FAILED');
+        store=payload.value;return true
+      }
+      throw new Error('UNEXPECTED_NATIVE_ACTION')
+    }
+    `+authSource.slice(secretStart,secretEnd)+`
+    (async()=>{
+      let rejected=false;
+      try{await getSecret()}catch(error){rejected=error.message==='WRITE_FAILED'}
+      if(!rejected||deviceSecret||deviceSecretPending)throw new Error('failed SecureStore write was cached');
+      failWrite=false;
+      const both=await Promise.all([getSecret(),getSecret()]);
+      if(both[0]!=='verified-device-secret'||both[1]!==both[0]||writes!==2)
+        throw new Error('parallel SecureStore requests created inconsistent device secrets');
+      return true
+    })()
+  `;
+  await vm.runInNewContext(secretTest,{Promise,Error});
+
+  const handshakeStart=authSource.indexOf('let resolveSecurityBoot,rejectSecurityBoot;');
+  const handshakeEnd=authSource.lastIndexOf('})();');
+  if(handshakeStart<0||handshakeEnd<handshakeStart)throw new Error('security startup handshake missing');
+  const handshake=authSource.slice(handshakeStart,handshakeEnd);
+  for(const gateReady of [true,false]){
+    const w={},ctx={
+      window:w,Promise,Error,
+      document:{readyState:'complete',getElementById:()=>gateReady?{}:null},
+      boot:async()=>true
+    };
+    vm.runInNewContext(handshake,ctx);
+    let success=false;
+    try{await w.__ABU_SECURITY_BOOT_PROMISE__;success=true}catch(error){}
+    if(success!==gateReady)throw new Error('security boot handshake accepted an absent login gate');
+  }
+}
+verifyAuthStartupAndSecret().then(()=>{
+  if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exitCode=1;return}
+  console.log('Security/control checks passed: credentials distinguish network failures, device keys survive write faults, and Android waits for the initialized security gate.');
+}).catch(error=>{failures.push('auth/startup behavior: '+error.message);process.stderr.write(failures.join('\n')+'\n');process.exitCode=1});
