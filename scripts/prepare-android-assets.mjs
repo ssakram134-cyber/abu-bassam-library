@@ -6,8 +6,10 @@ const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(projectRoot, 'web');
 const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library');
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
+const mediaPipeRoot = resolve(destination, 'vendor', 'mediapipe');
 const nativeAndroidSource = resolve(projectRoot, 'native', 'android');
 const DOWNLOAD_TIMEOUT_MS = 45000;
+const MEDIAPIPE_VERSION = '0.1.1675465747';
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
 const OCR_ASSETS = [
@@ -45,6 +47,22 @@ const OCR_ASSETS = [
   ), 500000],
 ];
 
+const mediaPipePair = (file) => pair(
+  `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@${MEDIAPIPE_VERSION}/${file}`,
+  `https://unpkg.com/@mediapipe/selfie_segmentation@${MEDIAPIPE_VERSION}/${file}`
+);
+const MEDIAPIPE_ASSETS = [
+  ['selfie_segmentation.js', mediaPipePair('selfie_segmentation.js'), 40000],
+  ['selfie_segmentation.binarypb', mediaPipePair('selfie_segmentation.binarypb'), 300],
+  ['selfie_segmentation.tflite', mediaPipePair('selfie_segmentation.tflite'), 200000],
+  ['selfie_segmentation_landscape.tflite', mediaPipePair('selfie_segmentation_landscape.tflite'), 200000],
+  ['selfie_segmentation_solution_simd_wasm_bin.data', mediaPipePair('selfie_segmentation_solution_simd_wasm_bin.data'), 0],
+  ['selfie_segmentation_solution_simd_wasm_bin.js', mediaPipePair('selfie_segmentation_solution_simd_wasm_bin.js'), 250000],
+  ['selfie_segmentation_solution_simd_wasm_bin.wasm', mediaPipePair('selfie_segmentation_solution_simd_wasm_bin.wasm'), 5000000],
+  ['selfie_segmentation_solution_wasm_bin.js', mediaPipePair('selfie_segmentation_solution_wasm_bin.js'), 250000],
+  ['selfie_segmentation_solution_wasm_bin.wasm', mediaPipePair('selfie_segmentation_solution_wasm_bin.wasm'), 5000000],
+];
+
 async function existsEnough(path,minBytes){try{return (await stat(path)).size>=minBytes}catch{return false}}
 async function fetchWithTimeout(url){
   const controller=new AbortController();
@@ -77,7 +95,7 @@ async function installHardenedWebView(){
   process.stdout.write('Hardened Android WebView asset origin installed and registered.\n');
 }
 
-async function download(urls,path,minBytes){
+async function download(urls,path,minBytes,label='Android asset'){
   if(await existsEnough(path,minBytes))return;
   await mkdir(dirname(path),{recursive:true});
   let lastError;
@@ -89,7 +107,7 @@ async function download(urls,path,minBytes){
         const data=Buffer.from(await response.arrayBuffer());
         if(data.length<minBytes)throw new Error(`asset too small: ${data.length}`);
         await writeFile(path,data);
-        process.stdout.write(`OCR Android asset ready: ${path.replace(projectRoot,'')} (${data.length} bytes) from ${new URL(url).hostname}\n`);
+        process.stdout.write(`${label} ready: ${path.replace(projectRoot,'')} (${data.length} bytes) from ${new URL(url).hostname}\n`);
         return;
       }catch(error){
         lastError=error;
@@ -97,7 +115,7 @@ async function download(urls,path,minBytes){
       }
     }
   }
-  throw new Error(`Failed to prepare required offline OCR asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
+  throw new Error(`Failed to prepare required Android asset ${path.replace(projectRoot,'')}: ${lastError?.message||lastError}`);
 }
 
 
@@ -110,13 +128,21 @@ await cp(source, destination, { recursive: true, force: true });
 for(const [relative,urls,minBytes] of OCR_ASSETS){
   await download(urls,resolve(vendorRoot,relative),minBytes);
 }
+for(const [relative,urls,minBytes] of MEDIAPIPE_ASSETS){
+  await download(urls,resolve(mediaPipeRoot,relative),minBytes,'MediaPipe Android asset');
+}
 
 for(const [relative,,minBytes] of OCR_ASSETS){
   const path=resolve(vendorRoot,relative);
   if(!(await existsEnough(path,minBytes)))throw new Error(`Required offline OCR asset is missing or incomplete: ${relative}`);
+}
+for(const [relative,,minBytes] of MEDIAPIPE_ASSETS){
+  const path=resolve(mediaPipeRoot,relative);
+  if(!(await existsEnough(path,minBytes)))throw new Error(`Required embedded MediaPipe asset is missing or incomplete: ${relative}`);
 }
 
 await installHardenedWebView();
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
 process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('MediaPipe assets are embedded in the standalone Android package; the privileged WebView never loads MediaPipe scripts from a CDN.\n');
