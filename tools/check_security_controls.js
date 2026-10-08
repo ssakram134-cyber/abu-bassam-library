@@ -111,6 +111,37 @@ async function verifyAuthStartupAndSecret(){
     try{await w.__ABU_SECURITY_BOOT_PROMISE__;success=true}catch(error){}
     if(success!==gateReady)throw new Error('security boot handshake accepted an absent login gate');
   }
+  // A synchronous Android postMessage failure must release its native request
+  // immediately. Malformed native callbacks must not crash the dispatcher.
+  const sync=read('web/secure-sync-runtime.js');
+  const bridgeBegin=sync.indexOf('  const nativePending = new Map();');
+  const bridgeEnd=sync.indexOf('  async function authNative(',bridgeBegin);
+  if(bridgeBegin<0||bridgeEnd<=bridgeBegin)throw new Error('native security dispatcher missing');
+  const factory=vm.runInNewContext(`(window,Android,setTimeout,clearTimeout)=>{
+    ${sync.slice(bridgeBegin,bridgeEnd)}
+    return {pending:nativePending,request:nativeRequest,result:window.AbuBassamNativeSecurityResult}
+  }`);
+  const timers=new Map();
+  let nextTimer=0;
+  const schedule=fn=>{const id=++nextTimer;timers.set(id,fn);return id};
+  const cancel=id=>timers.delete(id);
+  const throwingAndroid={security(){throw new Error('BRIDGE_SEND_FAILED')}};
+  const throwing=factory({Android:throwingAndroid},throwingAndroid,schedule,cancel);
+  let rejected=false;
+  try{await throwing.request('secureGet',{key:'test'})}
+  catch(error){rejected=error.message==='BRIDGE_SEND_FAILED'}
+  if(!rejected||throwing.pending.size||timers.size)throw new Error('sync Android bridge failure leaked pending request');
+  let requestId='';
+  const goodAndroid={security(action,id){requestId=id}};
+  const working=factory({Android:goodAndroid},goodAndroid,schedule,cancel);
+  const request=working.request('secureGet',{key:'test'});
+  for(const malformed of ['null','0','[]','{invalid']){
+    try{working.result(malformed)}
+    catch(error){throw new Error('malformed native response crashed dispatcher')}
+  }
+  working.result({requestId,ok:true,value:'verified'});
+  if((await request)!=='verified'||working.pending.size||timers.size)
+    throw new Error('native response was not resolved and cleaned up');
 }
 verifyAuthStartupAndSecret().then(()=>{
   if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exitCode=1;return}
