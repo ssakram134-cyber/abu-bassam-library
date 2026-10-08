@@ -204,6 +204,9 @@ async function logout(){
   // Close the unlocked UI immediately: a slow or offline sign-out must
   // never leave privileged controls available after confirmation.
   currentDevice=null;unlocked=false;showGate('تم تسجيل الخروج.');log('تسجيل خروج');
+  // Revoke signed offline trust before a slow/unreachable cloud sign-out.
+  // A canceled confirmation never reaches this point.
+  try{await window.AbuBassamSecurity?.clearOfflineTrust?.()}catch(error){console.warn('Offline trust deletion failed during logout',error)}
   try{await cloud()?.client?.auth?.signOut?.({scope:'local'})}catch(e){}
   return true
 }
