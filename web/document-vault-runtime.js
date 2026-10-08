@@ -58,7 +58,45 @@ function openDb(){
   return dbPromise
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
-async function dbPut(item){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function dbPut(item){
+  // A local edit gets a new token even when two edits share a timestamp.
+  const record=item.syncState==='pending'?{...item,localEditToken:uuid()}:item;
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).put(record);
+    tx.oncomplete=()=>resolve(record);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_WRITE_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_WRITE_ABORTED'))
+  })
+}
+function uploadedSnapshotUnchanged(current,snapshot){
+  if(!current||current.syncState!=='pending')return false;
+  if(String(current.localEditToken||'')!==String(snapshot.localEditToken||''))return false;
+  return ['updatedAt','name','folder','favorite','size','mime','deleted']
+    .every(key=>current[key]===snapshot[key])
+}
+function mergeUploadReceipt(current,snapshot,remoteVersion){
+  if(!current)return null;
+  return {...current,remoteUpdatedAt:String(remoteVersion||''),
+    syncState:uploadedSnapshotUnchanged(current,snapshot)?'synced':'pending'}
+}
+async function dbCommitUpload(snapshot,remoteVersion){
+  // Compare the uploaded snapshot to the live row in one IDB transaction.
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+    const request=store.get(snapshot.id);
+    let applied=false;
+    request.onsuccess=()=>{
+      const result=mergeUploadReceipt(request.result,snapshot,remoteVersion);
+      if(result){store.put(result);applied=true}
+    };
+    tx.oncomplete=()=>resolve(applied);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_SYNC_ACK_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_SYNC_ACK_ABORTED'))
+  })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 
 function addCss(){
@@ -310,7 +348,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       let saved;
       try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
-      item.remoteUpdatedAt=String(saved?.updated_at||'');item.syncState='synced';await dbPut(item);
+      await dbCommitUpload(item,saved?.updated_at);
       if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
 
