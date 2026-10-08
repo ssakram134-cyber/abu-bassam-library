@@ -18,22 +18,38 @@ function frameLoaded(frame){return !!(frame&&frame.getAttribute('src')&&frame.ge
 function ensureFrame(id,src){const frame=$(id);if(!frame)return null;const current=String(frame.getAttribute('src')||'');if(current==='about:blank'||!current){frame.src=src}return frame}
 function ensureQuestionFrame(){const frame=$('questionsFrame');if(!frame)return null;const wanted=wantedQuestionSrc();frame.dataset.src=wanted;if(!frameLoaded(frame)||!String(frame.getAttribute('src')||'').endsWith(wanted))frame.src=wanted;return frame}
 function ensureCompressorFrame(){return ensureFrame('compressorFrame','image-compressor.html')}
+const pendingAdvancedScripts=new Map();
 function loadOne(id,src,flag){
-  if(window[flag])return Promise.resolve(true);
-  const existing=document.getElementById(id);
-  if(existing){
-    if(existing.dataset.abuLoaded==='1')return Promise.resolve(true);
-    return new Promise((resolve,reject)=>{
-      existing.addEventListener('load',()=>resolve(true),{once:true});
-      existing.addEventListener('error',()=>reject(new Error(src+' failed to load')),{once:true})
-    })
-  }
-  return new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.id=id;script.src=src;script.async=false;
-    script.onload=()=>{script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-    script.onerror=()=>reject(new Error(src+' failed to load'));
-    document.body.appendChild(script)
-  })
+  if(flag&&window[flag])return Promise.resolve(true);
+  if(pendingAdvancedScripts.has(id))return pendingAdvancedScripts.get(id);
+  // A previous failed script does not fire a second load event; fail instead
+  // of permanently waiting for a nonexistent event.
+  if(document.getElementById(id))return Promise.reject(new Error(src+' present without a ready runtime'));
+  const script=document.createElement('script');
+  script.id=id;script.src=src;script.async=false;
+  const task=new Promise((resolve,reject)=>{
+    let finished=false;
+    const fail=(reason)=>{
+      if(finished)return;
+      finished=true;clearTimeout(watchdog);
+      script.remove();
+      reject(new Error(src+' failed to load: '+reason))
+    };
+    const watchdog=setTimeout(()=>fail('script load timeout'),10000);
+    script.onload=()=>{
+      if(flag&&!window[flag])return fail('runtime readiness flag absent');
+      if(finished)return;
+      finished=true;clearTimeout(watchdog);
+      script.dataset.abuLoaded='1';
+      document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));
+      resolve(true)
+    };
+    script.onerror=()=>fail('resource error');
+    try{document.body.appendChild(script)}catch(error){fail(error.message||error)}
+  });
+  pendingAdvancedScripts.set(id,task);
+  void task.then(()=>pendingAdvancedScripts.delete(id),()=>pendingAdvancedScripts.delete(id));
+  return task
 }
 async function loadAdvancedRuntime(){
   const scripts=[
@@ -58,8 +74,8 @@ async function loadAdvancedRuntime(){
   ];
   for(const spec of scripts){try{await loadOne(...spec)}catch(error){console.error(error)}}
 }
-function injectArabicRuntimes(){const frame=$('questionsFrame');if(!frame||language!=='ar'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc)return;[['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js'],['abuQuestionTypesExternal','question-type-runtime.js']].forEach(([id,src])=>{if(doc.getElementById(id))return;const script=doc.createElement('script');script.id=id;script.src=src;script.async=false;script.onerror=()=>console.warn(src+' failed to load');doc.head.appendChild(script)})}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات الأسئلة',false)}}
-function injectEnglishRuntime(){const frame=$('questionsFrame');if(!frame||language!=='en'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc||doc.getElementById('abuQuestionEnFixesExternal'))return;const script=doc.createElement('script');script.id='abuQuestionEnFixesExternal';script.src='questions-en-fixes-runtime.js';script.async=false;script.onerror=()=>console.warn('questions-en-fixes-runtime.js failed to load');doc.head.appendChild(script)}catch(e){setStatus('questionsHostStatus','Unable to load English question tools',false)}}
+function injectArabicRuntimes(){const frame=$('questionsFrame');if(!frame||language!=='ar'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc)return;[['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js'],['abuQuestionTypesExternal','question-type-runtime.js']].forEach(([id,src])=>{if(doc.getElementById(id))return;const script=doc.createElement('script');script.id=id;script.src=src;script.async=false;script.onerror=()=>{script.remove();console.warn(src+' failed to load')};doc.head.appendChild(script)})}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات الأسئلة',false)}}
+function injectEnglishRuntime(){const frame=$('questionsFrame');if(!frame||language!=='en'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc||doc.getElementById('abuQuestionEnFixesExternal'))return;const script=doc.createElement('script');script.id='abuQuestionEnFixesExternal';script.src='questions-en-fixes-runtime.js';script.async=false;script.onerror=()=>{script.remove();console.warn('questions-en-fixes-runtime.js failed to load')};doc.head.appendChild(script)}catch(e){setStatus('questionsHostStatus','Unable to load English question tools',false)}}
 function injectCurrentQuestionRuntime(){if(language==='ar')injectArabicRuntimes();else injectEnglishRuntime()}
 function updateLanguageUi(){$('questionLangAr')?.classList.toggle('active',language==='ar');$('questionLangEn')?.classList.toggle('active',language==='en');const frame=$('questionsFrame');if(frame)frame.dataset.src=wantedQuestionSrc()}
 function setLanguage(value){language=value==='en'?'en':'ar';localStorage.setItem('abuBassamQuestionLanguageV1',language);updateLanguageUi();if($('questionsCenter')?.classList.contains('productivity-show')){ensureQuestionFrame();setStatus('questionsHostStatus',language==='ar'?'تم فتح نموذج الأسئلة العربي':'English question template opened',true);setTimeout(injectCurrentQuestionRuntime,120)}}
