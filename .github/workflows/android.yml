@@ -1,4 +1,4 @@
-name: Android checks and build
+name: Android builds disabled - source changes only
 
 on:
   workflow_dispatch:
@@ -8,15 +8,15 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches: [main]
-  pull_request:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    # Disabled per repository owner: never build or sign APKs in GitHub Actions.
+    # Local source checking and corrections remain available in the repository.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
