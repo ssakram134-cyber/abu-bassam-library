@@ -25,6 +25,35 @@ const device=read('device-name-runtime.js');
 for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
+// Exercise the actual startup-failure handler against the shipped image-only
+// splash markup. A missing #splashText must not leave the failure invisible.
+{
+  const page=read('index.html');
+  if(!page.includes('<div id="splash" class="splash"><img')||page.includes('id="splashText"'))
+    errors.push('startup-failure fixture changed: review splash regression test');
+  const handlerStart=device.indexOf('  function showBootFailure(error){');
+  const handlerEnd=device.indexOf('\n  async function startApprovedUi()',handlerStart);
+  if(handlerStart<0||handlerEnd<0)errors.push('secure startup failure handler not found');
+  else {
+    const messages=[], nodes={};
+    const splash={style:{},appendChild(element){nodes[element.id]=element}};
+    nodes.splash=splash;
+    const doc={
+      getElementById(id){return nodes[id]||null},
+      createElement(){return {style:{},setAttribute(key,value){this[key]=value}}}
+    };
+    const stubWindow={ReactNativeWebView:{postMessage(payload){messages.push(JSON.parse(payload))}}};
+    try{
+      vm.runInNewContext(device.slice(handlerStart,handlerEnd)+'\nshowBootFailure(new Error("offline startup failure"));',{
+        document:doc,window:stubWindow,console:{error(){}}
+      });
+      if(!nodes.splashText||!nodes.splashText.textContent.includes('تعذر تحميل مكونات التطبيق')||nodes.splashText.role!=='alert')
+        errors.push('image-only splash does not surface secure boot failure visibly');
+      if(messages.length!==1||messages[0].type!=='webBootFailed')
+        errors.push('secure boot failure not forwarded to the native loading overlay');
+    }catch(error){errors.push('startup-failure simulation failed: '+error.message)}
+  }
+}
 const secureSync=read('secure-sync-runtime.js');
 for(const marker of [
   'function init()',
@@ -66,6 +95,8 @@ for(const file of ['device-name-runtime.js','app-settings-runtime.js','account-c
 }
 
 for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
+for(const marker of ["message.type === 'webBootFailed'","bootFailureAlertShown.current = true;","if (bootFailureAlertShown.current) return;","reportBootFailure('تعذر فتح مكتبة أبو بسام'","onError={() => reportBootFailure("])
+  need(native,marker,'native boot failure must be visible once and provide retry');
 for(const marker of ['webViewKey','restartWebView','onRenderProcessGone','nativeConfig={{ component: RCTAbuBassamWebView }}'])need(native,marker,'native WebView recovery');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
