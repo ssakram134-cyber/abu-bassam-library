@@ -105,6 +105,18 @@ need(native,"if (!message || typeof message !== 'object' || Array.isArray(messag
 for(const marker of ['webViewKey','restartWebView','onRenderProcessGone','nativeConfig={{ component: RCTAbuBassamWebView }}'])need(native,marker,'native WebView recovery');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
+const bootStart=security.indexOf('async function boot(){');
+const bootEnd=security.indexOf('\nwindow.AbuBassamSecurity={',bootStart);
+if(bootStart<0||bootEnd<0)errors.push('secure boot function could not be inspected');
+else {
+  const bootSource=security.slice(bootStart,bootEnd);
+  for(const forbidden of ['await cloud()?.ready?.()','await fetchDeviceInfo()','await getBiometricEnabled()'])
+    if(bootSource.includes(forbidden))errors.push('offline startup is blocked by '+forbidden);
+  for(const marker of ["showGate('أدخل بيانات الدخول لفتح التطبيق.')",'void fetchDeviceInfo().catch(',"cloudReady.catch(()=>{})",'abu-bassam-approved-ui-ready'])
+    need(bootSource,marker,'offline login gate and deferred native biometric startup');
+}
+for(const marker of ['window.__ABU_APPROVED_UI_READY__=true;',"new CustomEvent('abu-bassam-approved-ui-ready')"])
+  need(device,marker,'approved UI handshake must wait for all loaded guards');
 forbid(security,'setInterval(','app security must not keep a permanent background heartbeat');for(const marker of ['function scheduleMaintenance(delay=60000)','function maintenanceTick()','document.visibilityState===\'hidden\'','clearTimeout(maintenanceTimer)'])need(security,marker,'visibility-aware security maintenance');
 for(const marker of ['function setSecondaryOwnerOnly','abuSecurityOwnerGuard',"const denied=currentDevice?.role!=='owner'"])need(security,marker,'reversible owner-only security controls');
 for(const marker of ["'#abuA4EditorV2.show'","'#abuPosterAssemblyModal.show'","'#abuEnhanceModal.show'","'#abuPosterModal.show'","'#abuGeoModal.show'","'#abuRulerModal.show'","'#abuPresetModal.abu-open'","window.AbuA4CardSheetEditorV2?.close?.()","window.AbuPosterProject?.closePreview?.()","window.AbuPhotoAdvanced?.close?.(el.id)","window.AbuPhotoGeometry?.close?.(el.id)","window.AbuPrintPresets?.close?.()","'#abuPasswordResetModal.show'","window.AbuBassamPasswordRecovery?.close?.()","'#natZoom.show'","'#custView.on'","'#custPick.on'","'#custModal.on'","'#abuBackupModal.on'","'#abuVaultAdvancedModal.show'","'#abuRecoveryModal.show'","window.AbuFeatureRecovery?.close?.()","'#abuAccountModal.on'","'#abuNotificationSheet.show'","'#abuOpsV2.show'","window.AbuBassamOperationLogV2?.close?.()","window.Nat?.zoomClose?.()","window.AbuCustomerDocs?.closeTop?.()","window.AbuBackupCenter?.close?.()","window.AbuDocumentVaultAdvanced?.close?.()","window.AbuBassamAccount?.close?.()","window.AbuBassamNotifications?.close?.()"])need(security,marker,'top-layer back handling');
@@ -166,5 +178,42 @@ const securityExtras=read('security-extras-runtime.js');for(const marker of ['pr
 const featureRecovery=read('feature-recovery-runtime.js');for(const marker of ['function closeTool()','close:closeTool',"classList.add('show')"])need(featureRecovery,marker,'feature recovery modal back-close');
 
 const printPresets=read('print-presets-runtime.js');for(const marker of ["classList.add('abu-open')","classList.remove('abu-open')"])need(printPresets,marker,'print presets back state');
-if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, non-blocking offline startup, native startup watchdog, canonical login guards, touch/backdrop cleanup, lifecycle-driven customer documents, and reversible secondary-permission UI guards.\n');
+// Exercise the real inline MediaPipe operation with an instant fake watchdog:
+// an engine that never emits onResults must not leave #busyOverlay stuck.
+async function testBoundedSegmentation(){
+  const html=read('index.html');
+  const begin=html.indexOf('async function segment(src){');
+  const end=html.indexOf('function setBusy(',begin);
+  if(begin<0||end<begin)throw new Error('segmentation routine not found');
+  const source=html.slice(begin,end);
+  if(!source.includes('},30000)')||!source.includes('clearTimeout(timer)'))
+    throw new Error('segmentation watchdog or cleanup is missing');
+  const factory=vm.runInNewContext(`(getSelfie,schedule,cancel)=>{
+    const setTimeout=schedule,clearTimeout=cancel;
+    let selfieResolve=null;
+    ${source}
+    return {segment,deliver(value){if(selfieResolve)selfieResolve(value)}}
+  }`);
+  let timeout=null;
+  const test=factory(async()=>({send:async()=>{}}),fn=>{timeout=fn;return 1},()=>{});
+  const first=test.segment({});
+  for(let i=0;i<10;i+=1)await Promise.resolve();
+  if(typeof timeout!=='function')throw new Error('segment watchdog was not armed');
+  timeout();
+  let rejected=false;
+  try{await first}catch(error){rejected=/انتهت مهلة/.test(String(error.message))}
+  if(!rejected)throw new Error('unresponsive segmentation did not reject at deadline');
+  const next=test.segment({});
+  for(let i=0;i<10;i+=1)await Promise.resolve();
+  test.deliver({segmentationMask:true});
+  const result=await next;
+  if(result?.segmentationMask!==true)throw new Error('segmentation remained locked after timeout');
+}
+testBoundedSegmentation().then(()=>{
+  if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
+  process.stdout.write('Runtime regression checks passed: offline-first secure gate, bounded image segmentation, native bridge boot, touch/backdrop cleanup, and reversible permission guards.\n');
+}).catch(error=>{
+  errors.push('bounded segmentation regression: '+error.message);
+  process.stderr.write(errors.join('\n')+'\n');
+  process.exitCode=1
+});
