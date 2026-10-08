@@ -32,6 +32,8 @@ const APP_VERSION = String(APP_CONFIG.version || '');
 const BUILD_NUMBER = String(APP_CONFIG.android?.versionCode || '');
 const RELEASE_DATE = String(APP_CONFIG.extra?.releaseDate || '');
 const STARTUP_WATCHDOG_MS = 12000;
+// Old WebView callbacks must never complete startup for a newer renderer.
+const isCurrentWebViewGeneration = (renderKey, generationRef) => generationRef.current === renderKey;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
@@ -541,13 +543,13 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE}
-        onMessage={(event) => { if (webViewGenerationRef.current === webViewKey) void onWebMessage(event); }}
+        onMessage={(event) => { if (isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) void onWebMessage(event); }}
         onRenderProcessGone={(event) => {
-          if (webViewGenerationRef.current !== webViewKey) return;
+          if (!isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) return;
           const crashed = !!event?.nativeEvent?.didCrash;
           restartWebView(crashed ? 'تعطلت عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.' : 'أوقف Android عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.');
         }}
-        onError={() => { if (webViewGenerationRef.current === webViewKey) reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.'); }}
+        onError={() => { if (isCurrentWebViewGeneration(webViewKey, webViewGenerationRef)) reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (
