@@ -592,7 +592,61 @@ async function testReportExcelLoader(){
   let expired=false;try{await hanging}catch(e){expired=/timeout/.test(String(e.message))}
   if(!expired||nodes.size!==0)throw new Error('Excel load timeout retained the failed resource');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+async function testBackupIndexedDbConnectionLifecycle(){
+  const source=read('backup-center-runtime.js');
+  const begin=source.indexOf('async function all(){');
+  const end=source.indexOf('async function backupItems()',begin);
+  if(begin<0||end<=begin)throw new Error('IndexedDB backup reader missing');
+  const create=vm.runInNewContext(`(openDb)=>{
+    const STORE='items';
+    ${source.slice(begin,end)}
+    return all
+  }`);
+  const make=(mode)=>{
+    const state={closed:0,tx:null,req:null};
+    const db={
+      close(){state.closed++},
+      transaction(){
+        if(mode==='throw')throw new Error('DB_TRANSACTION_FAILED');
+        state.tx={
+          objectStore(){return{
+            getAll(){
+              if(mode==='getAllThrow')throw new Error('DB_QUERY_FAILED');
+              state.req={result:[{id:'safe'}],error:new Error('DB_READ_FAILED')};
+              return state.req
+            }
+          }}
+        };
+        return state.tx
+      }
+    };
+    return {state,run:create(()=>Promise.resolve(db))}
+  };
+  const ok=make('ok'),read=ok.run();
+  for(let i=0;i<3;i++)await Promise.resolve();
+  ok.state.req.onsuccess();
+  if((await read)?.[0]?.id!=='safe'||ok.state.closed!==1)
+    throw new Error('backup success did not close database');
+  const failure=make('failure'),broken=failure.run();
+  for(let i=0;i<3;i++)await Promise.resolve();
+  failure.state.req.onerror();
+  let failed=false;
+  try{await broken}catch(e){failed=/DB_READ_FAILED/.test(e.message)}
+  if(!failed||failure.state.closed!==1)throw new Error('backup getAll error leaked database connection');
+  const aborted=make('abort'),cancelled=aborted.run();
+  for(let i=0;i<3;i++)await Promise.resolve();
+  aborted.state.tx.error=new Error('DB_ABORTED');
+  aborted.state.tx.onabort();
+  let cancelledCorrectly=false;
+  try{await cancelled}catch(e){cancelledCorrectly=/DB_ABORTED/.test(e.message)}
+  if(!cancelledCorrectly||aborted.state.closed!==1)
+    throw new Error('backup transaction abort leaked database connection');
+  const unexpected=make('throw');
+  let threw=false;
+  try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
+  if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
