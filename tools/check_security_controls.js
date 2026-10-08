@@ -159,6 +159,38 @@ async function verifyAuthStartupAndSecret(){
   const originalBio=authSource.slice(authSource.indexOf('async function unlockWithBiometric(){'),authSource.indexOf('function lock(reason='));
   if(originalBio.includes('offlineAllowed()')||originalBio.includes('localTrust()'))
     throw new Error('legacy biometric bypass remains reachable');
+  // The real logout implementation must not change state on Cancel, and
+  // must close the gate before any slow asynchronous network sign-out.
+  const logoutBegin=authSource.indexOf('async function logout(){');
+  const logoutEnd=authSource.indexOf('function lockNow(){',logoutBegin);
+  if(logoutBegin<0||logoutEnd<=logoutBegin)throw new Error('logout source missing');
+  const makeLogout=vm.runInNewContext(
+    '(confirm,cloud,showGate,log)=>{let currentDevice={role:"owner"},unlocked=true;'
+    +authSource.slice(logoutBegin,logoutEnd)+';return{logout,state:()=>unlocked}}');
+  let logoutCalled=0,gateClosed=0;
+  const cancelLogout=makeLogout(()=>false,()=>({client:{auth:{signOut:async()=>{logoutCalled++}}}}),()=>{gateClosed++},()=>{});
+  if((await cancelLogout.logout())!==false||logoutCalled||gateClosed||cancelLogout.state()!==true)
+    throw new Error('Cancel destroyed the current login');
+  let releaseLogout=()=>{};
+  const slowSignout=()=>new Promise(resolve=>{releaseLogout=resolve});
+  const acceptLogout=makeLogout(()=>true,()=>({client:{auth:{signOut:slowSignout}}}),()=>{gateClosed++},()=>{});
+  const pendingLogout=acceptLogout.logout();
+  if(gateClosed!==1||acceptLogout.state()!==false)throw new Error('logout did not lock UI before sign-out');
+  releaseLogout();
+  if((await pendingLogout)!==true)throw new Error('confirmed logout did not complete');
+
+  const hardenedLogoutLine=hardening.split('\n').find(line=>line.includes('if(baseLogout)sec.logout=async function'));
+  if(!hardenedLogoutLine)throw new Error('secure logout wrapper missing');
+  const wrapLogout=vm.runInNewContext('(baseLogout,clearTrust,clearOfflineState)=>{const sec={};'
+    +hardenedLogoutLine+';return sec.logout}');
+  let trustErases=0,stateResets=0,wasConfirmed=false;
+  const safeLogout=wrapLogout(async()=>wasConfirmed,async()=>{trustErases++},()=>{stateResets++});
+  await safeLogout();
+  if(trustErases||stateResets)throw new Error('canceled logout erased the offline trust');
+  wasConfirmed=true;
+  await safeLogout();
+  if(trustErases!==1||stateResets!==1)throw new Error('confirmed logout kept offline access');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
