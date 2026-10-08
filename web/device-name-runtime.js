@@ -148,6 +148,8 @@
       if(!securityBoot||typeof securityBoot.then!=='function')throw new Error('APP_SECURITY_BOOT_PROMISE_REQUIRED');
       await securityBoot;
       if(!document.getElementById('abuSecurityGate'))throw new Error('APP_SECURITY_GATE_REQUIRED');
+      window.__ABU_APPROVED_UI_READY__=true;
+      document.dispatchEvent(new CustomEvent('abu-bassam-approved-ui-ready'));
       signalBootReady();
       dismissSplash();
       setTimeout(heartbeatSafely,200)
