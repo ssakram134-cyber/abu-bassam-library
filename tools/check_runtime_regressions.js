@@ -293,7 +293,40 @@ function testMissingSheetCannotBlockTouch(){
   api.closeSheets();
   if(backdrop.classList.contains('show')||valid.classList.contains('show'))throw new Error('sheet close did not release touch backdrop')
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch)]).then(()=>{
+// File-reader failures must not strand a batch. Clearing images must
+// invalidate callbacks from previous file selections, even after load.
+function testImageImportLifecycle(){
+  const html=read('index.html');
+  const start=html.indexOf('function onImageSelect(ev){'),end=html.indexOf('function refreshPeople()',start);
+  const clearStart=html.indexOf('function clearImages(){'),clearEnd=html.indexOf('function makePhotoCanvas(',clearStart);
+  if([start,end,clearStart,clearEnd].some(x=>x<0))throw new Error('image import/clear source missing');
+  const source=html.slice(start,end)+'\n'+html.slice(clearStart,clearEnd);
+  const factory=vm.runInNewContext(`(FileReader,Image,stats)=>{
+    let uploadedImages=[],selectedIndex=-1,pageCanvases=[],imageImportEpoch=0;
+    const $=()=>({style:{},textContent:''});
+    function refreshPeople(){stats.updated++}
+    function renderPaper(){stats.rendered++}
+    function updatePageNav(){}
+    ${source}
+    return {onImageSelect,clearImages,images:()=>uploadedImages}
+  }`);
+  const readers=[];
+  class Reader{constructor(){readers.push(this)}readAsDataURL(){}}
+  class Image{set src(value){if(value.includes('broken'))this.onerror?.();else this.onload?.()}}
+  const stats={updated:0,rendered:0},app=factory(Reader,Image,stats);
+  app.onImageSelect({target:{files:[{n:1},{n:2},{n:3}],value:'selected'}});
+  readers[2].onload({target:{result:'data:image/png;base64,third'}});
+  readers[1].onerror();
+  readers[0].onload({target:{result:'data:image/png;base64,first'}});
+  if(stats.rendered!==1||stats.updated!==1)throw new Error('failed file prevented the batch from completing');
+  if(app.images().map(x=>x.src).join('|')!=='data:image/png;base64,first|data:image/png;base64,third')
+    throw new Error('images were reordered by async FileReader completion');
+  app.onImageSelect({target:{files:[{n:4}],value:'selected'}});
+  app.clearImages();
+  readers[3].onload({target:{result:'data:image/png;base64,stale'}});
+  if(app.images().length!==0)throw new Error('cleared images were reimported by a stale FileReader');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
