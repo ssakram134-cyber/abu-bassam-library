@@ -81,7 +81,7 @@ async function testOwnerSessionFence(){
   async function runCase(change){
     let owner=true,gateOpen=true,connected=true,revealSecret=null,rpcCalls=0;
     const app=factory({
-      role:()=>owner,
+      role:()=>owner?'owner':'secondary',
       window:{
         AbuBassamDevices:{ensure:()=>({id:'owner-phone'})},
         AbuBassamSecurity:{isOnlineUnlocked:()=>gateOpen},
