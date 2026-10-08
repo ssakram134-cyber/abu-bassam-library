@@ -207,7 +207,7 @@ function startSecurityBoot(){
   Promise.resolve().then(boot).then(()=>{
     if(!document.getElementById('abuSecurityGate'))throw new Error('SECURITY_GATE_NOT_READY');
     resolveSecurityBoot(true)
-  },rejectSecurityBoot)
+  }).catch(rejectSecurityBoot)
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startSecurityBoot,{once:true});else startSecurityBoot();
 })();
