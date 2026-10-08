@@ -87,6 +87,10 @@ jobs:
           test -s dist/SIGNING_CERTIFICATE.txt
 
       - name: Upload APK artifacts
+        id: upload_qa_apk
+        # The APK, embedded bundle, and signature are validated above. GitHub's
+        # storage quota may reject only artifact delivery; report that separately.
+        continue-on-error: true
         # QA artifact for trusted same-repo PRs only; default signing key is not for production.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -99,3 +103,10 @@ jobs:
             dist/SIGNING_CERTIFICATE.txt
           if-no-files-found: error
           retention-days: 7
+
+      - name: Report QA APK delivery failure
+        if: ${{ steps.upload_qa_apk.outcome == 'failure' }}
+        shell: bash
+        run: |
+          echo '::warning title=QA APK upload unavailable::Android checks, APK build and signature verification succeeded, but GitHub artifact upload failed (possibly storage quota). No downloadable APK was published by this run.'
+          echo 'QA APK delivery failed; restore artifact storage capacity before device testing.' >> "$GITHUB_STEP_SUMMARY"
