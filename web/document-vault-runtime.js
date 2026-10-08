@@ -336,9 +336,23 @@ function printActive(){if(activeId)printItem(activeId)}
 async function renameItem(id){if(!requireVault('vaultRename'))return;
   let item=findItem(id);if(!item)return;let old=item.name,name=prompt('اكتب الاسم الجديد مع الامتداد:',item.name);if(!name||!name.trim())return;const saved=await dbModifyItem(id,row=>({...row,name:niceName(name)}));if(!saved)return;await refresh();logOperation('rename','إعادة تسمية ملف',old+' ← '+saved.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
 }
-async function deleteItem(id){if(!requireVault('vaultDelete'))return;
-  let item=findItem(id);if(!item||!confirm('حذف «'+item.name+'» من الأرشيف ومن الأجهزة المتزامنة؟'))return;
-  await dbPut({id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:new Date().toISOString(),blob:null,syncState:'pending',deleted:true});await refresh();logOperation('delete','حذف: '+item.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
+async function deleteItem(id){
+  if(!requireVault('vaultDelete'))return false;
+  const shown=findItem(id);
+  if(!shown||!confirm('حذف «'+shown.name+'» من الأرشيف ومن الأجهزة المتزامنة؟'))return false;
+  // Reject deletion if the record changed after this screen was rendered.
+  // A confirmation for an older photo must never delete its newer version.
+  const saved=await dbModifyItem(id,row=>{
+    if(String(row.localEditToken||'')!==String(shown.localEditToken||'')||
+      String(row.updatedAt||'')!==String(shown.updatedAt||'')||
+      row.name!==shown.name||row.size!==shown.size)return null;
+    return {...row,size:0,blob:null,deleted:true}
+  });
+  if(!saved){await refresh();alert('تغيّر الملف منذ عرضه. راجع أحدث نسخة ثم أعد الحذف.');return false}
+  await refresh();
+  logOperation('delete','حذف: '+saved.name);
+  if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500);
+  return true
 }
 
 async function editItem(id){if(!requireVault('vaultImageEdit'))return;
