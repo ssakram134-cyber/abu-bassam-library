@@ -449,8 +449,16 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const blob=await service.downloadVault(data.storagePath);
       await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))
     }
+    await refresh();
+    const stillPending=state.items.filter(item=>item.syncState==='pending').length;
+    if(stillPending){
+      // Another edit may have arrived while upload/download responses were
+      // in flight. Never tell the user the vault is fully synchronized yet.
+      setSyncStatus('تم حفظ التغييرات المحلية • '+stillPending+' عنصر بانتظار المزامنة');
+      return false
+    }
     syncSet(LAST_SYNC_KEY,String(Date.now()));
-    await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
+    setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
   }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
