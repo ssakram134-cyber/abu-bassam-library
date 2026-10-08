@@ -397,7 +397,7 @@ function testPhotoPreviewClearedWhenEmpty(){
     let uploadedImages=photos,pageCanvases=[{tag:'previous-private-photo'}],
       currentPage=2,selectedIndex=photos.length-1;
     const $=id=>elements[id],updateFooter=()=>{},updatePageNav=()=>{},
-      refreshPeople=()=>{},showPage=()=>{},
+      refreshPeople=()=>{},showPage=()=>{},makePhotoCanvas=()=>({}),
       getPaperSize=()=>paper,getPhotoSize=()=>({w:40,h:40}),mmToPx=x=>x;
     ${source}
     return {removePerson,renderPaper,summary:()=>({
