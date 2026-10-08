@@ -358,7 +358,32 @@ function testBarcodeScanDeduplication(){
   need(native,'barcodeScanHandledRef.current = false;','barcode scanner reset on camera reopen or close');
   forbid(native,'setTimeout(() => setBarcodeLocked(false), 500)','old scanner timer cannot reopen after session change');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication)]).then(()=>{
+// The optional AI PRO connection must never keep a blocking busy overlay
+// indefinitely while a remote session check is stalled or the phone is offline.
+async function testAiCloudStartupTimeout(){
+  const html=read('index.html');
+  const begin=html.indexOf('async function readyAiCloudWithin(');
+  const end=html.indexOf('async function runAiPro()',begin);
+  if(begin<0||end<=begin)throw new Error('AI PRO session timeout routine not found');
+  need(html,"navigator.onLine===false)return alert('تحتاج خدمة AI PRO إلى اتصال بالإنترنت.')",'AI PRO should refuse offline operations before blocking touch');
+  const factory=vm.runInNewContext(`(window,setTimeout,clearTimeout)=>{
+    ${html.slice(begin,end)}
+    return readyAiCloudWithin
+  }`);
+  let watchdog,cleared=false;
+  const waitForever=factory({AbuBassamCloud:{ready:()=>new Promise(()=>{})}},
+    fn=>{watchdog=fn;return 1},id=>{if(id===1)cleared=true});
+  const waiting=waitForever();
+  for(let i=0;i<6;i+=1)await Promise.resolve();
+  if(typeof watchdog!=='function')throw new Error('cloud readiness watchdog was not armed');
+  watchdog();
+  let expired=false;
+  try{await waiting}catch(error){expired=/انتهت مهلة/.test(String(error.message))}
+  if(!expired||!cleared)throw new Error('stalled cloud session did not release its watchdog');
+  const ready=factory({AbuBassamCloud:{ready:()=>Promise.resolve(true)}},()=>2,()=>{});
+  if((await ready())!==true)throw new Error('available cloud session did not pass readiness');
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout()]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
