@@ -50,7 +50,8 @@ function install(){
   ops.add=wrapped;
   return true;
 }
-let attempts=0;const timer=setInterval(()=>{attempts++;install();if(attempts>50)clearInterval(timer)},120);
-setTimeout(()=>{clearInterval(timer);install();loadSecondaryPrivacy();loadCorrections()},7000);
-if(document.readyState!=='loading')install();else document.addEventListener('DOMContentLoaded',install,{once:true});
+function refreshBridge(){install();loadSecondaryPrivacy();loadCorrections()}
+if(document.readyState!=='loading')refreshBridge();else document.addEventListener('DOMContentLoaded',refreshBridge,{once:true});
+document.addEventListener('abu-runtime-loaded',event=>{const src=String(event.detail?.src||'');if(src==='notification-center-runtime.js'||src==='app-security-runtime.js')refreshBridge()});
+document.addEventListener('abu-bassam-auth-changed',refreshBridge);
 })();
