@@ -20,8 +20,8 @@ function apply(){
 
 function init(){
   apply();
-  let timer=0;
-  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(apply,30)}).observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('abu-bassam-security-state',apply);
+  document.addEventListener('abu-bassam-auth-changed',apply);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
