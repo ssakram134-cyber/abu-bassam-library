@@ -149,6 +149,7 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
+  const bootFailureAlertShown = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -177,25 +178,28 @@ function App() {
   }, []);
   const restartWebView = useCallback((notice = '') => {
     closeCamera();
+    bootFailureAlertShown.current = false;
     setWebReady(false);
     setWebViewKey((value) => value + 1);
     if (notice) Alert.alert('استعادة واجهة التطبيق', notice);
   }, [closeCamera]);
+  const reportBootFailure = useCallback((title, description) => {
+    if (bootFailureAlertShown.current) return;
+    bootFailureAlertShown.current = true;
+    setWebReady(false);
+    Alert.alert(title, description, [
+      { text: 'إعادة المحاولة', onPress: () => restartWebView() },
+      { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
+    ]);
+  }, [restartWebView]);
 
   useEffect(() => {
     if (webReady) return undefined;
     const timer = setTimeout(() => {
-      Alert.alert(
-        'تعذر إكمال تشغيل التطبيق',
-        'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة.',
-        [
-          { text: 'إعادة المحاولة', onPress: () => restartWebView() },
-          { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
-        ],
-      );
+      reportBootFailure('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة.');
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [restartWebView, webReady]);
+  }, [reportBootFailure, webReady]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -464,7 +468,11 @@ function App() {
 
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    if (message.type === 'webBootReady') { bootFailureAlertShown.current = false; setWebReady(true); return; }
+    if (message.type === 'webBootFailed') {
+      reportBootFailure('تعذر فتح مكتبة أبو بسام', 'فشل تحميل أحد مكونات التطبيق بأمان. يمكنك إعادة المحاولة دون فقدان البيانات المحفوظة.');
+      return;
+    }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -480,7 +488,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, reportBootFailure, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
@@ -503,13 +511,7 @@ function App() {
           const crashed = !!event?.nativeEvent?.didCrash;
           restartWebView(crashed ? 'تعطلت عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.' : 'أوقف Android عملية عرض الواجهة وأُعيد تشغيلها تلقائيًا.');
         }}
-        onError={() => {
-          setWebReady(false);
-          Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.', [
-            { text: 'إعادة المحاولة', onPress: () => restartWebView() },
-            { text: 'إغلاق التطبيق', style: 'destructive', onPress: () => BackHandler.exitApp() },
-          ]);
-        }}
+        onError={() => reportBootFailure('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام.')}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
       {cameraMode && (
