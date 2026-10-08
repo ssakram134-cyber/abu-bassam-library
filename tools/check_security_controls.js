@@ -466,6 +466,13 @@ async function verifyAuthStartupAndSecret(){
   if(retryable.state().pushes!==2||!retryable.state().appearanceStamp)
     throw new Error('failed theme upload never retried');
 
+  const separateAccounts=makeAppearance({get:async()=>null,upsert:async()=>({ok:true})});
+  await separateAccounts.push();
+  separateAccounts.changeUser('owner2');
+  await separateAccounts.push();
+  if(separateAccounts.state().pushes!==2)
+    throw new Error('appearance cache skipped synchronization for a different account');
+
   // Device revalidation can finish after an explicit lock. Its maintenance
   // continuation must not push or pull appearance on that locked session.
   const maintenanceBegin=authSource.indexOf('async function maintenanceTick(){');
