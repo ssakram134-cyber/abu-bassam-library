@@ -260,7 +260,40 @@ async function testBoundedSegmentation(){
   const result=await next;
   if(result?.segmentationMask!==true)throw new Error('segmentation remained locked after timeout');
 }
-Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader()]).then(()=>{
+// A missing optional dialog must not leave the full-screen backdrop active.
+function testMissingSheetCannotBlockTouch(){
+  const html=read('index.html');
+  const start=html.indexOf('function openSheet(id){');
+  const end=html.indexOf('function openOptions()',start);
+  if(start<0||end<=start)throw new Error('base sheet implementation not found');
+  const source=html.slice(start,end);
+  const list=(...names)=>({
+    set:new Set(names),
+    add(name){this.set.add(name)},remove(name){this.set.delete(name)},
+    contains(name){return this.set.has(name)}
+  });
+  const backdrop={classList:list('sheet-backdrop')};
+  const valid={classList:list('sheet')};
+  const wrong={classList:list('other')};
+  const items={sheetBackdrop:backdrop,valid,wrong};
+  const document={
+    getElementById:id=>items[id]||null,
+    querySelectorAll:()=>[valid]
+  };
+  const factory=vm.runInNewContext(`(document,console)=>{
+    const $=id=>document.getElementById(id);
+    ${source}
+    return {openSheet,closeSheets}
+  }`);
+  const api=factory(document,{warn(){}});
+  if(api.openSheet('missing')!==false||backdrop.classList.contains('show'))throw new Error('missing sheet blocked all touches');
+  if(api.openSheet('wrong')!==false||backdrop.classList.contains('show'))throw new Error('non-dialog element opened backdrop');
+  if(api.openSheet('valid')!==true||!backdrop.classList.contains('show')||!valid.classList.contains('show'))
+    throw new Error('valid sheet no longer opens');
+  api.closeSheets();
+  if(backdrop.classList.contains('show')||valid.classList.contains('show'))throw new Error('sheet close did not release touch backdrop')
+}
+Promise.all([testBoundedSegmentation(),testRuntimeScriptLoader(),Promise.resolve().then(testMissingSheetCannotBlockTouch)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
