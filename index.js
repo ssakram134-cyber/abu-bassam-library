@@ -467,7 +467,9 @@ function App() {
   }, [cameraPermission, replySecurity]);
 
   const onWebMessage = useCallback(async (event) => {
-    let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
+    let message; try { message = JSON.parse(event?.nativeEvent?.data); } catch (_) { return; }
+    // A valid JSON primitive (including null) is not a native bridge command.
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
     if (message.type === 'webBootReady') { bootFailureAlertShown.current = false; setWebReady(true); return; }
     if (message.type === 'webBootFailed') {
       reportBootFailure('تعذر فتح مكتبة أبو بسام', 'فشل تحميل أحد مكونات التطبيق بأمان. يمكنك إعادة المحاولة دون فقدان البيانات المحفوظة.');
