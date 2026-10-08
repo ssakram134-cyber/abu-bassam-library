@@ -203,6 +203,9 @@ let resolveSecurityBoot,rejectSecurityBoot;
 window.__ABU_SECURITY_BOOT_PROMISE__=new Promise((resolve,reject)=>{
   resolveSecurityBoot=resolve;rejectSecurityBoot=reject
 });
+// Attach a rejection observer immediately; the device loader also awaits the
+// original promise and receives the actual error after loading all guards.
+window.__ABU_SECURITY_BOOT_PROMISE__.catch(()=>{});
 function startSecurityBoot(){
   Promise.resolve().then(boot).then(()=>{
     if(!document.getElementById('abuSecurityGate'))throw new Error('SECURITY_GATE_NOT_READY');
