@@ -303,7 +303,7 @@ function testImageImportLifecycle(){
   const source=html.slice(start,end)+'\n'+html.slice(clearStart,clearEnd);
   const factory=vm.runInNewContext(`(FileReader,Image,stats)=>{
     let uploadedImages=[],selectedIndex=-1,pageCanvases=[],imageImportEpoch=0;
-    const $=()=>({style:{},textContent:''});
+    const $=()=>({style:{},classList:{remove(){}},textContent:''});
     function refreshPeople(){stats.updated++}
     function renderPaper(){stats.rendered++}
     function updatePageNav(){}
