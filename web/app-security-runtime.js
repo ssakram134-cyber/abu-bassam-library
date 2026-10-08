@@ -166,13 +166,16 @@ async function login(){
   if(busy)return;const wait=loginRemaining();if(wait>0)return setError('الدخول متوقف مؤقتًا بسبب محاولات بيانات اعتماد غير صحيحة. حاول بعد '+formatWait(wait)+'.');const username=String($('abuLoginUser')?.value||'').trim(),password=String($('abuLoginPass')?.value||'');if(username!==MAIN_USERNAME){recordCredentialFailure('اسم المستخدم غير صحيح.');return}if(password.length<8)return setError('أدخل كلمة المرور كاملة.');if(!client())return setError('خدمة الدخول غير جاهزة.');busy=true;const attemptEpoch=deviceSessionEpoch;setError('جاري التحقق...');let authenticated=false;
   try{
     const result=await client().auth.signInWithPassword({email:MAIN_EMAIL,password});
+    // A successful Supabase sign-in must be cleaned up if the user locked or
+    // logged out while the network request was pending.
+    authenticated=!!result.data?.session;
     if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     if(result.error){
       if(isCredentialFailure(result.error))recordCredentialFailure(authError(result.error));
       else setError(authError(result.error));
       return
     }
-    authenticated=!!result.data?.session;clearCredentialFailures();if($('abuLoginPass'))$('abuLoginPass').value='';
+    clearCredentialFailures();if($('abuLoginPass'))$('abuLoginPass').value='';
     await fetchDeviceInfo();
     if(attemptEpoch!==deviceSessionEpoch)throw new Error('DEVICE_SESSION_CHANGED');
     await registerDevice();
