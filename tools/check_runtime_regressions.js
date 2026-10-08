@@ -430,6 +430,12 @@ function testPhotoPreviewClearedWhenEmpty(){
       !emptyLayout.info.includes('تعذر ترتيب الصور'))
     throw new Error('unplaceable photos retained a previous printable image');
   // Custom 100 cm paper at high DPI would exceed WebView canvas limits.
+  const paperTooSmall=create(2,{w:20,h:20});
+  paperTooSmall.renderPaper();
+  const outOfBounds=paperTooSmall.summary();
+  if(outOfBounds.pages!==0||outOfBounds.currentPage!==0||!outOfBounds.hidden||
+      !outOfBounds.zoomHidden||!outOfBounds.info.includes('مقاس الصورة أكبر'))
+    throw new Error('paper smaller than photo kept the zoom overlay open');
   const giant=create(2,{w:24000,h:24000});
   giant.renderPaper();
   const refused=giant.summary();
