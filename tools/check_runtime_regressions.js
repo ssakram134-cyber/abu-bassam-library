@@ -405,6 +405,37 @@ function testBarcodeScanDeduplication(){
   need(native,'barcodeScanHandledRef.current = false;','barcode scanner reset on camera reopen or close');
   forbid(native,'setTimeout(() => setBarcodeLocked(false), 500)','old scanner timer cannot reopen after session change');
 }
+async function testCameraCaptureCancelledAfterClose(){
+  for(const marker of ['const cameraSessionRef = useRef(0)','const cameraOpenPendingRef = useRef(false)',
+    'if (session !== cameraSessionRef.current) return;',
+    'cameraSessionRef.current += 1;'])
+    need(native,marker,'camera session lifecycle');
+  const start=native.indexOf('  const captureDocument = useCallback(async () => {');
+  const end=native.indexOf('  }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);',start);
+  if(start<0||end<=start)throw new Error('camera capture handler missing');
+  const body=native.slice(start+'  const captureDocument = useCallback(async () => {'.length,end);
+  const make=vm.runInNewContext('(photo,ref,events)=>{'
+    +'const cameraSessionRef=ref,cameraRef={current:{takePictureAsync:()=>photo}},'
+    +'cameraReady=true,cameraBusy=false,cameraMode="scan";'
+    +'const setCameraBusy=()=>{},cameraError=()=>events.push("unexpected error");'
+    +'const closeCamera=()=>{cameraSessionRef.current++};'
+    +'const inject=(name,payload)=>events.push([name,payload]);'
+    +'return {capture:async()=>{'+body+'},close:closeCamera}}');
+  let finish;
+  const pendingPhoto=new Promise(resolve=>{finish=resolve});
+  const oldEvents=[],old=make(pendingPhoto,{current:3},oldEvents);
+  const request=old.capture();
+  old.close();
+  finish({base64:'old-picture'});
+  await request;
+  if(oldEvents.length)throw new Error('stale photo returned after user closed camera');
+  const newEvents=[],valid=make(Promise.resolve({base64:'fresh-picture'}),{current:9},newEvents);
+  await valid.capture();
+  if(newEvents.length!==1||newEvents[0][0]!=='AbuBassamNativeCameraResult'||
+      newEvents[0][1].dataUrl!=='data:image/jpeg;base64,fresh-picture')
+    throw new Error('valid camera capture no longer sends image to WebView');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -693,7 +724,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
