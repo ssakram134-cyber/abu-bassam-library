@@ -154,10 +154,11 @@ async function verifyAuthStartupAndSecret(){
   const secondary={role:'secondary',device_id:'verified-secondary',permissions:{cardsPrint:false,cardsEdit:true}};
   const staleOwner={role:'owner',device_id:'old-online-owner'};
   const mockWindow={AbuBassamSecurity:{
-    __baseDevice:()=>staleOwner,__baseCan:()=>true,
+    __baseDevice:()=>staleOwner,__baseCan:()=>true,isOnlineUnlocked:()=>mockWindow.onlineOpen===true,
     __offlineRole:'secondary',__offlineTrust:secondary,
     __offlinePermissions:secondary.permissions
   }};
+  mockWindow.onlineOpen=true;
   const roleContext={window:mockWindow,offlineSession:true};
   vm.runInNewContext(hardening.slice(effectiveBegin,effectiveEnd)+';var result={role:effectiveRole(),device:effectiveDevice(),print:effectiveCan("cardsPrint"),edit:effectiveCan("cardsEdit")}',roleContext);
   if(roleContext.result.role!=='secondary'||roleContext.result.device.device_id!=='verified-secondary'||roleContext.result.print!==false||roleContext.result.edit!==true)
@@ -166,6 +167,11 @@ async function verifyAuthStartupAndSecret(){
   vm.runInNewContext('result={role:effectiveRole(),device:effectiveDevice(),print:effectiveCan("cardsPrint")}',roleContext);
   if(roleContext.result.role!=='owner'||roleContext.result.device.device_id!=='old-online-owner'||roleContext.result.print!==true)
     throw new Error('online authorization did not return to its base implementation');
+  mockWindow.onlineOpen=false;
+  vm.runInNewContext('result={role:effectiveRole(),device:effectiveDevice(),print:effectiveCan("cardsPrint")}',roleContext);
+  if(roleContext.result.role!==''||roleContext.result.device!==null||roleContext.result.print!==false)
+    throw new Error('locked online gate leaked stale owner permissions');
+  mockWindow.onlineOpen=true;
   // The original biometric handler must not perform unsigned offline login.
   const originalBio=authSource.slice(authSource.indexOf('async function unlockWithBiometric(){'),authSource.indexOf('function lock(reason='));
   if(originalBio.includes('offlineAllowed()')||originalBio.includes('localTrust()'))
@@ -302,14 +308,14 @@ async function verifyAuthStartupAndSecret(){
   const deviceEnd=authSource.indexOf('function loginRemaining(){',deviceBegin);
   if(deviceBegin<0||deviceEnd<=deviceBegin)throw new Error('device RPC authorization functions missing');
   const makeDevice=vm.runInNewContext('(options)=>{'
-    +'let currentDevice={role:"owner",active:true},deviceSessionEpoch=0,unlocked=true,locks=[],renders=0;'
+    +'let currentDevice={role:"owner",active:true},deviceSessionEpoch=0,deviceTouchSeq=0,unlocked=true,locks=[],renders=0;'
     +'const client=()=>({rpc:options.rpc}),cloud=()=>({isConnected:()=>true}),navigator={onLine:true},'
     +'getSecret=async()=>"secret",ensureDeviceName=async()=>({id:"phone1",name:"device"}),'
     +'identity=()=>({id:"phone1"}),APP_VERSION="test",DEVICE_NAME_KEY="testkey",'
     +'deviceInfo={model:"Android",os:"Android",name:"Android"},'
     +'localStorage={getItem:()=>null,setItem:()=>{}},'
     +'normalizeDevice=value=>Array.isArray(value)?value[0]||null:value,'
-    +'renderSecurityCard=()=>{renders++},'
+    +'renderSecurityCard=()=>{renders++},emitSecurityState=()=>{},'
     +'lock=message=>{deviceSessionEpoch++;unlocked=false;locks.push(message)};'
     +authSource.slice(deviceBegin,deviceEnd)
     +';return {registerDevice,touchDevice,state:()=>({currentDevice,unlocked,locks,renders}),'
