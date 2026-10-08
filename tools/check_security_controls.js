@@ -466,6 +466,39 @@ async function verifyAuthStartupAndSecret(){
   if(retryable.state().pushes!==2||!retryable.state().appearanceStamp)
     throw new Error('failed theme upload never retried');
 
+  // Device revalidation can finish after an explicit lock. Its maintenance
+  // continuation must not push or pull appearance on that locked session.
+  const maintenanceBegin=authSource.indexOf('async function maintenanceTick(){');
+  const maintenanceEnd=authSource.indexOf('function installMaintenance(){',maintenanceBegin);
+  if(maintenanceBegin<0||maintenanceEnd<=maintenanceBegin)
+    throw new Error('security maintenance handler missing');
+  const maintenanceFactory=vm.runInNewContext('(deps)=>{'
+    +'let maintenanceTimer=null;'
+    +'const {document,unlockedState,epochState,touchDevice,localStorage,currentRole,pushAppearance,pullAppearanceIfNeeded,scheduleMaintenance}=deps;'
+    +'const window={};'
+    +'Object.defineProperty(window,"unused",{value:true});'
+    +'return (async()=>{'
+    +authSource.slice(maintenanceBegin,maintenanceEnd)
+    .replace(/deviceSessionEpoch/g,'epochState()')
+    .replace(/\bunlocked\b/g,'unlockedState()')
+    +';return maintenanceTick})()'
+    +'}');
+  let stillOpen=true,epoch=1,finishTouch=null,pushCount=0,pullCount=0,scheduled=0;
+  const runner=await maintenanceFactory({
+    document:{visibilityState:'visible'},unlockedState:()=>stillOpen,epochState:()=>epoch,
+    touchDevice:()=>new Promise(resolve=>{finishTouch=resolve}),
+    localStorage:{getItem:()=> '1'},currentRole:()=> 'owner',
+    pushAppearance:async()=>{pushCount++},pullAppearanceIfNeeded:async()=>{pullCount++},
+    scheduleMaintenance:()=>{scheduled++}
+  });
+  const oldTick=runner();
+  for(let i=0;i<8&&!finishTouch;i++)await Promise.resolve();
+  if(!finishTouch)throw new Error('device heartbeat did not begin');
+  epoch++;stillOpen=false;
+  finishTouch();await oldTick;
+  if(pushCount||pullCount||scheduled!==1)
+    throw new Error('maintenance continued cloud changes after locking the app');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
