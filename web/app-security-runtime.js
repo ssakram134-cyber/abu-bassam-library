@@ -194,11 +194,26 @@ function scheduleMaintenance(delay=60000){clearTimeout(maintenanceTimer);mainten
 async function maintenanceTick(){maintenanceTimer=null;if(document.visibilityState==='hidden')return;try{if(unlocked)await touchDevice();if(localStorage.getItem(APPEARANCE_SYNC_KEY)==='1'){if(currentDevice?.role==='owner')await Promise.resolve(pushAppearance());else await Promise.resolve(pullAppearanceIfNeeded())}}catch(e){}finally{scheduleMaintenance()}}
 function installMaintenance(){scheduleMaintenance();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(maintenanceTimer);maintenanceTimer=null}else scheduleMaintenance(1000)})}
 async function boot(){
-  buildUi();guardClicks();injectSecurityCard();wrapAppearance();await fetchDeviceInfo();if(!localStorage.getItem(LOCK_MINUTES_KEY))localStorage.setItem(LOCK_MINUTES_KEY,'5');
-  const trust=localTrust();if(offlineAllowed())$('abuOfflineBtn').style.display='block';
-  try{await cloud()?.ready?.()}catch(e){}
-  const bio=await getBiometricEnabled().catch(()=>false);if(bio&&((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed())){setTimeout(unlockWithBiometric,180)}else showGate('أدخل بيانات الدخول لفتح التطبيق.');
-  installMaintenance()
+  // Critical startup is local: construct and lock the gate before notifying
+  // Android. Cloud/session restoration must not make offline startup hang.
+  buildUi();guardClicks();injectSecurityCard();wrapAppearance();
+  if(!localStorage.getItem(LOCK_MINUTES_KEY))localStorage.setItem(LOCK_MINUTES_KEY,'5');
+  if(offlineAllowed())$('abuOfflineBtn').style.display='block';
+  showGate('أدخل بيانات الدخول لفتح التطبيق.');
+  installMaintenance();
+  void fetchDeviceInfo().catch(error=>console.warn('Device information unavailable',error));
+  try{
+    const cloudReady=cloud()?.ready?.();
+    if(cloudReady&&typeof cloudReady.catch==='function')void cloudReady.catch(()=>{});
+  }catch(error){console.warn('Cloud session initialization unavailable',error)}
+  void getBiometricEnabled().then(bio=>{
+    if(!bio||unlocked||!((cloud()?.isConnected?.()&&navigator.onLine)||offlineAllowed()))return;
+    // Never display the biometric prompt before the approved UI is booted.
+    if(window.__ABU_APPROVED_UI_READY__)setTimeout(()=>{if(!unlocked)void unlockWithBiometric()},180);
+    else document.addEventListener('abu-bassam-approved-ui-ready',()=>{
+      if(!unlocked)void unlockWithBiometric()
+    },{once:true})
+  }).catch(()=>{});
 }
 
 window.AbuBassamSecurity={
