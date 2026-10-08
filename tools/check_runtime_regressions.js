@@ -661,6 +661,47 @@ function testVaultSyncConflictRules(){
     need(source,marker,'atomic vault conflict handling');
 }
 
+async function testVaultConflictCommitIsolation(){
+  const source=read('document-vault-runtime.js');
+  const a=source.indexOf('function uploadedSnapshotUnchanged(');
+  const b=source.indexOf('async function dbCommitUpload(',a);
+  const c=source.indexOf('async function dbResolvePendingConflict(');
+  const d=source.indexOf('function remoteSnapshotStillCurrent(',c);
+  if([a,b,c,d].some(x=>x<0)||b<=a||d<=c)throw Error('vault conflict source missing');
+  const tables=new Map();let id=0;
+  const database={transaction(){
+    const tx={};
+    tx.objectStore=()=>({
+      get:key=>{const request={};Promise.resolve().then(()=>{
+        request.result=tables.get(key);request.onsuccess?.();
+        Promise.resolve().then(()=>tx.oncomplete?.())
+      });return request},
+      put:row=>{tables.set(row.id,{...row});Promise.resolve().then(()=>tx.oncomplete?.())},
+      delete:key=>{tables.delete(key);Promise.resolve().then(()=>tx.oncomplete?.())}
+    });return tx
+  }};
+  const app=vm.runInNewContext('(openDb,uuid,STORE)=>{'
+    +source.slice(a,b)+source.slice(c,d)
+    +';return dbResolvePendingConflict}')(
+      async()=>database,()=>String(++id),'items');
+  const old={id:'doc',name:'before',updatedAt:'one',syncState:'pending',
+    localEditToken:'revision1',size:1,favorite:false,folder:'',mime:'image/png',deleted:false};
+  const newest={...old,name:'last-change',localEditToken:'revision2'};
+  tables.set(old.id,newest);
+  const changed=await app(old,{...old,name:'cloud'});
+  if(changed||tables.get('doc').name!=='last-change')
+    throw Error('stale remote conflict overwrote a new edit');
+  tables.set(old.id,old);
+  const backup={...old,id:'backup',name:'saved copy'};
+  const applied=await app(old,{...old,name:'cloud'},backup);
+  if(!applied||tables.get('doc').name!=='cloud'||tables.get('backup').name!=='saved copy')
+    throw Error('atomic remote conflict did not preserve local copy');
+  tables.set(old.id,newest);
+  const removed=await app(old,null);
+  if(removed||!tables.has('doc'))
+    throw Error('late remote deletion erased an edited document');
+}
+
 // The optional AI PRO connection must never keep a blocking busy overlay
 // indefinitely while a remote session check is stalled or the phone is offline.
 async function testAiCloudStartupTimeout(){
@@ -949,7 +990,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
