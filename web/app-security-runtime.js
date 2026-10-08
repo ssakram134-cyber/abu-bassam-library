@@ -239,7 +239,7 @@ async function pushAppearance(){
   if(!cloud()?.isConnected?.()||!can('appearance')||currentRole()!=='owner')return;
   const epoch=deviceSessionEpoch,user=String(cloud()?.session?.()?.user?.id||'');
   if(!user)return;
-  const payload=appearancePayload(),stamp=JSON.stringify(payload);
+  const payload=appearancePayload(),stamp=user+':'+JSON.stringify(payload);
   if(stamp===appearanceStamp)return;
   try{
     await cloud().upsert('appearance','shared',payload);
@@ -268,7 +268,7 @@ async function pullAppearanceIfNeeded(){
       localStorage.setItem('abuBassamTypographyV5',JSON.stringify(data.typography));
       window.AbuBassamTypography?.applyApp?.()
     }
-    appearanceStamp=JSON.stringify(appearancePayload())
+    appearanceStamp=user+':'+JSON.stringify(appearancePayload())
   }catch(e){}
 }
 async function appearanceSync(enabled){localStorage.setItem(APPEARANCE_SYNC_KEY,enabled?'1':'0');if(enabled){if(currentDevice?.role==='owner')await pushAppearance();else await pullAppearanceIfNeeded()}log('مزامنة المظهر',enabled?'مفعلة':'متوقفة')}
