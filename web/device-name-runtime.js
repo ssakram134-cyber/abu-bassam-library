@@ -44,15 +44,37 @@
   }
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
+  const pendingScriptLoads=new Map();
   function loadScript(id,src,guard){
-    return new Promise((resolve,reject)=>{
-      if(document.getElementById(id)||(guard&&window[guard])){resolve(true);return}
-      const script=document.createElement('script');
-      script.id=id;script.src=src;script.async=false;
-      script.onload=()=>{document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-      script.onerror=()=>reject(new Error(src+' failed to load'));
-      (document.head||document.documentElement).appendChild(script)
-    })
+    // A script element alone does not prove that its code loaded successfully.
+    // Reentrant callers must await the same load, rather than run ahead.
+    if(guard&&window[guard])return Promise.resolve(true);
+    if(pendingScriptLoads.has(id))return pendingScriptLoads.get(id);
+    if(document.getElementById(id))return Promise.reject(new Error(src+' already exists but its runtime is not ready'));
+    const script=document.createElement('script');
+    script.id=id;script.src=src;script.async=false;
+    const task=new Promise((resolve,reject)=>{
+      let finished=false;
+      const fail=(reason)=>{
+        if(finished)return;
+        finished=true;clearTimeout(watchdog);
+        script.remove();
+        reject(new Error(src+' failed to load: '+reason))
+      };
+      const watchdog=setTimeout(()=>fail('script load timeout'),10000);
+      script.onload=()=>{
+        if(guard&&!window[guard])return fail('runtime initialization flag missing');
+        if(finished)return;
+        finished=true;clearTimeout(watchdog);
+        document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));
+        resolve(true)
+      };
+      script.onerror=()=>fail('resource error');
+      try{(document.head||document.documentElement).appendChild(script)}catch(error){fail(error.message||error)}
+    });
+    pendingScriptLoads.set(id,task);
+    void task.then(()=>pendingScriptLoads.delete(id),()=>pendingScriptLoads.delete(id));
+    return task
   }
   const loadFeatureRecovery=()=>loadScript('abuFeatureRecoveryRuntime','feature-recovery-runtime.js','__ABU_FEATURE_RECOVERY_V1__');
   const loadChildTemplates=()=>loadScript('abuChildTemplatesRuntime','child-card-templates-runtime.js','__ABU_CHILD_TEMPLATES_V1__');
