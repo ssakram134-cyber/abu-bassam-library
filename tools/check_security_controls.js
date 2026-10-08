@@ -295,6 +295,54 @@ async function verifyAuthStartupAndSecret(){
   if(serverResults.some(value=>value!==false)||rpcCalls!==1||roleUpdates||reseals)
     throw new Error('late device RPC reauthorized a locked session');
 
+  // Verify device RPC decisions on the actual shipped auth functions:
+  // missing/disabled rows are not valid logins, while slow responses from
+  // an older unlocked session cannot restore roles after a lock/logout.
+  const deviceBegin=authSource.indexOf('async function registerDevice(){');
+  const deviceEnd=authSource.indexOf('function loginRemaining(){',deviceBegin);
+  if(deviceBegin<0||deviceEnd<=deviceBegin)throw new Error('device RPC authorization functions missing');
+  const makeDevice=vm.runInNewContext('(options)=>{'
+    +'let currentDevice={role:"owner",active:true},deviceSessionEpoch=0,unlocked=true,locks=[],renders=0;'
+    +'const client=()=>({rpc:options.rpc}),cloud=()=>({isConnected:()=>true}),navigator={onLine:true},'
+    +'getSecret=async()=>"secret",ensureDeviceName=async()=>({id:"phone1",name:"device"}),'
+    +'identity=()=>({id:"phone1"}),APP_VERSION="test",DEVICE_NAME_KEY="testkey",'
+    +'deviceInfo={model:"Android",os:"Android",name:"Android"},'
+    +'localStorage={getItem:()=>null,setItem:()=>{}},'
+    +'normalizeDevice=value=>Array.isArray(value)?value[0]||null:value,'
+    +'renderSecurityCard=()=>{renders++},'
+    +'lock=message=>{deviceSessionEpoch++;unlocked=false;locks.push(message)};'
+    +authSource.slice(deviceBegin,deviceEnd)
+    +';return {registerDevice,touchDevice,state:()=>({currentDevice,unlocked,locks,renders}),'
+    +'forceLock:()=>{deviceSessionEpoch++;unlocked=false}}}');
+  for(const [row,expected] of [[null,'DEVICE_NOT_AUTHORIZED'],[{active:false},'DEVICE_DISABLED']]){
+    const app=makeDevice({rpc:async()=>({data:row,error:null})});
+    let denied=false;
+    try{await app.registerDevice()}catch(error){denied=error.message===expected}
+    if(!denied||app.state().renders)throw new Error('unauthorized registration accepted: '+expected);
+    const checking=makeDevice({rpc:async()=>({data:row,error:null})});
+    await checking.touchDevice();
+    if(checking.state().unlocked||checking.state().locks.length!==1)
+      throw new Error('invalid device heartbeat failed to lock: '+expected);
+  }
+  const approved=makeDevice({rpc:async()=>({data:{active:true,role:'secondary'},error:null})});
+  await approved.registerDevice();
+  if(approved.state().currentDevice.role!=='secondary'||approved.state().renders!==1)
+    throw new Error('valid secondary device registration rejected');
+  const disconnected=makeDevice({rpc:async()=>{throw new Error('network unreachable')}});
+  await disconnected.touchDevice();
+  if(!disconnected.state().unlocked||disconnected.state().locks.length)
+    throw new Error('transient network failure incorrectly disabled approved device');
+  let reply=null;
+  const stale=makeDevice({rpc:()=>new Promise(resolve=>{reply=resolve})});
+  const oldHeartbeat=stale.touchDevice();
+  for(let step=0;step<8&&!reply;step++)await Promise.resolve();
+  if(!reply)throw new Error('device heartbeat did not reach RPC');
+  stale.forceLock();
+  reply({data:{active:true,role:'secondary'},error:null});
+  await oldHeartbeat;
+  if(stale.state().unlocked||stale.state().currentDevice.role!=='owner')
+    throw new Error('late device RPC overwrote a locked session');
+
   // A synchronous Android postMessage failure must release its native request
   // immediately. Malformed native callbacks must not crash the dispatcher.
   const sync=read('web/secure-sync-runtime.js');
