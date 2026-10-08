@@ -28,12 +28,33 @@
     if(verified!==identity.id)throw new Error('SECURE_DEVICE_ID_PERSIST_FAILED');
     return identity
   }
-  async function heartbeat(){return stabilizeIdentity()}
-  // Boot must fail closed; periodic identity checks are best-effort and must
-  // never create unhandled Promise rejections during offline/background use.
+  let heartbeatPending=null,heartbeatTimer=null;
+  function heartbeat(){
+    // Online/auth/visibility events can fire in one frame; SecureStore must
+    // not receive redundant reads/writes from simultaneous identity checks.
+    if(heartbeatPending)return heartbeatPending;
+    const task=stabilizeIdentity();
+    heartbeatPending=task;
+    void task.then(
+      ()=>{if(heartbeatPending===task)heartbeatPending=null},
+      ()=>{if(heartbeatPending===task)heartbeatPending=null}
+    );
+    return task
+  }
+  // Boot must fail closed; background checks are best-effort, non-overlapping
+  // and paused while the activity is hidden.
   function heartbeatSafely(){
     if(document.visibilityState==='hidden')return;
     void heartbeat().catch(error=>console.warn('Abu Bassam background device check failed',error));
+  }
+  function scheduleHeartbeat(delay=120000){
+    clearTimeout(heartbeatTimer);heartbeatTimer=null;
+    if(document.visibilityState==='hidden')return;
+    heartbeatTimer=setTimeout(()=>{
+      heartbeatTimer=null;
+      heartbeatSafely();
+      scheduleHeartbeat()
+    },Math.max(1000,delay))
   }
   async function adoptIdentity(id){
     const value=String(id||'').trim();if(!validIdentityId(value))throw new Error('SECURE_DEVICE_ID_INVALID');
@@ -179,7 +200,11 @@
   }
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,stabilize:stabilizeIdentity,adopt:adoptIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
-  setInterval(heartbeatSafely,120000);
+  scheduleHeartbeat();
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden'){clearTimeout(heartbeatTimer);heartbeatTimer=null}
+    else{heartbeatSafely();scheduleHeartbeat()}
+  });
   window.addEventListener('online',heartbeatSafely);
   document.addEventListener('abu-bassam-auth-changed',()=>{
     heartbeatSafely();
