@@ -1,4 +1,4 @@
-name: Android production release
+name: Android production build disabled
 
 on:
   workflow_dispatch:
@@ -15,7 +15,8 @@ env:
 
 jobs:
   build:
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # Disabled: release APKs must NOT be built or signed in GitHub Actions.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -101,7 +102,8 @@ jobs:
 
   sign:
     needs: build
-    if: ${{ github.ref == 'refs/heads/main' && needs.build.result == 'success' }}
+    # Disabled even when invoked manually.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
