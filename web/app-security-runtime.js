@@ -199,7 +199,14 @@ function back(fromHardware=false){if(!sessionUnlocked())return true;if(closeTopL
 function exit(){const now=Date.now();if(now-exitArmedAt<=2000){exitArmedAt=0;if(window.Android?.exitApp)Android.exitApp();return true}exitArmedAt=now;toast('اضغط مرة ثانية للخروج');return true}
 window.AbuBassamNativeBackPress=function(){back(true)};
 
-async function logout(){if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;try{await cloud()?.client?.auth?.signOut?.({scope:'local'})}catch(e){}currentDevice=null;unlocked=false;showGate('تم تسجيل الخروج.');log('تسجيل خروج')}
+async function logout(){
+  if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return false;
+  // Close the unlocked UI immediately: a slow or offline sign-out must
+  // never leave privileged controls available after confirmation.
+  currentDevice=null;unlocked=false;showGate('تم تسجيل الخروج.');log('تسجيل خروج');
+  try{await cloud()?.client?.auth?.signOut?.({scope:'local'})}catch(e){}
+  return true
+}
 function lockNow(){lock('تم قفل التطبيق يدويًا')}
 
 function scheduleMaintenance(delay=60000){clearTimeout(maintenanceTimer);maintenanceTimer=null;if(document.visibilityState==='hidden')return;maintenanceTimer=setTimeout(()=>void maintenanceTick(),Math.max(1000,delay))}
