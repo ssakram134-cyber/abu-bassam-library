@@ -26,6 +26,7 @@ const pending=new Map();
 let requestSeq=0;
 let currentDevice=null;
 let deviceSecret='';
+let deviceSecretPending=null;
 let unlocked=false;
 let busy=false;
 let lastBackgroundAt=0;
@@ -65,9 +66,22 @@ function randomSecret(){
 }
 async function getSecret(){
   if(deviceSecret)return deviceSecret;
-  deviceSecret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
-  if(!deviceSecret){deviceSecret=randomSecret();await nativeRequest('secureSet',{key:SECRET_KEY,value:deviceSecret})}
-  return deviceSecret
+  if(deviceSecretPending)return deviceSecretPending;
+  // A failed SecureStore write must never be cached as a registered device key.
+  // Coalesce concurrent callers so they cannot generate competing secrets.
+  const pending=(async()=>{
+    let stored=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+    if(!stored){
+      const generated=randomSecret();
+      await nativeRequest('secureSet',{key:SECRET_KEY,value:generated});
+      stored=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+      if(stored!==generated)throw new Error('SECURE_DEVICE_SECRET_PERSIST_FAILED');
+    }
+    deviceSecret=stored;
+    return stored
+  })();
+  deviceSecretPending=pending;
+  try{return await pending}finally{if(deviceSecretPending===pending)deviceSecretPending=null}
 }
 async function getBiometricEnabled(){return String(await nativeRequest('secureGet',{key:BIO_KEY})||'')==='1'}
 async function setBiometricEnabled(value){if(value)await nativeRequest('secureSet',{key:BIO_KEY,value:'1'});else await nativeRequest('secureDelete',{key:BIO_KEY});renderSecurityCard()}
