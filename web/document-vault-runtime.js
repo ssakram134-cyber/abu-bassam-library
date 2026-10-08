@@ -103,7 +103,7 @@ function mergeUploadReceipt(current,snapshot,remoteVersion){
   return {...current,remoteUpdatedAt:String(remoteVersion||''),
     syncState:uploadedSnapshotUnchanged(current,snapshot)?'synced':'pending'}
 }
-async function dbCommitUpload(snapshot,remoteVersion){
+async function dbCommitUpload(snapshot,remoteVersion,scope=''){
   // Compare the uploaded snapshot to the live row in one IDB transaction.
   const db=await openDb();
   return new Promise((resolve,reject)=>{
@@ -111,6 +111,7 @@ async function dbCommitUpload(snapshot,remoteVersion){
     const request=store.get(snapshot.id);
     let applied=false;
     request.onsuccess=()=>{
+      if(scope&&!vaultSyncContextValid(scope)){tx.abort();return}
       const result=mergeUploadReceipt(request.result,snapshot,remoteVersion);
       if(result){store.put(result);applied=true}
     };
@@ -119,7 +120,7 @@ async function dbCommitUpload(snapshot,remoteVersion){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_SYNC_ACK_ABORTED'))
   })
 }
-async function dbResolvePendingConflict(snapshot,replacement,localCopy=null){
+async function dbResolvePendingConflict(snapshot,replacement,localCopy=null,scope=''){
   // Commit preservation of a local copy and any remote replacement atomically.
   const db=await openDb();
   return new Promise((resolve,reject)=>{
@@ -127,6 +128,7 @@ async function dbResolvePendingConflict(snapshot,replacement,localCopy=null){
     const req=store.get(snapshot.id);
     let applied=false;
     req.onsuccess=()=>{
+      if(scope&&!vaultSyncContextValid(scope)){tx.abort();return}
       if(!uploadedSnapshotUnchanged(req.result,snapshot))return;
       if(localCopy)store.put({...localCopy,localEditToken:uuid()});
       if(replacement)store.put(replacement);
@@ -144,7 +146,7 @@ function remoteSnapshotStillCurrent(current,observed){
   return ['localEditToken','updatedAt','remoteUpdatedAt','name','folder','favorite','size','deleted']
     .every(key=>current[key]===observed[key])
 }
-async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord){
+async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord,scope=''){
   // Cloud downloads may finish after a user has edited or deleted the row.
   // Check again inside the same write transaction before replacing content.
   const db=await openDb();
@@ -153,6 +155,7 @@ async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord){
     let written=false;
     const req=store.get(remoteItemRecord.id);
     req.onsuccess=()=>{
+      if(scope&&!vaultSyncContextValid(scope)){tx.abort();return}
       if(remoteSnapshotStillCurrent(req.result,observed)){
         store.put(remoteItemRecord);
         written=true
@@ -163,7 +166,7 @@ async function dbReceiveRemoteIfUnchanged(observed,remoteItemRecord){
     tx.onabort=()=>reject(tx.error||new Error('VAULT_REMOTE_RECEIVE_ABORTED'))
   })
 }
-async function dbDeleteIfUnchanged(snapshot){
+async function dbDeleteIfUnchanged(snapshot,scope=''){
   // Deletion acknowledgements must not delete newer local changes.
   const db=await openDb();
   return new Promise((resolve,reject)=>{
@@ -171,6 +174,7 @@ async function dbDeleteIfUnchanged(snapshot){
     const req=store.get(snapshot.id);
     let deleted=false;
     req.onsuccess=()=>{
+      if(scope&&!vaultSyncContextValid(scope)){tx.abort();return}
       const current=req.result;
       const same=snapshot.syncState==='pending'
         ?uploadedSnapshotUnchanged(current,snapshot)
@@ -438,13 +442,15 @@ async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRest
 
 function cloud(){return window.AbuBassamCloud}
 function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',blob,syncState:'synced',deleted:false}}
+function vaultSyncContextValid(scope){
+  return !!(navigator.onLine&&sessionOk()&&syncScope()===scope&&
+    vaultScopeOk(false)&&vaultAllowed('vaultSync')&&
+    window.AbuBassamSecurity?.device?.()?.device_id)
+}
 function assertVaultSyncContext(scope){
   // A delayed RPC belongs only to the account/device and permissions that
   // initiated it; logout, role changes and loss of connectivity abort the run.
-  if(!navigator.onLine||!sessionOk()||syncScope()!==scope||
-    !vaultScopeOk(false)||!vaultAllowed('vaultSync')||
-    !window.AbuBassamSecurity?.device?.()?.device_id)
-    throw new Error('VAULT_SYNC_CONTEXT_CHANGED')
+  if(!vaultSyncContextValid(scope))throw new Error('VAULT_SYNC_CONTEXT_CHANGED')
 }
 async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(state.syncing)return false;
@@ -471,33 +477,33 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbResolvePendingConflict(item,null);continue}
+          if(remote?.deleted){await dbResolvePendingConflict(item,null,null,runScope);continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
           assertVaultSyncContext(runScope);
-          await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion));
+          await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion),null,runScope);
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbResolvePendingConflict(item,null,copy);continue
+          await dbResolvePendingConflict(item,null,copy,runScope);continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
         assertVaultSyncContext(runScope);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-        await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy);
+        await dbResolvePendingConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy,runScope);
         continue
       }
 
       if(item.deleted){
-        if(!row){await dbDeleteIfUnchanged(item);continue}
+        if(!row){await dbDeleteIfUnchanged(item,runScope);continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         assertVaultSyncContext(runScope);
         await service.upsert('vault',item.id,data);
         assertVaultSyncContext(runScope);
-        await dbDeleteIfUnchanged(item);
+        await dbDeleteIfUnchanged(item,runScope);
         if(oldPath){assertVaultSyncContext(runScope);await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}})}
         continue
       }
@@ -514,7 +520,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         throw error
       }
       assertVaultSyncContext(runScope);
-      await dbCommitUpload(item,saved?.updated_at);
+      await dbCommitUpload(item,saved?.updated_at,runScope);
       if(oldPath&&oldPath!==newPath){assertVaultSyncContext(runScope);await service.removeVault(oldPath).catch(()=>{})}
     }
 
@@ -529,12 +535,12 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbDeleteIfUnchanged(here);continue}
+      if(data.deleted){if(here)await dbDeleteIfUnchanged(here,runScope);continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
       assertVaultSyncContext(runScope);
-      await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion))
+      await dbReceiveRemoteIfUnchanged(here,remoteItem(data,blob,remoteVersion),runScope)
     }
     assertVaultSyncContext(runScope);
     await refresh();
