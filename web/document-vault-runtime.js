@@ -344,7 +344,7 @@ async function deleteItem(id){if(!requireVault('vaultDelete'))return;
 async function editItem(id){if(!requireVault('vaultImageEdit'))return;
   let item=findItem(id);if(!item||!isImage(item))return;
   let src=objectUrl(item.blob),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=src});
-  state.editor={id,image,l:0,r:100,t:0,b:100,rotate:0,brightness:100,contrast:100};
+  state.editor={id,image,sourceEditToken:String(item.localEditToken||''),sourceUpdatedAt:String(item.updatedAt||''),sourceName:item.name,sourceSize:item.size,l:0,r:100,t:0,b:100,rotate:0,brightness:100,contrast:100};
   resetEditor(false);showModal('vEditModal');drawEditor(false)
 }
 function readEditorControls(){let e=state.editor;if(!e)return;e.l=+$('vCropL').value;e.r=+$('vCropR').value;e.t=+$('vCropT').value;e.b=+$('vCropB').value;e.rotate=+$('vRotate').value;e.brightness=+$('vBrightness').value;e.contrast=+$('vContrast').value}
@@ -356,10 +356,32 @@ function drawEditor(full){
 function editorChanged(){drawEditor(false)}
 function resetEditor(draw=true){if(!state.editor)return;Object.assign(state.editor,{l:0,r:100,t:0,b:100,rotate:0,brightness:100,contrast:100});[['vCropL',0],['vCropR',100],['vCropT',0],['vCropB',100],['vRotate',0],['vBrightness',100],['vContrast',100]].forEach(([id,value])=>$(id).value=value);if(draw)drawEditor(false)}
 function clarify(){if(!requireVault('vaultEnhance'))return;if(!state.editor)return;$('vBrightness').value=106;$('vContrast').value=128;editorChanged()}
-async function saveEditor(){if(!requireVault('vaultImageEdit'))return;
-  let canvas=drawEditor(true);if(!canvas)return alert('حدود القص صغيرة جداً');setBusy(true,'حفظ الصورة المعدّلة بدون ضغط ضياعي...');
-  try{let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png')),item=findItem(state.editor.id);if(!blob||!item)throw new Error('تعذر إنشاء الصورة');item.blob=blob;item.mime='image/png';item.size=blob.size;item.name=item.name.replace(/\.[^.]+$/, '')+'.png';item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);closeModal('vEditModal');await refresh();if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
-  catch(e){alert(e.message||'تعذر حفظ التعديل')}
+async function saveEditor(){
+  if(!requireVault('vaultImageEdit'))return;
+  if(state.busy)return;
+  const editor=state.editor;
+  if(!editor)return;
+  const canvas=drawEditor(true);
+  if(!canvas)return alert('حدود القص صغيرة جداً');
+  setBusy(true,'حفظ الصورة المعدّلة بدون ضغط ضياعي...');
+  try{
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!blob)throw new Error('تعذر إنشاء الصورة');
+    if(state.editor!==editor)throw new Error('انتهت جلسة تحرير الصورة. افتح الصورة مجددًا.');
+    const saved=await dbModifyItem(editor.id,item=>{
+      // Reject a stale editor instead of silently replacing a newer image,
+      // rename or deletion performed by another action while PNG rendered.
+      if(String(item.localEditToken||'')!==editor.sourceEditToken||
+        String(item.updatedAt||'')!==editor.sourceUpdatedAt||
+        item.name!==editor.sourceName||item.size!==editor.sourceSize)return null;
+      return {...item,blob,mime:'image/png',size:blob.size,
+        name:item.name.replace(/\.[^.]+$/,'')+'.png'}
+    });
+    if(!saved)throw new Error('تغيّرت الصورة أثناء التحرير. أعد فتح أحدث نسخة قبل الحفظ.');
+    closeModal('vEditModal');
+    await refresh();
+    if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
+  }catch(e){alert(e.message||'تعذر حفظ التعديل')}
   finally{setBusy(false)}
 }
 function editorCanvas(){let canvas=drawEditor(true);if(!canvas)alert('حدود القص صغيرة جداً');return canvas}
