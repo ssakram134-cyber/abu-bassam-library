@@ -133,7 +133,7 @@ function mainHtml(){return `<div class="v-shell">
 </div>`}
 
 function modalHtml(){return `
-<div id="vViewModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b id="vViewTitle">المستند</b><button class="v-close" onclick="DocumentVault.closeModal('vViewModal')">×</button></div><div class="v-body"><div id="vView" class="v-view"></div><div class="v-modal-actions"><button id="vGalleryButton" onclick="DocumentVault.saveGalleryActive()">حفظ في المعرض</button><button onclick="DocumentVault.savePdfActive()">حفظ PDF</button><button onclick="DocumentVault.printActive()">🖨 طباعة</button><button onclick="DocumentVault.saveActive()">حفظ الأصل</button><button onclick="DocumentVault.shareActive()">مشاركة / Google</button><button class="alt" onclick="DocumentVault.closeModal('vViewModal')">عودة</button></div></div></div></div>
+<div id="vViewModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b id="vViewTitle">المستند</b><button class="v-close" onclick="DocumentVault.closeModal('vViewModal')">×</button></div><div class="v-body"><div id="vView" class="v-view"></div><div class="v-modal-actions"><button id="vGalleryButton" onclick="DocumentVault.saveGalleryActive()">حفظ في المعرض</button><button onclick="DocumentVault.savePdfActive()">حفظ PDF</button><button onclick="DocumentVault.printActive()">🖨 طباعة</button><button onclick="DocumentVault.saveActive()">حفظ الملف</button><button onclick="DocumentVault.editActive()">✎ تحرير / نسخة معدّلة</button><button onclick="DocumentVault.shareActive()">مشاركة / Google</button><button class="alt" onclick="DocumentVault.closeModal('vViewModal')">عودة</button></div></div></div></div>
 <div id="vTextEditModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b id="vTextEditTitle">تحرير ملف نصي</b><button class="v-close" onclick="DocumentVault.closeModal('vTextEditModal')">×</button></div><div class="v-body"><p style="font-size:10px">يمكن تحرير TXT وCSV وJSON وXML وHTML هنا. تحفظ النتيجة محلياً أولاً ويمكنك الاحتفاظ بالأصل أو استبداله.</p><textarea id="vTextEdit" class="v-ocr-text" dir="auto" spellcheck="false"></textarea><div class="v-modal-actions"><button onclick="DocumentVault.saveTextEdit()">حفظ التعديل</button><button class="alt" onclick="DocumentVault.closeModal('vTextEditModal')">إلغاء</button></div></div></div></div><div id="vEditModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b>تحرير وتوضيح الصورة</b><button class="v-close" onclick="DocumentVault.closeModal('vEditModal')">×</button></div><div class="v-body"><canvas id="vEditCanvas" class="v-edit-canvas"></canvas><div class="v-controls"><label>قص من اليسار<input id="vCropL" type="range" min="0" max="45" value="0" oninput="DocumentVault.editorChanged()"></label><label>قص من اليمين<input id="vCropR" type="range" min="55" max="100" value="100" oninput="DocumentVault.editorChanged()"></label><label>قص من الأعلى<input id="vCropT" type="range" min="0" max="45" value="0" oninput="DocumentVault.editorChanged()"></label><label>قص من الأسفل<input id="vCropB" type="range" min="55" max="100" value="100" oninput="DocumentVault.editorChanged()"></label><label>الدوران<input id="vRotate" type="range" min="-180" max="180" step="90" value="0" oninput="DocumentVault.editorChanged()"></label><label>الإضاءة<input id="vBrightness" type="range" min="60" max="160" value="100" oninput="DocumentVault.editorChanged()"></label><label>التباين / التوضيح<input id="vContrast" type="range" min="60" max="180" value="100" oninput="DocumentVault.editorChanged()"></label></div><div class="v-modal-actions"><button onclick="DocumentVault.saveEditor()">اعتماد وحفظ</button><button onclick="DocumentVault.clarify()">✨ توضيح تلقائي</button><button class="alt" onclick="DocumentVault.resetEditor()">إعادة الأصل</button><button onclick="DocumentVault.saveEditorGallery()">حفظ في المعرض</button><button onclick="DocumentVault.saveEditorPdf()">حفظ PDF</button><button onclick="DocumentVault.printEditor()">🖨 طباعة</button></div></div></div></div>
 <div id="vOcrModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b>تحويل الصورة إلى نص قابل للنسخ</b><button class="v-close" onclick="DocumentVault.closeModal('vOcrModal')">×</button></div><div class="v-body"><div class="v-modal-actions"><button onclick="DocumentVault.ocrCamera()">📷 فتح الكاميرا</button><button onclick="DocumentVault.ocrGallery()">🖼 اختيار من الاستديو</button><button onclick="DocumentVault.ocrFilePicker()">📂 ملف صورة</button><button class="alt" onclick="DocumentVault.clearOcr()">مسح النص</button></div><img id="vOcrImage" class="v-ocr-source" style="display:none"><div id="vOcrProgress" class="v-progress">اختر صورة واضحة لبدء قراءة النص العربي أو الإنجليزي.</div><textarea id="vOcrText" class="v-ocr-text" placeholder="سيظهر النص هنا ويمكن تعديله ونسخه..."></textarea><div class="v-modal-actions"><button onclick="DocumentVault.copyOcr()">نسخ النص</button><button onclick="DocumentVault.selectOcr()">تحديد الكل</button><button onclick="DocumentVault.shareOcr()">مشاركة النص</button><button onclick="DocumentVault.saveOcrText()">حفظ TXT</button><button onclick="DocumentVault.saveOcrPdf()">حفظ PDF</button><button onclick="DocumentVault.saveOcrWithImage()">PDF مع الصورة</button><button onclick="DocumentVault.reOcr()">إعادة OCR</button><button onclick="DocumentVault.printOcr()">🖨 طباعة النص</button><button id="vOcrLoginBtn" onclick="DocumentVault.useOcrLogin()">إرسال إلى كارت الدخول</button></div></div></div></div>
 <div id="vBusy" class="v-busy"><div class="v-busy-card"><div class="v-spinner"></div><div id="vBusyText">جاري العمل...</div></div></div>
@@ -201,6 +201,89 @@ function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupIn
 
 function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
 async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
+function previousVersionName(name){
+  const text=niceName(name),match=text.match(/^(.*?)(\.[^.]*)?$/),tag=new Date().toISOString().replace(/[:.]/g,'-');
+  return (match?.[1]||text)+' (الأصل قبل التعديل '+tag+')'+(match?.[2]||'')
+}
+async function commitEditedFile(previous,blob,meta,keepOriginal){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let tx;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.get(previous.id);
+      request.onsuccess=()=>{
+        const current=request.result;
+        if(!current||current.deleted||current.syncRevision!==previous.syncRevision){
+          try{tx.abort()}catch(_){}
+          return
+        }
+        if(keepOriginal){
+          const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
+          original.originalOf=current.id;
+          original.favorite=current.favorite;
+          store.add(original)
+        }
+        store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),syncState:'pending',syncRevision:uuid()})
+      };
+      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      tx.oncomplete=()=>resolve(true);
+      tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ التعديل'));
+      tx.onabort=()=>reject(new Error('أُلغي الحفظ: الملف تغيّر أثناء التحرير أو تعذر التخزين'))
+    }catch(e){try{tx?.abort()}catch(_){}reject(e)}
+  })
+}
+async function saveEditedBlob(id,blob,meta={}){
+  const required=meta.image?'vaultImageEdit':'vaultEdit';
+  if(!requireVault(required))return false;
+  const previous=findItem(id);
+  if(!previous||previous.deleted||!previous.blob||!blob)return false;
+  if(blob.size<1||blob.size>100*1024*1024)return alert('يجب ألا يتجاوز حجم الملف المعدل 100 ميغابايت.'),false;
+  const mode=prompt('طريقة حفظ التعديل:\\n1 - الاحتفاظ بالنسخة الأصلية كملف مستقل\\n2 - استبدال الملف الحالي فقط\\nإلغاء: عدم حفظ أي تغيير','1');
+  if(mode===null)return false;
+  if(mode.trim()!=='1'&&mode.trim()!=='2')return alert('اختر 1 أو 2 فقط.'),false;
+  const keepOriginal=mode.trim()==='1';
+  if(keepOriginal&&(await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('وصل الأرشيف إلى حد 1000 ملف؛ لا توجد مساحة لنسخة أصلية جديدة.'),false;
+  try{
+    await commitEditedFile(previous,blob,meta,keepOriginal);
+    await refresh();
+    logOperation('edit','تحرير ملف محفوظ',keepOriginal?'تم الاحتفاظ بالأصل كملف مستقل':'تم استبدال الملف الحالي',previous.name);
+    if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
+    return true
+  }catch(e){alert('لم تُحفظ التعديلات: '+(e?.message||e));return false}
+}
+function pickRevisedFile(id){
+  if(!requireVault('vaultEdit'))return;
+  const item=findItem(id);if(!item||item.deleted)return;
+  state.replaceId=id;
+  const picker=$('vReplaceInput');if(!picker)return alert('اختيار الملف المعدل غير جاهز.');
+  picker.value='';
+  picker.click()
+}
+async function replaceFromDevice(file){
+  const id=state.replaceId;state.replaceId='';
+  if(!id||!file)return false;
+  const old=findItem(id);if(!old)return false;
+  const category=String(file.type||'').startsWith('image/')?'image':'file';
+  return saveEditedBlob(id,file,{name:file.name||old.name,mime:file.type||old.mime,category,image:false})
+}
+function editActive(){if(!activeId)return;const item=findItem(activeId);if(!item)return;if(isImage(item))editItem(activeId);else if(textEditable(item))editTextItem(activeId);else{alert('لملفات Word وExcel وPDF: افتح الملف في التطبيق المناسب عن طريق الحفظ أو المشاركة، ثم اختر النسخة المعدلة لإعادتها إلى الأرشيف.');pickRevisedFile(activeId)}}
+async function editTextItem(id){
+  if(!requireVault('vaultEdit'))return;
+  const item=findItem(id);if(!item||!textEditable(item))return;
+  if(item.blob.size>5*1024*1024)return alert('التحرير النصي الداخلي متاح حتى 5 ميغابايت. استخدم تطبيقاً خارجياً للملفات الأكبر.');
+  state.editTextId=id;
+  $('vTextEditTitle').textContent='تحرير: '+item.name;
+  $('vTextEdit').value=await item.blob.text();
+  showModal('vTextEditModal')
+}
+async function saveTextEdit(){
+  const id=state.editTextId,item=findItem(id);
+  if(!item||!textEditable(item))return;
+  const blob=new Blob([$('vTextEdit').value],{type:item.mime||'text/plain'});
+  if(await saveEditedBlob(id,blob,{name:item.name,mime:item.mime||'text/plain'})){state.editTextId='';closeModal('vTextEditModal')}
+}
+
 async function addFiles(fileList,category,input){
   const files=[...(fileList||[])];if(!files.length)return false;
   if(state.uploading){alert('جاري حفظ دفعة أخرى. انتظر اكتمالها قبل إضافة ملفات جديدة.');if(input)input.value='';return false}
@@ -275,7 +358,7 @@ function resetEditor(draw=true){if(!state.editor)return;Object.assign(state.edit
 function clarify(){if(!requireVault('vaultEnhance'))return;if(!state.editor)return;$('vBrightness').value=106;$('vContrast').value=128;editorChanged()}
 async function saveEditor(){if(!requireVault('vaultImageEdit'))return;
   let canvas=drawEditor(true);if(!canvas)return alert('حدود القص صغيرة جداً');setBusy(true,'حفظ الصورة المعدّلة بدون ضغط ضياعي...');
-  try{let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png')),item=findItem(state.editor.id);if(!blob||!item)throw new Error('تعذر إنشاء الصورة');item.blob=blob;item.mime='image/png';item.size=blob.size;item.name=item.name.replace(/\.[^.]+$/, '')+'.png';item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);closeModal('vEditModal');await refresh();if(autoSync()&&navigator.onLine)scheduleAutoSync(500)}
+  try{let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png')),item=findItem(state.editor.id);if(!blob||!item)throw new Error('تعذر إنشاء الصورة');const name=item.name.replace(/\.[^.]+$/,'')+'.png';if(await saveEditedBlob(item.id,blob,{name,mime:'image/png',category:'image',image:true}))closeModal('vEditModal')}
   catch(e){alert(e.message||'تعذر حفظ التعديل')}
   finally{setBusy(false)}
 }
@@ -402,6 +485,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={setFilter,setSort,setView,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
