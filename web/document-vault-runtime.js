@@ -296,7 +296,7 @@ async function addFiles(fileList,category,input){
     const records=files.map(file=>newVaultItem(file.name,file,category,undefined,folder));
     await dbPutBatch(records); // IndexedDB transaction is all-or-nothing on quota, abort or duplicate ID.
     committed=true;
-    state.filter=folder?'folder:'+folder:category;
+    state.filter=folder?'folder:'+folder:category==='image'?'image':'all';
     await refresh();
     logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',records.length+' عنصر');
     setSyncStatus('تم الحفظ محلياً • بانتظار المزامنة');
