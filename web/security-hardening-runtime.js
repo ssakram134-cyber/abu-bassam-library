@@ -24,9 +24,49 @@ function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecuri
 async function hmac(body,secret){if(!crypto?.subtle)throw new Error('CRYPTO_UNAVAILABLE');const key=await crypto.subtle.importKey('raw',enc(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return hex(await crypto.subtle.sign('HMAC',key,enc(body)))}
 function serverTime(device){const candidates=[device?.last_seen,device?.updated_at,device?.verified_at,device?.first_seen];for(const value of candidates){const n=Date.parse(value||'');if(Number.isFinite(n)&&n>0)return n}return Date.now()}
 function normalizeDevice(device){if(!device||!device.device_id)return null;return{schema:2,device_id:String(device.device_id),device_name:String(device.device_name||''),role:device.role==='owner'?'owner':'secondary',active:device.active!==false,permissions:device.permissions&&typeof device.permissions==='object'?device.permissions:{},verifiedAt:serverTime(device),appVersion:APP_VERSION}}
-async function seal(device){if(!nativeAvailable()||!online())return false;const record=normalizeDevice(device);if(!record||!record.active||record.device_id!==currentId())return false;const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)return false;const body=JSON.stringify(record),mac=await hmac(body,secret);await nativeRequest('secureSet',{key:SECURE_TRUST_KEY,value:JSON.stringify({body,mac})});cleanLegacy();lastSealAt=Date.now();return true}
+let trustEpoch=0,trustMutationTail=Promise.resolve();
+function queueTrustMutation(action){
+  // SecureStore calls can finish out of order. Always perform revocations
+  // after any write that was already in progress at sign-out time.
+  const next=trustMutationTail.catch(()=>{}).then(action);
+  trustMutationTail=next.catch(()=>{});
+  return next
+}
+async function seal(device){
+  if(!nativeAvailable()||!online())return false;
+  const record=normalizeDevice(device);
+  if(!record||!record.active||record.device_id!==currentId())return false;
+  const epoch=trustEpoch,offlineStart=offlineEpoch;
+  const sameSession=()=>{
+    const sec=window.AbuBassamSecurity;
+    return epoch===trustEpoch&&offlineStart===offlineEpoch&&online()&&
+      record.device_id===currentId()&&
+      (offlineSession||sec?.isOnlineUnlocked?.()===true)
+  };
+  if(!sameSession())return false;
+  const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+  if(!secret||!sameSession())return false;
+  const body=JSON.stringify(record),mac=await hmac(body,secret);
+  if(!sameSession())return false;
+  return queueTrustMutation(async()=>{
+    if(!sameSession())return false;
+    await nativeRequest('secureSet',{key:SECURE_TRUST_KEY,value:JSON.stringify({body,mac})});
+    cleanLegacy();
+    lastSealAt=Date.now();
+    return true
+  })
+}
 async function loadTrust(){if(!nativeAvailable())return null;const raw=String(await nativeRequest('secureGet',{key:SECURE_TRUST_KEY})||'');if(!raw)return null;let env;try{env=JSON.parse(raw)}catch(_){return null}if(!env?.body||!env?.mac)return null;const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)return null;const expected=await hmac(env.body,secret);if(!constantTime(expected,env.mac))return null;let trust;try{trust=JSON.parse(env.body)}catch(_){return null}if(trust?.schema!==2||trust?.appVersion!==APP_VERSION||trust?.device_id!==currentId()||trust?.active===false)return null;const now=Date.now(),verified=Number(trust.verifiedAt||0);if(!verified||now+CLOCK_SKEW_MS<verified||now-verified>OFFLINE_GRACE_MS)return null;return trust}
-async function clearTrust(){try{if(nativeAvailable())await nativeRequest('secureDelete',{key:SECURE_TRUST_KEY})}catch(_){}cleanLegacy()}
+async function clearTrust(){
+  trustEpoch++;
+  lastSealAt=0;
+  try{
+    await queueTrustMutation(async()=>{
+      if(nativeAvailable())await nativeRequest('secureDelete',{key:SECURE_TRUST_KEY})
+    })
+  }catch(error){console.warn('Failed to clear offline trust in SecureStore',error)}
+  cleanLegacy()
+}
 async function biometricCheck(){if(!nativeAvailable())throw new Error('الفتح دون إنترنت متاح داخل تطبيق Android فقط.');const status=await nativeRequest('biometricStatus');if(!status?.available||!status?.enrolled)throw new Error('يلزم تفعيل بصمة الجهاز لاستخدام الفتح دون إنترنت.');const result=await nativeRequest('biometricAuth',{reason:'فتح مكتبة أبو بسام دون إنترنت'});if(!result?.success)throw new Error(result?.error==='user_cancel'?'تم إلغاء البصمة.':'لم تنجح المصادقة بالبصمة.');return true}
 function applyOfflineDevice(trust){const sec=window.AbuBassamSecurity;if(!sec)return false;sec.__offlineTrust=trust;sec.__offlineRole=trust.role;sec.__offlinePermissions=trust.permissions||{};return true}
 function clearOfflineState(){offlineEpoch++;const sec=window.AbuBassamSecurity;offlineSession=false;offlineBackgroundAt=0;if(sec){sec.__offlineTrust=null;sec.__offlineRole='';sec.__offlinePermissions={}}}
