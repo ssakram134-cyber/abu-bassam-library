@@ -43,6 +43,10 @@ assert.throws(()=>planner.planFolderTransfer(files,'z1','علي','reorder',1,'r1
 const full=Array.from({length:1000},(_,i)=>row('item-'+i,'حافظة',i+1));
 assert.throws(()=>planner.planFolderTransfer(full,'item-0','أخرى','copy',1,'r1'),/VAULT_LIMIT_1000/);
 assert.match(source,/state\.sort='manual'/,'Folder operations activate manual sort');
+assert.match(source,/id="vFolderTabs"/,'Custom archive folders are navigable');
+assert.match(source,/function pickIntoFolder\(kind\)/,'File picker supports selected custom folder');
+assert.match(source,/state\.uploadFolder=state\.filter\.slice\(7\)/,'Selected folder is used for upload');
+assert.match(source,/onclick="DocumentVault\.pasteToFolder\(\)"/,'Folder paste control exists');
 assert.match(source,/copyItem,cutItem,pasteToFolder,moveItem,reorderItem/,'Controls exported');
 assert.match(source,/clip\.scope!==syncScope\(\)/,'Clipboard scoped to account and device');
 assert.match(source,/state\.clipboard=null;updateVaultAccessUi\(\)/,'Sign out clears temporary cut/copy');
