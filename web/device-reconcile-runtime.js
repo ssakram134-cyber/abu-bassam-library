@@ -60,7 +60,7 @@ async function removeDevice(id){if(!owner())return alert('هذه العملية 
 function adjustLimit(delta){const input=$('abuDeviceLimitInput');if(!input)return;const min=Math.max(1,Number(input.min)||1),next=Math.max(min,Math.min(50,(Number(input.value)||5)+Number(delta||0)));input.value=String(next);updateLimitHint()}
 function updateLimitHint(current){const input=$('abuDeviceLimitInput'),info=$('abuDeviceLimitInfo');if(!input||!info)return;const c=Number.isFinite(current)?current:Math.max(0,Number(input.dataset.deviceCount)||0),n=Math.max(1,Math.min(50,Number(input.value)||5));info.textContent=`المسجل حاليًا: ${c} • الحد المختار: ${n} • المسموح من ${Math.max(1,c)} إلى 50 جهازًا.`}
 async function saveLimit(){if(!owner())return alert('تغيير عدد الأجهزة متاح للحساب الرئيسي فقط.');if(!client()||!connected())return alert('اربط الحساب بالإنترنت أولًا.');try{const scope=ownerScope();requireOwnerScope(scope);const input=$('abuDeviceLimitInput'),c=await count();requireOwnerScope(scope);const value=Math.max(Math.max(1,c),Math.min(50,Number(input?.value)||5)),{scope:_scope,...args}=await ownerArgs();requireOwnerScope(scope);args.p_device_limit=value;const r=await client().rpc('abu_bassam_set_device_limit',args);requireOwnerScope(scope);if(r.error)throw r.error;const saved=Math.max(1,Math.min(50,Number(r.data)||value));localStorage.setItem(LIMIT_KEY,String(saved));if(input){input.value=String(saved);input.min=String(Math.max(1,c));input.dataset.deviceCount=String(c)}patchLabels(saved);updateLimitHint(c);alert(`تم اعتماد عدد الأجهزة: ${saved}`)}catch(e){alert('تعذر حفظ عدد الأجهزة: '+String(e.message||e))}}
-async function refreshLimitUi(){if(!owner())return;const scope=ownerScope();if(!scope)return;const input=$('abuDeviceLimitInput');if(!input)return;try{const [limit,c]=await Promise.all([readLimit(),count()]);requireOwnerScope(scope);input.min=String(Math.max(1,c));input.max='50';input.value=String(Math.max(limit,c));input.dataset.deviceCount=String(c);const buttons=[...document.querySelectorAll('#abuDeviceLimitSettings .abu-device-stepper button')];if(buttons[0])buttons[0].onclick=()=>adjustLimit(-1);if(buttons[1])buttons[1].onclick=()=>adjustLimit(1);input.onchange=()=>{const min=Math.max(1,c);input.value=String(Math.max(min,Math.min(50,Number(input.value)||limit)));updateLimitHint(c)};const save=$('abuDeviceLimitSave');if(save){save.disabled=false;save.style.opacity='1';save.onclick=saveLimit}patchLabels(limit);updateLimitHint(c)}catch(e){if(ownerScope()===scope){const info=$('abuDeviceLimitInfo');if(info)info.textContent='تعذر جلب عدد الأجهزة من الخادم: '+String(e.message||e)}}}
+async function refreshLimitUi(){if(!owner())return;const scope=ownerScope();if(!scope)return;const input=$('abuDeviceLimitInput');if(!input)return;try{const [limit,c]=await Promise.all([readLimit(),count()]);requireOwnerScope(scope);input.disabled=false;input.min=String(Math.max(1,c));input.max='50';input.value=String(Math.max(limit,c));input.dataset.deviceCount=String(c);const buttons=[...document.querySelectorAll('#abuDeviceLimitSettings .abu-device-stepper button')];if(buttons[0])buttons[0].onclick=()=>adjustLimit(-1);if(buttons[1])buttons[1].onclick=()=>adjustLimit(1);input.onchange=()=>{const min=Math.max(1,c);input.value=String(Math.max(min,Math.min(50,Number(input.value)||limit)));updateLimitHint(c)};const save=$('abuDeviceLimitSave');if(save){save.disabled=false;save.style.opacity='1';save.onclick=saveLimit}patchLabels(limit);updateLimitHint(c)}catch(e){if(ownerScope()===scope){const info=$('abuDeviceLimitInfo');if(info)info.textContent='تعذر جلب عدد الأجهزة من الخادم: '+String(e.message||e)}}}
 function patch(){let sec=window.AbuBassamSecurity;if(!sec||sec.__abuDeviceReconcilePatchedV2)return false;sec.openDevices=async function(){if(!owner())return alert('إدارة الأجهزة متاحة للحساب الرئيسي فقط.');$('abuDeviceModal')?.classList.add('show');await render()};sec.renderDevices=render;sec.renameDevice=renameDevice;sec.toggleDevice=toggleDevice;sec.permissionsDevice=()=>alert('محرر الصلاحيات المتقدمة غير جاهز. أعد فتح التطبيق.');sec.removeDevice=removeDevice;sec.__abuDeviceReconcilePatched=true;sec.__abuDeviceReconcilePatchedV2=true;syncSecurityCardLabel();refreshLimitUi();const scope=ownerScope();if(scope)readLimit().then(limit=>{if(ownerScope()===scope)patchLabels(limit)}).catch(()=>{});return true}
 function onDeviceActionClick(event){
   const button=event.target?.closest?.('button[data-abu-device-action]');
@@ -77,7 +77,23 @@ function onDeviceActionClick(event){
   else if(action==='permissions')void api?.permissionsDevice?.(id);
   else if(action==='remove')void api?.removeDevice?.(id)
 }
-function init(){document.addEventListener('click',onDeviceActionClick);document.addEventListener('abu-bassam-security-state',invalidateOwnerSession);if(!patch())throw new Error('AbuBassamSecurity غير جاهز لإدارة الأجهزة');document.addEventListener('abu-bassam-auth-changed',()=>{invalidateOwnerSession();setTimeout(()=>{render();refreshLimitUi();syncSecurityCardLabel()},100)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&owner())setTimeout(()=>{refreshLimitUi();syncSecurityCardLabel()},100)})}
+function clearOwnerRegistryUi(){
+  const box=$('abuDeviceList');
+  if(box)box.textContent='إدارة الأجهزة متاحة للحساب الرئيسي فقط.';
+  $('abuDeviceModal')?.classList.remove('show');
+  const input=$('abuDeviceLimitInput'),save=$('abuDeviceLimitSave');
+  if(input)input.disabled=true;
+  if(save)save.disabled=true
+}
+function onOwnerSecurityState(){
+  invalidateOwnerSession();
+  if(!owner())clearOwnerRegistryUi();
+  else{
+    if($('abuDeviceModal')?.classList.contains('show'))void render();
+    void refreshLimitUi()
+  }
+}
+function init(){document.addEventListener('click',onDeviceActionClick);document.addEventListener('abu-bassam-security-state',onOwnerSecurityState);if(!patch())throw new Error('AbuBassamSecurity غير جاهز لإدارة الأجهزة');document.addEventListener('abu-bassam-auth-changed',()=>{invalidateOwnerSession();clearOwnerRegistryUi();setTimeout(()=>{if(owner()){render();refreshLimitUi();syncSecurityCardLabel()}},100)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&owner())setTimeout(()=>{refreshLimitUi();syncSecurityCardLabel()},100)})}
 window.AbuBassamDeviceRegistry={rows,count,readLimit,render,refreshLimitUi};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
