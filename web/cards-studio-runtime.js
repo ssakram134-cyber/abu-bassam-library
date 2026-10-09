@@ -184,12 +184,33 @@ function childInstitution(data){return data.institutionType==='school'?(data.sch
 function loginServices(model){let current=model.data.service||'facebook',items=[['facebook','f','فيسبوك'],['apple','●','ابل ستور'],['google','▶','سوق بلي'],['email','✉','بريد إلكتروني'],['other','●','اكاونت / غيرها']];return `<div class="cs-login-services cs-editable-text" ${textAttrs(model,'secondary','قائمة أنواع الحسابات')}><div class="cs-login-services-title">حسابات تسجيل الدخول</div>${items.map(item=>`<div class="cs-login-service ${current===item[0]?'active':''}"><span class="cs-login-service-icon">${item[1]}</span><b>${item[2]}</b></div>`).join('')}</div>`}
 function loginContact(model){let values=[model.brand.phone&&'☎ '+model.brand.phone,model.brand.email&&'✉ '+model.brand.email,model.brand.website&&'⌁ '+model.brand.website].filter(Boolean).map(esc);return `<div class="cs-login-contact cs-editable-text" ${textAttrs(model,'footer','الشريط السفلي')}>${values.join(' | ')}</div>`}
 
+function vcardEscape(value){return String(value??'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,')}
+function vcardPhone(value){return String(value||'').replace(/[^0-9+]/g,'')}
+function guardianWhatsApp(value){const digits=String(value||'').replace(/\D/g,'');return /^07\d{9}$/.test(digits)?'https://wa.me/964'+digits.slice(1):''}
 function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,b.address,b.email,b.website].filter(Boolean).join(' | ');
-  if(model.type==='personal')return ['BEGIN:VCARD','VERSION:3.0','FN:'+d.name,'TEL:'+d.phone,'EMAIL:'+d.email,'ADR:;;'+d.address,'URL:'+(d.location||('https://t.me/'+String(d.telegram||'').replace(/^@/,''))),'NOTE:Telegram '+d.telegram+' | '+d.notes+' | '+brand,'END:VCARD'].join('\n');
-  if(model.type==='child')return ['BEGIN:VCARD','VERSION:3.0','FN:'+d.name,'ORG:'+childInstitution(d),'TEL;TYPE=CELL:'+d.guardianPhone,'TEL;TYPE=WORK:'+d.driverPhone,'ADR:;;'+d.address,'NOTE:خط النقل '+d.line+' | '+d.notes+' | '+brand,'END:VCARD'].join('\n');
-  if(model.type==='login')return `الخدمة: ${serviceName(d)}\nالحساب: ${d.account}\nكلمة السر: ${d.password}\nملاحظات: ${d.notes}\nالمصدر: ${brand}`;
-  if(model.type==='wifi')return `WIFI:T:${d.security};S:${String(d.ssid).replace(/([\\;,:"])/g,'\\$1')};P:${String(d.password).replace(/([\\;,:"])/g,'\\$1')};H:${d.hidden?'true':'false'};;`;
-  let content=d.content||state.lastBarcode||'';if(d.kind==='email')return'mailto:'+content;if(d.kind==='phone')return'tel:'+content.replace(/[^0-9+]/g,'');if(d.kind==='url')return/^https?:\/\//i.test(content)?content:'https://'+content;return content||`العنوان: ${d.title||''}\nالوصف: ${d.caption||''}\nالمصدر: ${brand}`;
+  if(model.type==='personal'){
+    const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name)];
+    if(d.phone)rows.push('TEL:'+vcardPhone(d.phone));
+    if(d.email)rows.push('EMAIL:'+vcardEscape(d.email));
+    if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
+    const contactUrl=String(d.location||'').trim()||(d.telegram?'https://t.me/'+String(d.telegram).replace(/^@/,''):'');
+    if(contactUrl)rows.push('URL:'+vcardEscape(contactUrl));
+    rows.push('NOTE:'+vcardEscape('Telegram '+(d.telegram||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    return rows.join('\n');
+  }
+  if(model.type==='child'){
+    const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name),'ORG:'+vcardEscape(childInstitution(d))];
+    if(d.guardianPhone)rows.push('TEL;TYPE=CELL:'+vcardPhone(d.guardianPhone));
+    if(d.driverPhone)rows.push('TEL;TYPE=WORK:'+vcardPhone(d.driverPhone));
+    if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
+    const whatsapp=guardianWhatsApp(d.guardianPhone);
+    if(whatsapp)rows.push('URL:'+whatsapp);
+    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    return rows.join('\n');
+  }
+  if(model.type==='login')return 'الخدمة: '+serviceName(d)+'\nالحساب: '+(d.account||'')+'\nكلمة السر: '+(d.password||'')+'\nملاحظات: '+(d.notes||'')+'\nالمصدر: '+brand;
+  if(model.type==='wifi')return 'WIFI:T:'+(d.security||'WPA')+';S:'+String(d.ssid||'').replace(/([\\;,:"])/g,'\\$1')+';P:'+String(d.password||'').replace(/([\\;,:"])/g,'\\$1')+';H:'+(d.hidden?'true':'false')+';;';
+  let content=d.content||state.lastBarcode||'';if(d.kind==='email')return'mailto:'+content;if(d.kind==='phone')return'tel:'+content.replace(/[^0-9+]/g,'');if(d.kind==='url')return/^https?:\/\//i.test(content)?content:'https://'+content;return content||'العنوان: '+(d.title||'')+'\nالوصف: '+(d.caption||'')+'\nالمصدر: '+brand;
 }
 function qrSvg(text){try{if(typeof qrcode!=='function')return '<div class="cs-photo-empty">QR</div>';let qr=qrcode(0,'M');qr.addData(String(text||' '));qr.make();return qr.createSvgTag({cellSize:3,margin:12,scalable:true})}catch(e){return '<div class="cs-photo-empty">البيانات طويلة</div>'}}
 
