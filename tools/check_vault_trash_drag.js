@@ -11,12 +11,16 @@ function between(src,start,end){
  assert.ok(i>=0&&j>i,'Missing '+start);
  return src.slice(i,j);
 }
-assert.match(source,/indexedDB\.open\(DB_NAME,2\)/);
-assert.match(hard,/indexedDB\.open\(DB,2\)/);
-assert.match(advanced,/indexedDB\.open\(DB_NAME,2\)/);
+assert.match(source,/indexedDB\.open\(DB_NAME,3\)/);
+assert.match(hard,/indexedDB\.open\(DB,3\)/);
+assert.match(advanced,/indexedDB\.open\(DB_NAME,3\)/);
 for(const js of [source,hard,advanced]){
  assert.match(js,/createObjectStore\('trash',\{keyPath:'id'\}\)/,'Trash DB migration must preserve existing items');
  assert.match(js,/createIndex\('expiresAt','expiresAt'\)/,'Expiry index');
+}
+for(const js of [source,hard,advanced]){
+ assert.match(js,/createObjectStore\('checkpoints',\{keyPath:'id'\}\)/,'v3 metadata checkpoints store');
+ assert.match(js,/createIndex\('expiresAt','expiresAt'\)/,'Checkpoint retention index');
 }
 assert.match(source,/data-filter="trash"/);
 assert.match(source,/TRASH_DAYS=30/);
