@@ -15,6 +15,13 @@ assert.equal(cat.typeOf({name:'slides.pptx'}),'powerpoint');
 assert.equal(cat.typeOf({name:'file.pdf'}),'pdf');
 assert.equal(cat.textEditable({name:'notes.txt'}),true);
 assert.equal(cat.textEditable({name:'file.docx'}),false);
+const mimeSource=section('function fileMime(','\nfunction formatBytes(');
+const fileMime=new Function('ext',mimeSource+';return fileMime')(ext);
+assert.equal(fileMime('document.docx','application/octet-stream'),'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+assert.equal(fileMime('finance.xlsx',''),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+assert.equal(fileMime('scanned.pdf',''),'application/pdf');
+assert.match(source,/function viewObjectUrl\(blob\)/,'Preview URL is independent from thumbnail URLs');
+assert.match(source,/if\(id==='vViewModal'&&state\.previewUrl\)/,'Preview URL is released on close');
 let sort='modified-desc',filter='all',query='';
 const items=[
  {name:'old.docx',mime:'',folder:'',category:'file',createdAt:'2026-01-01',updatedAt:'2026-06-01',size:100},
