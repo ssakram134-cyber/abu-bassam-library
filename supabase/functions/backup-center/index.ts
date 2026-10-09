@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.58.0";
+import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { sha256 } from "npm:@noble/hashes@1.5.0/sha256";
 
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')!;
@@ -13,13 +13,16 @@ function userClient(req:Request){return createClient(SUPABASE_URL,ANON_KEY,{glob
 function adminClient(){return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}})}
 async function sha256Hex(v:string){const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function permissionEnabled(device:{role?:string;permissions?:Record<string,unknown>},key:string){if(device?.role==='owner')return true;const p=device?.permissions&&typeof device.permissions==='object'?device.permissions:{};return p[key]===true}
-async function context(req:Request,permission:string){
+// Retention and stale-upload cleanup are destructive, including when called from create/restore flows.
+function mayCleanup(base:{device:{role?:string;permissions?:Record<string,unknown>}}){return permissionEnabled(base.device,'backupDelete')}
+async function context(req:Request,permission:string|string[]){
   const deviceId=req.headers.get('x-device-id')||'',secret=req.headers.get('x-device-secret')||'';
   if(!deviceId||!secret)throw new Error('DEVICE_REQUIRED');
   const uc=userClient(req),{data:{user},error:ue}=await uc.auth.getUser();if(ue||!user)throw new Error('NOT_AUTHENTICATED');
   const admin=adminClient(),{data:device,error}=await admin.from('abu_bassam_devices').select('device_id,device_name,role,active,permissions,secret_hash').eq('user_id',user.id).eq('device_id',deviceId).maybeSingle();
   if(error||!device||device.active===false||!device.secret_hash||device.secret_hash!==await sha256Hex(secret))throw new Error('DEVICE_NOT_AUTHORIZED');
-  if(!permissionEnabled(device,permission))throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
+  const permitted=Array.isArray(permission)?permission.some(key=>permissionEnabled(device,key)):permissionEnabled(device,permission);
+  if(!permitted)throw new Error(Array.isArray(permission)?'BACKUP_ACCESS_NOT_ALLOWED':permission.toUpperCase()+'_NOT_ALLOWED');
   return{user,admin,deviceId,device};
 }
 function safeId(v:string){return String(v||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180)}
@@ -77,7 +80,7 @@ Deno.serve(async(req:Request)=>{
     const url=new URL(req.url),action=url.searchParams.get('action')||'';
     if(action==='plan'&&req.method==='POST'){
       const body=await req.json().catch(()=>({})),kind=['manual','automatic','pre_restore'].includes(body.backup_kind)?body.backup_kind:'manual';
-      const base=await context(req,kind==='pre_restore'?'backupRestore':'backupCreate');const cleanupDeferred=await cleanupPending(base);
+      const base=await context(req,kind==='pre_restore'?'backupRestore':'backupCreate');const cleanupDeferred=mayCleanup(base)?await cleanupPending(base):0;
       const sha=String(body.sha256||'').toLowerCase(),size=Number(body.size_bytes||0),count=Number(body.item_count||0),partCount=Number(body.part_count||0),encrypted=!!body.encrypted;
       if(!/^[0-9a-f]{64}$/.test(sha))return json({error:'INVALID_SHA256'},400);
       if(!Number.isInteger(size)||size<0||size>MAX_BYTES||!Number.isInteger(count)||count<0||count>MAX_ITEMS||!Number.isInteger(partCount)||partCount<1||partCount>MAX_PARTS)return json({error:'BACKUP_LIMIT_INVALID'},400);
@@ -91,18 +94,19 @@ Deno.serve(async(req:Request)=>{
     }
     if(action==='commit'&&req.method==='POST'){
       const body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),retention=Math.max(1,Math.min(30,Number(body.retention)||7));
-      const base=await context(req,'backupRestore');
+      const base=await context(req,['backupCreate','backupRestore']);
       const {data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).maybeSingle();
       if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);
       if(row.branch_device_id!==base.deviceId)return json({error:'BACKUP_SCOPE_DENIED'},403);
-      if(row.backup_kind!=='pre_restore'&&!permissionEnabled(base.device,'backupCreate'))return json({error:'BACKUPCREATE_NOT_ALLOWED'},403);
+      const requiredPermission=row.backup_kind==='pre_restore'?'backupRestore':'backupCreate';
+      if(!permissionEnabled(base.device,requiredPermission))return json({error:requiredPermission.toUpperCase()+'_NOT_ALLOWED'},403);
       if(row.ready)return json({ok:true,already_ready:true});
       const parts=Array.isArray(row.parts)?row.parts.map(String):[];
       try{await verifyParts(base.admin,parts,Number(row.size_bytes),String(row.sha256||''))}
       catch(error){return json({error:String((error as Error)?.message||error)},409)}
       const {error:updateError}=await base.admin.from(TABLE).update({ready:true,committed_at:new Date().toISOString()}).eq('user_id',base.user.id).eq('backup_id',backupId);
       if(updateError)return json({error:updateError.message},500);
-      const cleanupDeferred=row.backup_kind==='pre_restore'?0:await cleanupReady(base,retention);
+      const cleanupDeferred=row.backup_kind==='pre_restore'||!mayCleanup(base)?0:await cleanupReady(base,retention);
       return json({ok:true,backup_id:backupId,retention,cleanup_deferred:cleanupDeferred,sha256_verified:true});
     }
     if(action==='list'&&req.method==='GET'){
@@ -114,7 +118,7 @@ Deno.serve(async(req:Request)=>{
     if(action==='delete'&&req.method==='DELETE'){
       const base=await context(req,'backupDelete'),body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),{data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).maybeSingle();if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);if(!scopeAllowed(base.device,base.deviceId,row))return json({error:'BACKUP_SCOPE_DENIED'},403);const parts=Array.isArray(row.parts)?row.parts.map(String):[];await deleteMetadata(base.admin,base.user.id,backupId);let cleanup_deferred=0;try{await removeParts(base.admin,parts)}catch(_){cleanup_deferred=1}return json({ok:true,cleanup_deferred});
     }
-    if(action==='cleanup'&&req.method==='POST'){const body=await req.json().catch(()=>({})),base=await context(req,'backupRestore'),pending=await cleanupPending(base),ready=await cleanupReady(base,Math.max(1,Math.min(30,Number(body.retention)||7)));return json({ok:true,cleanup_deferred:pending+ready})}
+    if(action==='cleanup'&&req.method==='POST'){const body=await req.json().catch(()=>({})),base=await context(req,'backupDelete'),pending=await cleanupPending(base),ready=await cleanupReady(base,Math.max(1,Math.min(30,Number(body.retention)||7)));return json({ok:true,cleanup_deferred:pending+ready})}
     return json({error:'UNSUPPORTED_ACTION'},400);
   }catch(error){const message=String((error as Error)?.message||error||'SERVER_ERROR'),status=message==='NOT_AUTHENTICATED'?401:/NOT_ALLOWED|DEVICE|SCOPE/.test(message)?403:500;return json({error:message},status)}
 });
