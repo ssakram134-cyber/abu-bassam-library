@@ -1122,7 +1122,7 @@ async function testPaperAiPhotoSessionRaces(){
     +'readyAiCloudWithin=async()=>{},'
     +'AbortController=class{abort(){}get signal(){return{}}},'
     +'setTimeout=()=>1,clearTimeout=()=>{},'
-    +'fetch:()=>new Promise(resolve=>responses.push(resolve)),'
+    +'fetch=()=>new Promise(resolve=>responses.push(resolve)),'
     +'Image=class{set src(value){this._src=value;Promise.resolve().then(()=>this.onload?.())}},'
     +'refreshPeople=()=>{},renderPaper=()=>{draws++},paperDraftChanged=()=>{};'
     +html.slice(first,last)
