@@ -19,6 +19,36 @@ function recordPaths(rows){(rows||[]).forEach(row=>{const path=String(row?.data?
 async function rpc(name,args){const c=client();if(!c||!connected())throw new Error('اربط حساب المزامنة أولًا');const {data,error}=await c.rpc(name,args);if(error)throw error;return data}
 async function vaultList(limit=10000){if(!allowed('vaultView'))throw new Error('VAULT_VIEW_NOT_ALLOWED');const cr=await credentials(),max=Math.max(1,Math.min(20000,Number(limit)||10000)),out=[];let offset=0;while(out.length<max){const take=Math.min(500,max-out.length),data=await rpc('abu_bassam_vault_list',{p_device_id:cr.deviceId,p_device_secret:cr.secret,p_limit:take,p_offset:offset}),rows=Array.isArray(data)?data:[];out.push(...rows);if(rows.length<take)break;offset+=rows.length}return recordPaths(out)}
 async function vaultGet(id){if(!allowed('vaultView'))throw new Error('VAULT_VIEW_NOT_ALLOWED');const c=await credentials(),data=await rpc('abu_bassam_vault_get',{p_device_id:c.deviceId,p_device_secret:c.secret,p_client_id:String(id)}),row=Array.isArray(data)?data[0]:data;if(row)recordPaths([row]);return row||null}
+async function ownerList(limit=1000){
+ if(role()!=='owner'||!allowed('vaultViewOtherBranches')||!allowed('vaultView')||!localScopeOk(false))throw new Error('VAULT_OWNER_REQUIRED');
+ const scope=String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id;
+ const cr=await credentials(),out=[];
+ let offset=0,max=Math.max(1,Math.min(5000,Number(limit)||1000));
+ while(out.length<max){
+  const take=Math.min(250,max-out.length);
+  const rows=await rpc('abu_bassam_vault_owner_list',{p_device_id:cr.deviceId,p_device_secret:cr.secret,p_limit:take,p_offset:offset}),page=Array.isArray(rows)?rows:[];
+  if(role()!=='owner'||!localScopeOk(false)||String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id!==scope)throw new Error('VAULT_SCOPE_CHANGED');
+  out.push(...page.filter(x=>x?.client_id&&x?.branch_device_id&&x?.data?.deleted!==true));
+  if(page.length<take)break;
+  offset+=page.length
+ }
+ return out
+}
+async function ownerDownload(row){
+ if(role()!=='owner'||!allowed('vaultViewOtherBranches')||!allowed('vaultView')||!localScopeOk(false))throw new Error('VAULT_OWNER_REQUIRED');
+ const identity=String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id;
+ const id=String(row?.client_id||''),target=String(row?.branch_device_id||''),version=String(row?.updated_at||'');
+ if(!id||!target||!version)throw new Error('VAULT_ITEM_OR_VERSION_REQUIRED');
+ const query='&item_id='+encodeURIComponent(id)+'&branch_device_id='+encodeURIComponent(target)+'&updated_at='+encodeURIComponent(version);
+ const plan=await edge('owner-download-url',{query});
+ const stillAllowed=()=>role()==='owner'&&allowed('vaultViewOtherBranches')&&localScopeOk(false)&&String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id===identity;
+ if(!stillAllowed())throw new Error('VAULT_SCOPE_CHANGED');
+ const response=await fetch(plan.url,{cache:'no-store'});
+ if(!response.ok)throw new Error('VAULT_SHARED_DOWNLOAD_FAILED');
+ const blob=await response.blob();
+ if(!stillAllowed())throw new Error('VAULT_SCOPE_CHANGED');
+ return {blob,name:String(row.data?.name||'ملف'),mime:String(row.data?.mime||blob.type||'application/octet-stream')}
+}
 async function vaultUpsert(id,data,expectedRemoteUpdatedAt=null){if(!allowed('vaultSync'))throw new Error('VAULT_SYNC_NOT_ALLOWED');const c=await credentials(),rows=await rpc('abu_bassam_vault_upsert_cas',{p_device_id:c.deviceId,p_device_secret:c.secret,p_client_id:String(id),p_data:data&&typeof data==='object'?data:{},p_expected_updated_at:expectedRemoteUpdatedAt||null}),row=Array.isArray(rows)?rows[0]:rows;if(row)recordPaths([row]);return row||null}
 async function edge(action,{method='GET',body=null,query=''}={}){const c=client();if(!c||!connected())throw new Error('اربط حساب المزامنة أولًا');const cr=await credentials(),{data:{session}}=await c.auth.getSession();if(!session?.access_token)throw new Error('الجلسة غير متاحة');const url=`https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/branch-vault?action=${encodeURIComponent(action)}${query}`;const res=await fetch(url,{method,headers:{Authorization:`Bearer ${session.access_token}`,apikey:'sb_publishable_Umb40YIAVf6YSYsncrBcjw_FhBGogw1','Content-Type':'application/json','x-device-id':cr.deviceId,'x-device-secret':cr.secret},body:body===null?undefined:JSON.stringify(body),cache:'no-store'});const out=await res.json().catch(()=>({}));if(!res.ok||out?.error)throw new Error(out?.error||`HTTP_${res.status}`);return out}
 async function uploadVault(id,blob,mime){if(!allowed('vaultSync'))throw new Error('VAULT_SYNC_NOT_ALLOWED');const c=client(),plan=await edge('upload-url',{method:'POST',body:{item_id:String(id),mime:mime||blob?.type||'application/octet-stream'}});const {data,error}=await c.storage.from(BUCKET).uploadToSignedUrl(plan.path,plan.token,blob,{contentType:mime||blob?.type||'application/octet-stream',upsert:true});if(error)throw error;pathToId.set(plan.path,String(id));return data?.path||plan.path}
@@ -48,8 +78,8 @@ function registerCloudAdapter(){
 }
 function localScopeOk(show=true){const d=device();if(!d.id)return false;const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||''),target=(uid||'local')+':'+d.id,old=String(localStorage.getItem(SCOPE_KEY)||'');if(!old){localStorage.setItem(SCOPE_KEY,target);return true}if(old===d.id){localStorage.setItem(SCOPE_KEY,target);return true}if(old==='local:'+d.id&&uid){localStorage.setItem(SCOPE_KEY,target);return true}if(old===target)return true;if(show)alert('هذا الأرشيف المحلي مرتبط بحساب أو فرع آخر على هذا الجهاز. لن تُعرض ملفاته أو تُنقل تلقائيًا حفاظًا على الخصوصية.');return false}
 function lockUi(){const center=document.getElementById('vaultCenter');if(!center)return;center.classList.add('abu-vault-branch-locked');let box=document.getElementById('abuVaultBranchLock');if(!box){box=document.createElement('div');box.id='abuVaultBranchLock';box.style.cssText='margin:12px;padding:18px;border-radius:14px;background:#fff1d7;color:#6d4a12;font-weight:900;text-align:center';box.textContent='🔒 هذا الأرشيف المحلي يعود إلى فرع آخر على هذا الجهاز، لذلك تم حجبه.';center.prepend(box)}}
-function updateUi(){const center=document.getElementById('vaultCenter');if(!center)return;if(!localScopeOk(false)){lockUi();return}center.classList.remove('abu-vault-branch-locked');document.getElementById('abuVaultBranchLock')?.remove();let badge=document.getElementById('abuVaultBranchBadge');if(!badge){badge=document.createElement('div');badge.id='abuVaultBranchBadge';badge.style.cssText='margin-top:8px;padding:7px 9px;border-radius:10px;background:#ffffff22;color:#fff;font-size:8px;font-weight:900';const hero=center.querySelector('.v-hero');hero?.appendChild(badge)}const d=device();if(badge)badge.textContent=`🔒 ملفات خاصة بهذا الفرع فقط • ${d.name} • الفروع الأخرى لا تستطيع رؤيتها`;const map=[['.v-upload-grid','vaultAdd'],['#vAutoSync','vaultSync']];map.forEach(([sel,p])=>center.querySelectorAll(sel).forEach(el=>{el.style.opacity=allowed(p)?'1':'.45';el.style.pointerEvents=allowed(p)?'':'none'}))}
+function updateUi(){const center=document.getElementById('vaultCenter');if(!center)return;if(!localScopeOk(false)){lockUi();return}center.classList.remove('abu-vault-branch-locked');document.getElementById('abuVaultBranchLock')?.remove();let badge=document.getElementById('abuVaultBranchBadge');if(!badge){badge=document.createElement('div');badge.id='abuVaultBranchBadge';badge.style.cssText='margin-top:8px;padding:7px 9px;border-radius:10px;background:#ffffff22;color:#fff;font-size:8px;font-weight:900';const hero=center.querySelector('.v-hero');hero?.appendChild(badge)}const d=device();if(badge)badge.textContent=`🔒 أرشيف هذا الفرع مستقل • ${d.name} • المدير فقط يستطيع استعراض الفروع الأخرى`;const map=[['.v-upload-grid','vaultAdd'],['#vAutoSync','vaultSync']];map.forEach(([sel,p])=>center.querySelectorAll(sel).forEach(el=>{el.style.opacity=allowed(p)?'1':'.45';el.style.pointerEvents=allowed(p)?'':'none'}))}
 function boot(){if(!registerCloudAdapter())throw new Error('VAULT_GATEWAY_NOT_READY');updateUi();document.addEventListener('abu-bassam-auth-changed',()=>{updateUi()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')updateUi()})}
-window.AbuBassamBranchVault={allowed,credentials,list:vaultList,get:vaultGet,upsert:vaultUpsert,upload:uploadVault,download:downloadVault,remove:removeVault,localScopeOk,defaults:{}};
+window.AbuBassamBranchVault={allowed,credentials,list:vaultList,get:vaultGet,upsert:vaultUpsert,upload:uploadVault,download:downloadVault,remove:removeVault,ownerList,ownerDownload,localScopeOk,defaults:{}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

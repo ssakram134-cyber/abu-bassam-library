@@ -59,6 +59,7 @@ function updateVaultAccessUi(){
   const scope=vaultScopeOk(false),view=scope&&vaultAllowed('vaultView');
   if(!view){if(shell)shell.style.display='none';if(!denied){denied=document.createElement('div');denied.id='abuVaultViewDenied';denied.style.cssText='margin:18px;padding:24px;border-radius:16px;background:#fff1d7;color:#6d4a12;text-align:center;font-weight:900;line-height:1.9';center.appendChild(denied)}denied.textContent=!scope?'🔒 هذا الأرشيف المحلي مرتبط بحساب أو فرع آخر، لذلك تم حجبه بالكامل.':'🔒 الأدمن عطّل صلاحية عرض ملفات الحفظ لهذا الفرع.';return false}
   if(shell)shell.style.display='';denied?.remove();
+  const sharedButton=$('vOtherBranchButton');if(sharedButton)sharedButton.style.display=vaultOwner()?'':'none';
   const controls=[['.v-upload-grid','vaultAdd'],['#vAutoSync','vaultSync']];
   controls.forEach(([sel,key])=>center.querySelectorAll(sel).forEach(el=>{const ok=vaultAllowed(key);el.style.opacity=ok?'1':'.45';el.style.pointerEvents=ok?'':'none'}));
   return true
@@ -346,9 +347,9 @@ function addCss(){
 
 function mainHtml(){return `<div class="v-shell">
   <div class="v-hero">
-    <h2>🗄️ الحفظ والمستندات</h2><p>أرشيف محلي منظم • بحث سريع • OCR • نسخ احتياطي • مزامنة بين الأجهزة</p>
+    <h2>🗄️ الحفظ والمستندات</h2><p>أرشيف فرعك المحلي • بحث وOCR • نسخ احتياطي • مزامنة ملفات هذا الفرع</p>
     <label class="v-search">🔎<input id="vSearch" placeholder="ابحث باسم أي كتاب أو صورة أو ملف..." autocomplete="off"></label>
-    <div class="v-actions"><button onclick="DocumentVault.openOcr()">📷 تحويل صورة إلى نص</button><button onclick="DocumentVault.backup('save')">⬇ نسخة على الجهاز</button><button onclick="DocumentVault.backup('share')">✉ Google / Gmail</button><button onclick="DocumentVault.encryptedBackup()">🔐 نسخة مشفرة</button><button onclick="DocumentVault.syncNow()">↻ مزامنة الآن</button></div>
+    <div class="v-actions"><button onclick="DocumentVault.openOcr()">📷 تحويل صورة إلى نص</button><button onclick="DocumentVault.backup('save')">⬇ نسخة على الجهاز</button><button onclick="DocumentVault.backup('share')">✉ Google / Gmail</button><button onclick="DocumentVault.encryptedBackup()">🔐 نسخة مشفرة</button><button onclick="DocumentVault.syncNow()">↻ مزامنة الآن</button><button id="vOtherBranchButton" style="display:none" onclick="DocumentVault.openOtherBranches()">📱 أرشيف الفروع (قراءة فقط)</button></div>
     <div class="v-syncline"><span id="vSyncStatus">المزامنة: جاهزة</span><label class="v-auto"><input id="vAutoSync" type="checkbox" onchange="DocumentVault.setAutoSync(this.checked)"> تلقائي يومياً وعند توفر الإنترنت</label></div>
   </div>
   <div class="v-tabs"><button class="v-tab active" data-filter="all" onclick="DocumentVault.setFilter('all')">الكل</button><button class="v-tab" data-filter="image" onclick="DocumentVault.setFilter('image')">الصور</button><button class="v-tab" data-filter="pdf" onclick="DocumentVault.setFilter('pdf')">PDF</button><button class="v-tab" data-filter="word" onclick="DocumentVault.setFilter('word')">Word</button><button class="v-tab" data-filter="excel" onclick="DocumentVault.setFilter('excel')">Excel</button><button class="v-tab" data-filter="powerpoint" onclick="DocumentVault.setFilter('powerpoint')">العروض</button><button class="v-tab" data-filter="text" onclick="DocumentVault.setFilter('text')">النصوص</button><button class="v-tab" data-filter="file" onclick="DocumentVault.setFilter('file')">الملفات</button><button class="v-tab" data-filter="folder:المستمسكات" onclick="DocumentVault.setFilter('folder:المستمسكات')">المستمسكات</button><button class="v-tab" data-filter="folder:المعاملات" onclick="DocumentVault.setFilter('folder:المعاملات')">المعاملات</button><button class="v-tab" data-filter="folder:الباجات" onclick="DocumentVault.setFilter('folder:الباجات')">الباجات</button><button class="v-tab" data-filter="favorite" onclick="DocumentVault.setFilter('favorite')">★ المفضلة</button><button class="v-tab" data-filter="recent" onclick="DocumentVault.setFilter('recent')">🕘 الأخيرة</button><button class="v-tab" data-filter="trash" onclick="DocumentVault.setFilter('trash')">🗑️ سلة المحذوفات (30 يومًا)</button></div>
@@ -368,6 +369,7 @@ function modalHtml(){return `
 <div id="vViewModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b id="vViewTitle">المستند</b><button class="v-close" onclick="DocumentVault.closeModal('vViewModal')">×</button></div><div class="v-body"><div id="vView" class="v-view"></div><div class="v-modal-actions"><button id="vGalleryButton" onclick="DocumentVault.saveGalleryActive()">حفظ في المعرض</button><button onclick="DocumentVault.savePdfActive()">حفظ PDF</button><button onclick="DocumentVault.printActive()">🖨 طباعة</button><button onclick="DocumentVault.saveActive()">حفظ الملف</button><button onclick="DocumentVault.editActive()">✎ تحرير / نسخة معدّلة</button><button onclick="DocumentVault.shareActive()">مشاركة / Google</button><button class="alt" onclick="DocumentVault.closeModal('vViewModal')">عودة</button></div></div></div></div>
 <div id="vTextEditModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b id="vTextEditTitle">تحرير ملف نصي</b><button class="v-close" onclick="DocumentVault.closeModal('vTextEditModal')">×</button></div><div class="v-body"><p style="font-size:10px">يمكن تحرير TXT وCSV وJSON وXML وHTML هنا. تحفظ النتيجة محلياً أولاً ويمكنك الاحتفاظ بالأصل أو استبداله.</p><textarea id="vTextEdit" class="v-ocr-text" dir="auto" spellcheck="false"></textarea><div class="v-modal-actions"><button onclick="DocumentVault.saveTextEdit()">حفظ التعديل</button><button class="alt" onclick="DocumentVault.closeModal('vTextEditModal')">إلغاء</button></div></div></div></div><div id="vEditModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b>تحرير وتوضيح الصورة</b><button class="v-close" onclick="DocumentVault.closeModal('vEditModal')">×</button></div><div class="v-body"><canvas id="vEditCanvas" class="v-edit-canvas"></canvas><div class="v-controls"><label>قص من اليسار<input id="vCropL" type="range" min="0" max="45" value="0" oninput="DocumentVault.editorChanged()"></label><label>قص من اليمين<input id="vCropR" type="range" min="55" max="100" value="100" oninput="DocumentVault.editorChanged()"></label><label>قص من الأعلى<input id="vCropT" type="range" min="0" max="45" value="0" oninput="DocumentVault.editorChanged()"></label><label>قص من الأسفل<input id="vCropB" type="range" min="55" max="100" value="100" oninput="DocumentVault.editorChanged()"></label><label>الدوران<input id="vRotate" type="range" min="-180" max="180" step="90" value="0" oninput="DocumentVault.editorChanged()"></label><label>الإضاءة<input id="vBrightness" type="range" min="60" max="160" value="100" oninput="DocumentVault.editorChanged()"></label><label>التباين / التوضيح<input id="vContrast" type="range" min="60" max="180" value="100" oninput="DocumentVault.editorChanged()"></label></div><div class="v-modal-actions"><button onclick="DocumentVault.saveEditor()">اعتماد وحفظ</button><button onclick="DocumentVault.clarify()">✨ توضيح تلقائي</button><button class="alt" onclick="DocumentVault.resetEditor()">إعادة الأصل</button><button onclick="DocumentVault.saveEditorGallery()">حفظ في المعرض</button><button onclick="DocumentVault.saveEditorPdf()">حفظ PDF</button><button onclick="DocumentVault.printEditor()">🖨 طباعة</button></div></div></div></div>
 <div id="vOcrModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b>تحويل الصورة إلى نص قابل للنسخ</b><button class="v-close" onclick="DocumentVault.closeModal('vOcrModal')">×</button></div><div class="v-body"><div class="v-modal-actions"><button onclick="DocumentVault.ocrCamera()">📷 فتح الكاميرا</button><button onclick="DocumentVault.ocrGallery()">🖼 اختيار من الاستديو</button><button onclick="DocumentVault.ocrFilePicker()">📂 ملف صورة</button><button class="alt" onclick="DocumentVault.clearOcr()">مسح النص</button></div><img id="vOcrImage" class="v-ocr-source" style="display:none"><div id="vOcrProgress" class="v-progress">اختر صورة واضحة لبدء قراءة النص العربي أو الإنجليزي.</div><textarea id="vOcrText" class="v-ocr-text" placeholder="سيظهر النص هنا ويمكن تعديله ونسخه..."></textarea><div class="v-modal-actions"><button onclick="DocumentVault.copyOcr()">نسخ النص</button><button onclick="DocumentVault.selectOcr()">تحديد الكل</button><button onclick="DocumentVault.shareOcr()">مشاركة النص</button><button onclick="DocumentVault.saveOcrText()">حفظ TXT</button><button onclick="DocumentVault.saveOcrPdf()">حفظ PDF</button><button onclick="DocumentVault.saveOcrWithImage()">PDF مع الصورة</button><button onclick="DocumentVault.reOcr()">إعادة OCR</button><button onclick="DocumentVault.printOcr()">🖨 طباعة النص</button><button id="vOcrLoginBtn" onclick="DocumentVault.useOcrLogin()">إرسال إلى كارت الدخول</button></div></div></div></div>
+<div id="vOtherBranchModal" class="v-modal"><div class="v-dialog"><div class="v-head"><b>📱 أرشيف الفروع — للمدير فقط (قراءة دون تعديل)</b><button class="v-close" onclick="DocumentVault.closeOtherBranches()">×</button></div><div class="v-body"><div id="vOtherBranchFiles" class="v-tabs" style="flex-direction:column;align-items:stretch">جاري قراءة قائمة الفروع...</div><div id="vOtherBranchPreview" class="v-view" style="min-height:120px;margin-top:10px">اختر ملفاً لمعاينته.</div><div class="v-modal-actions"><button id="vOtherBranchSave" style="display:none" onclick="DocumentVault.saveOtherBranchFile()">⬇ تنزيل نسخة من الملف</button><button class="alt" onclick="DocumentVault.closeOtherBranches()">إغلاق</button></div></div></div></div>
 <div id="vBusy" class="v-busy"><div class="v-busy-card"><div class="v-spinner"></div><div id="vBusyText">جاري العمل...</div></div></div>
 `}
 
@@ -390,7 +392,7 @@ async function build(){
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   scheduleAutoSync(5000);
   setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())void syncNow(false)},900000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();closeOtherBranches();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
@@ -947,6 +949,76 @@ async function backup(mode='save'){if(!requireVault('vaultBackup'))return false;
 async function encryptedBackup(){if(!requireVault('vaultEncryptedBackup'))return false;try{return await backupService().encryptedBackup()}catch(e){alert(String(e?.message||e));return false}}
 async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRestoreBackup'))return false;try{return await backupService().restore(file,options)}catch(e){alert(String(e?.message||e));return false}}
 
+
+let otherBranchRows=[],otherBranchActive=null,otherBranchUrl='',otherBranchScope='',otherBranchRequest=0;
+function closeOtherBranches(){
+  otherBranchRequest++;
+  if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
+  otherBranchRows=[];otherBranchActive=null;otherBranchScope='';
+  const modal=$('vOtherBranchModal');if(modal)modal.classList.remove('show');
+  const save=$('vOtherBranchSave');if(save)save.style.display='none'
+}
+async function openOtherBranches(){
+  if(!requireVault('vaultView')||!vaultOwner()||!vaultAllowed('vaultViewOtherBranches'))return false;
+  if(!sessionOk()||!navigator.onLine){alert('تحتاج هذه القائمة إلى اتصال سحابي موثّق. ملفات هذا الجهاز المحلية محفوظة دون إنترنت.');return false}
+  const gateway=window.AbuBassamBranchVault;
+  if(!gateway?.ownerList){alert('عارض أرشيف الفروع غير متاح في هذه النسخة.');return false}
+  closeOtherBranches();
+  otherBranchScope=syncScope();
+  const request=++otherBranchRequest;
+  showModal('vOtherBranchModal');
+  $('vOtherBranchFiles').textContent='جاري جلب قائمة ملفات الفروع...';
+  $('vOtherBranchPreview').textContent='اختر ملفاً لمعاينته.';
+  try{
+    const rows=await gateway.ownerList(5000);
+    if(request!==otherBranchRequest||syncScope()!==otherBranchScope||!vaultOwner()||!vaultScopeOk(false))throw new Error('VAULT_SCOPE_CHANGED');
+    otherBranchRows=rows;
+    $('vOtherBranchFiles').innerHTML=rows.length?rows.map((row,index)=>
+      '<button type="button" class="v-tab" style="white-space:normal;text-align:right" onclick="DocumentVault.openOtherBranchFile('+index+')">'+
+      '📁 '+esc(row.branch_name||row.branch_device_id)+' — '+esc(row.data?.name||row.client_id)+
+      ' <small>('+esc(formatBytes(row.data?.size||0))+' • '+esc(formatTime(row.updated_at))+')</small></button>'
+    ).join(''):'لا توجد ملفات سحابية ظاهرة في فروع هذا الحساب.';
+    return true
+  }catch(e){
+    if(request===otherBranchRequest&&$('vOtherBranchModal')?.classList.contains('show'))$('vOtherBranchFiles').textContent='تعذر تحميل الأرشيف: '+String(e?.message||e);
+    return false
+  }
+}
+async function openOtherBranchFile(index){
+  if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||otherBranchScope!==syncScope())return false;
+  const row=otherBranchRows[index],gateway=window.AbuBassamBranchVault,request=++otherBranchRequest;
+  if(!row||!gateway?.ownerDownload)return false;
+  const preview=$('vOtherBranchPreview');
+  if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
+  otherBranchActive=null;
+  $('vOtherBranchSave').style.display='none';
+  preview.textContent='جاري تنزيل نسخة للمعاينة فقط...';
+  try{
+    const result=await gateway.ownerDownload(row);
+    if(request!==otherBranchRequest||!vaultOwner()||otherBranchScope!==syncScope()||!vaultScopeOk(false)||!$('vOtherBranchModal')?.classList.contains('show'))return false;
+    otherBranchActive=result;
+    const mime=String(result.mime||'').split(';')[0].toLowerCase();
+    if(['image/jpeg','image/png','image/webp','image/gif','image/bmp','application/pdf'].includes(mime)){
+      const safeBlob=new Blob([result.blob],{type:mime});
+      otherBranchUrl=URL.createObjectURL(safeBlob);
+      preview.innerHTML=mime==='application/pdf'?
+        '<iframe title="معاينة PDF" style="width:100%;height:65vh;border:0" src="'+esc(otherBranchUrl)+'"></iframe>':
+        '<img alt="معاينة مستند" style="max-width:100%;max-height:65vh;object-fit:contain" src="'+esc(otherBranchUrl)+'">';
+    }else{
+      preview.textContent='الملف '+result.name+' جاهز للتنزيل. هذه الصيغة لا تدعم المعاينة المباشرة.'
+    }
+    $('vOtherBranchSave').style.display='';
+    return true
+  }catch(e){if(request===otherBranchRequest)preview.textContent='تعذرت معاينة الملف: '+String(e?.message||e);return false}
+}
+function saveOtherBranchFile(){
+  if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||!vaultAllowed('vaultExport')||otherBranchScope!==syncScope()||!otherBranchActive)return false;
+  const file=otherBranchActive,url=URL.createObjectURL(file.blob),anchor=document.createElement('a');
+  anchor.href=url;anchor.download=niceName(file.name);document.body.appendChild(anchor);anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  return true
+}
+
 function cloud(){return window.AbuBassamCloud}
 function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',manualOrder:Number.isInteger(data.manualOrder)?data.manualOrder:null,blob,syncState:'synced',deleted:false}}
 async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
@@ -1045,6 +1117,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={openOtherBranches,openOtherBranchFile,saveOtherBranchFile,closeOtherBranches,setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
