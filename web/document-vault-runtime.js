@@ -4,6 +4,8 @@
 const DB_NAME='AbuBassamDocumentVaultV4';
 const STORE='items';
 const TRASH_STORE='trash';
+const CHECKPOINT_STORE='checkpoints';
+const CHECKPOINT_MS=30*86400000;
 const TRASH_DAYS=30;
 const TRASH_MS=TRASH_DAYS*86400000;
 const MAX_ITEMS=1000;
@@ -18,7 +20,7 @@ function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.
 function syncKey(key){return key+':'+syncScope()}
 function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null&&key!==LAST_SYNC_KEY){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
-const state={items:[],trashItems:[],clipboard:null,filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],previewUrl:'',editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploading:false,uploadFolder:''};
+const state={items:[],trashItems:[],selectedIds:new Set(),clipboard:null,filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],previewUrl:'',editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploading:false,uploadFolder:''};
 let autoSyncTimer=null,autoSyncRerunRequested=false;
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
@@ -66,8 +68,8 @@ let dbPromise;
 function openDb(){
   if(dbPromise)return dbPromise;
   dbPromise=new Promise((resolve,reject)=>{
-    let request=indexedDB.open(DB_NAME,2);
-    request.onupgradeneeded=()=>{let db=request.result;if(!db.objectStoreNames.contains(STORE)){let store=db.createObjectStore(STORE,{keyPath:'id'});store.createIndex('category','category');store.createIndex('updatedAt','updatedAt')}if(!db.objectStoreNames.contains('trash')){let trash=db.createObjectStore('trash',{keyPath:'id'});trash.createIndex('expiresAt','expiresAt')}};
+    let request=indexedDB.open(DB_NAME,3);
+    request.onupgradeneeded=()=>{let db=request.result;if(!db.objectStoreNames.contains(STORE)){let store=db.createObjectStore(STORE,{keyPath:'id'});store.createIndex('category','category');store.createIndex('updatedAt','updatedAt')}if(!db.objectStoreNames.contains('trash')){let trash=db.createObjectStore('trash',{keyPath:'id'});trash.createIndex('expiresAt','expiresAt')};if(!db.objectStoreNames.contains('checkpoints')){const checkpoints=db.createObjectStore('checkpoints',{keyPath:'id'});checkpoints.createIndex('expiresAt','expiresAt')}};
     request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();dbPromise=null};resolve(db)};
     request.onerror=()=>{dbPromise=null;reject(request.error||new Error('تعذر فتح قاعدة الحفظ'))};
     request.onblocked=()=>{dbPromise=null;reject(new Error('قاعدة الحفظ مستخدمة من جلسة أخرى'))};
@@ -229,6 +231,7 @@ function mainHtml(){return `<div class="v-shell">
   <div class="v-upload-grid"><button class="v-upload" onclick="DocumentVault.pickImages()"><span>🖼️</span>رفع صور أو كتب صورية<br>مع القص والتدوير والتحسين</button><button class="v-upload" onclick="DocumentVault.pickFiles()"><span>📚</span>رفع Word / Excel / PDF<br>وجميع أنواع الملفات</button></div>
   <div class="v-tabs"><button class="v-tab" onclick="DocumentVault.pickCollection('المستمسكات')">＋ رفع مستمسك</button><button class="v-tab" onclick="DocumentVault.pickCollection('المعاملات')">＋ رفع معاملة</button><button class="v-tab" onclick="DocumentVault.pickCollection('الباجات')">＋ رفع باج</button></div>
   <div class="v-counter"><span id="vCount">0 من 1000</span><label class="v-sort">ترتيب حسب <select id="vSort" onchange="DocumentVault.setSort(this.value)"><option value="date-desc">التاريخ — الأحدث</option><option value="date-asc">التاريخ — الأقدم</option><option value="alpha-asc">الأبجدية — أ إلى ي</option><option value="alpha-desc">الأبجدية — ي إلى أ</option><option value="size-desc">الحجم — الأكبر</option><option value="size-asc">الحجم — الأصغر</option><option value="type-asc">النوع</option><option value="manual">ترتيب يدوي داخل الحافظة</option><option value="modified-desc">آخر تعديل — الأحدث</option><option value="modified-asc">آخر تعديل — الأقدم</option><option value="opened-desc">آخر فتح</option></select></label><div class="v-view-switch"><button id="vGridBtn" title="مصغرات" onclick="DocumentVault.setView('grid')">▦</button><button id="vLargeBtn" title="صور كبيرة" onclick="DocumentVault.setView('large')">▣</button><button id="vDetailsBtn" title="عرض التفاصيل" onclick="DocumentVault.setView('details')">≡</button><button id="vListBtn" title="قائمة" onclick="DocumentVault.setView('list')">☷</button></div><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.createFolder()">＋ حافظة</button><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.pasteToFolder()">📋 لصق هنا</button><button class="v-tab" onclick="DocumentVault.pickIntoFolder('image')">🖼️ إضافة صورة هنا</button><button class="v-tab" onclick="DocumentVault.pickIntoFolder('file')">📄 إضافة ملف هنا</button><span id="vClipboardStatus" class="v-meta" aria-live="polite"></span><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.pickBackup()">استعادة نسخة</button></div>
+  <div id="vBulkToolbar" class="v-tabs" role="toolbar" aria-label="إدارة الملفات المحددة"><button class="v-tab" onclick="DocumentVault.selectVisibleFiles()">☑ تحديد المعروض</button><button class="v-tab" onclick="DocumentVault.clearFileSelection()">إلغاء التحديد</button><span id="vSelectedCount" class="v-meta" aria-live="polite">0 محددة</span><button class="v-tab" onclick="DocumentVault.renumberFolder()">123 ترقيم الحافظة</button><button class="v-tab" onclick="DocumentVault.restoreLastFolderNumbering()">↩ استعادة آخر ترقيم</button></div>
   <div id="vGrid" class="v-grid"></div>
   <input id="vImageInput" type="file" accept="image/*" multiple hidden>
   <input id="vFileInput" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.zip,.rar,.7z,.odt,.ods,.epub,.mobi,.html,.xml,.json,*/*" multiple hidden><input id="vReplaceInput" type="file" accept="*/*" hidden>
@@ -262,7 +265,7 @@ async function build(){
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   scheduleAutoSync(5000);
   setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())void syncNow(false)},900000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
@@ -275,6 +278,7 @@ function logOperation(type,title,details='',fileName=''){if(window.AbuBassamOps&
 
 async function refresh(){
   await purgeExpiredTrash();
+  await purgeExpiredCheckpoints();
   state.items=(await dbAll()).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
   state.trashItems=(await dbTrashAll()).filter(item=>trashScopeOk(item)&&Number(item.expiresAt)>Date.now()).sort((a,b)=>Number(b.deletedAtMs)-Number(a.deletedAtMs));
   render()
@@ -289,20 +293,147 @@ function textEditable(item){return ['txt','csv','json','xml','html'].includes(ex
 function visibleItems(){let q=state.query.trim().toLocaleLowerCase('ar'),active=state.items.filter(item=>!item.deleted),match=item=>state.filter==='all'||state.filter==='favorite'&&item.favorite||state.filter==='recent'&&item.lastOpenedAt||state.filter.startsWith('folder:')&&item.folder===state.filter.slice(7)||typeOf(item)===state.filter,items=active.filter(item=>match(item)&&(!q||[item.name,item.mime,ext(item.name),item.folder,formatTime(item.createdAt),formatTime(item.updatedAt)].join(' ').toLocaleLowerCase('ar').includes(q))),sort=state.sort||'date-desc';if(state.filter==='recent')sort='opened-desc';items.sort((a,b)=>{if(sort==='manual'){let group=String(a.folder||'').localeCompare(String(b.folder||''),'ar',{numeric:true});return group||((Number.isInteger(a.manualOrder)?a.manualOrder:999999)-(Number.isInteger(b.manualOrder)?b.manualOrder:999999))||((Date.parse(b.createdAt)||0)-(Date.parse(a.createdAt)||0))||String(a.id).localeCompare(String(b.id))}if(sort==='alpha-asc'||sort==='alpha-desc'){let n=String(a.name||'').localeCompare(String(b.name||''),'ar',{numeric:true,sensitivity:'base'});return sort==='alpha-desc'?-n:n}if(sort==='size-asc'||sort==='size-desc'){let n=(Number(a.size)||0)-(Number(b.size)||0);return sort==='size-desc'?-n:n}if(sort==='type-asc')return typeOf(a).localeCompare(typeOf(b),'ar')||String(a.name).localeCompare(String(b.name),'ar');if(sort==='opened-desc')return (Date.parse(b.lastOpenedAt)||0)-(Date.parse(a.lastOpenedAt)||0);if(sort==='modified-asc'||sort==='modified-desc'){let n=(Date.parse(a.updatedAt)||0)-(Date.parse(b.updatedAt)||0);return sort==='modified-asc'?n:-n}let n=(Date.parse(a.createdAt||a.updatedAt)||0)-(Date.parse(b.createdAt||b.updatedAt)||0);return sort==='date-asc'?n:-n});return items}
 function render(){
   let grid=$('vGrid');if(!grid)return;cleanupUrls();if(state.filter==='trash'){renderTrash();return}let active=state.items.filter(item=>!item.deleted),items=visibleItems();
+  for(const id of [...state.selectedIds])if(!active.some(item=>item.id===id))state.selectedIds.delete(id);
   $('vCount').textContent=`${active.length} من ${MAX_ITEMS} • الظاهر ${items.length}`;
+  if($('vSelectedCount'))$('vSelectedCount').textContent=state.selectedIds.size+' محددة';
   document.querySelectorAll('.v-tab[data-filter]').forEach(button=>button.classList.toggle('active',button.dataset.filter===state.filter));
   grid.classList.remove('list','details','large');
   const folderHost=$('vFolderTabs');if(folderHost){folderHost.style.display='';folderHost.textContent='';const allFolders=[...new Set([...readFolders(),...active.map(x=>x.folder).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'ar'));for(const folder of allFolders){const btn=document.createElement('button');btn.className='v-tab'+(state.filter==='folder:'+folder?' active':'');btn.textContent='📁 '+folder;btn.onclick=()=>setFilter('folder:'+folder);folderHost.appendChild(btn)}}
   const clip=$('vClipboardStatus');if(clip)clip.textContent=state.clipboard?'الحافظة: '+(state.clipboard.mode==='cut'?'قص':'نسخ')+' • '+state.clipboard.name:'';
   if(['list','details','large'].includes(state.view))grid.classList.add(state.view);
   [['vGridBtn','grid'],['vLargeBtn','large'],['vDetailsBtn','details'],['vListBtn','list']].forEach(([id,mode])=>$(id)?.classList.toggle('active',state.view===mode));
-  grid.innerHTML=items.length?items.map(item=>{let thumb=isImage(item)?`<img src="${objectUrl(item.blob)}" alt="">`:`<div class="v-file-icon">${fileIcon(item)}</div>`,action=isImage(item)?'editItem':textEditable(item)?'editTextItem':'pickRevisedFile',caption=isImage(item)?'قص وتدوير':textEditable(item)?'تحرير':'نسخة معدلة';return `<article class="v-item" data-vault-item="${esc(item.id)}"><button class="v-thumb" onclick="DocumentVault.openItem('${item.id}')">${thumb}${item.syncState==='pending'?'<span class="v-pending">بانتظار المزامنة</span>':''}${item.favorite?'<span class="v-favorite">★</span>':''}</button><div class="v-name" title="${esc(item.name)}">${esc(item.name)}</div>${item.folder?`<div class="v-folder">📁 ${esc(item.folder)}</div>`:''}<div class="v-meta">${state.sort==='manual'&&Number.isInteger(item.manualOrder)?'#'+item.manualOrder+' • ':''}${typeLabel(item)} • ${formatBytes(item.size)} • ${formatTime(item.updatedAt)}</div>${state.view==='details'?`<div class="v-details">تاريخ الإضافة: ${formatTime(item.createdAt)}<br>آخر تعديل: ${formatTime(item.updatedAt)}<br>آخر فتح: ${item.lastOpenedAt?formatTime(item.lastOpenedAt):'لم يُفتح بعد'}</div>`:''}<div class="v-item-actions">${state.sort==='manual'&&state.filter.startsWith('folder:')?`<button class="v-drag-handle" data-vault-drag="${esc(item.id)}" title="اسحب لتغيير ترتيب الصور والملفات" aria-label="اسحب لترتيب ${esc(item.name)}">⠿ سحب</button>`:'' }<button onclick="DocumentVault.${action}('${item.id}')">${caption}</button><button onclick="DocumentVault.printItem('${item.id}')">طباعة</button><button onclick="DocumentVault.saveItem('${item.id}')">حفظ</button><button class="${item.favorite?'favorite-on':''}" onclick="DocumentVault.toggleFavorite('${item.id}')">${item.favorite?'★':'☆'}</button><button onclick="DocumentVault.moveItem('${item.id}')">نقل</button><button onclick="DocumentVault.copyItem('${item.id}')">نسخ</button><button onclick="DocumentVault.cutItem('${item.id}')">قص</button><button onclick="DocumentVault.reorderItem('${item.id}')">ترتيب</button><button onclick="DocumentVault.renameItem('${item.id}')">تسمية</button><button onclick="DocumentVault.shareItem('${item.id}')">مشاركة</button><button class="danger" onclick="DocumentVault.deleteItem('${item.id}')">حذف</button></div></article>`}).join(''):'<div class="v-empty">لا توجد نتائج. ارفع صوراً أو كتباً أو ملفات من الأيقونات في الأعلى.</div>'
+  grid.innerHTML=items.length?items.map(item=>{let thumb=isImage(item)?`<img src="${objectUrl(item.blob)}" alt="">`:`<div class="v-file-icon">${fileIcon(item)}</div>`,action=isImage(item)?'editItem':textEditable(item)?'editTextItem':'pickRevisedFile',caption=isImage(item)?'قص وتدوير':textEditable(item)?'تحرير':'نسخة معدلة';return `<article class="v-item" data-vault-item="${esc(item.id)}"><label class="v-meta" style="display:flex;gap:5px;align-items:center;margin:5px"><input type="checkbox" aria-label="تحديد ${esc(item.name)}" ${state.selectedIds.has(item.id)?'checked':''} onchange="DocumentVault.toggleFileSelection(\'${item.id}\',this.checked)"> تحديد</label><button class="v-thumb" onclick="DocumentVault.openItem('${item.id}')">${thumb}${item.syncState==='pending'?'<span class="v-pending">بانتظار المزامنة</span>':''}${item.favorite?'<span class="v-favorite">★</span>':''}</button><div class="v-name" title="${esc(item.name)}">${esc(item.name)}</div>${item.folder?`<div class="v-folder">📁 ${esc(item.folder)}</div>`:''}<div class="v-meta">${state.sort==='manual'&&Number.isInteger(item.manualOrder)?'#'+item.manualOrder+' • ':''}${typeLabel(item)} • ${formatBytes(item.size)} • ${formatTime(item.updatedAt)}</div>${state.view==='details'?`<div class="v-details">تاريخ الإضافة: ${formatTime(item.createdAt)}<br>آخر تعديل: ${formatTime(item.updatedAt)}<br>آخر فتح: ${item.lastOpenedAt?formatTime(item.lastOpenedAt):'لم يُفتح بعد'}</div>`:''}<div class="v-item-actions">${state.sort==='manual'&&state.filter.startsWith('folder:')?`<button class="v-drag-handle" data-vault-drag="${esc(item.id)}" title="اسحب لتغيير ترتيب الصور والملفات" aria-label="اسحب لترتيب ${esc(item.name)}">⠿ سحب</button>`:'' }<button onclick="DocumentVault.${action}('${item.id}')">${caption}</button><button onclick="DocumentVault.printItem('${item.id}')">طباعة</button><button onclick="DocumentVault.saveItem('${item.id}')">حفظ</button><button class="${item.favorite?'favorite-on':''}" onclick="DocumentVault.toggleFavorite('${item.id}')">${item.favorite?'★':'☆'}</button><button onclick="DocumentVault.moveItem('${item.id}')">نقل</button><button onclick="DocumentVault.copyItem('${item.id}')">نسخ</button><button onclick="DocumentVault.cutItem('${item.id}')">قص</button><button onclick="DocumentVault.reorderItem('${item.id}')">ترتيب</button><button onclick="DocumentVault.renameItem('${item.id}')">تسمية</button><button onclick="DocumentVault.shareItem('${item.id}')">مشاركة</button><button class="danger" onclick="DocumentVault.deleteItem('${item.id}')">حذف</button></div></article>`}).join(''):'<div class="v-empty">لا توجد نتائج. ارفع صوراً أو كتباً أو ملفات من الأيقونات في الأعلى.</div>'
 }
+function toggleFileSelection(id,selected){const item=findItem(id);if(!item||item.deleted)return;if(selected)state.selectedIds.add(id);else state.selectedIds.delete(id);if($('vSelectedCount'))$('vSelectedCount').textContent=state.selectedIds.size+' محددة'}
+function selectVisibleFiles(){if(!requireVault('vaultView')||state.filter==='trash')return;for(const item of visibleItems())state.selectedIds.add(item.id);render()}
+function clearFileSelection(){state.selectedIds.clear();render()}
 function setFilter(filter){state.filter=filter;if(filter==='trash'){void refresh().catch(()=>{});return}if(filter.startsWith('folder:')){state.sort='manual';localStorage.setItem(SORT_KEY,'manual');if($('vSort'))$('vSort').value='manual'}render()}
 function setSort(sort){state.sort=sort;localStorage.setItem(SORT_KEY,sort);render()}
 function setView(view){state.view=['grid','list','large','details'].includes(view)?view:'grid';localStorage.setItem(VIEW_KEY,state.view);render()}
 function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));state.filter='folder:'+name;render();alert('تم إنشاء الحافظة «'+name+'» ✓')}
 function readFolders(){try{return [...new Set([...SYSTEM_FOLDERS,...JSON.parse(localStorage.getItem('abuBassamVaultFoldersV5')||'[]')])]}catch(e){return SYSTEM_FOLDERS.slice()}}
+function numberedName(name,position){
+  const cleaned=niceName(name).replace(/^\d{3,}\s*[-_]\s*/,'');
+  return String(position).padStart(3,'0')+'_'+cleaned
+}
+function planFolderNumbering(rows,folder,revisions){
+  const list=folderEntries(rows,folder);
+  if(list.length!==revisions.size)throw new Error('VAULT_STALE_FOLDER');
+  if(list.some(row=>String(row.syncRevision||'')!==revisions.get(row.id)))throw new Error('VAULT_STALE_FOLDER');
+  const now=new Date().toISOString();
+  return list.map((item,index)=>({
+    ...item,name:numberedName(item.name,index+1),manualOrder:index+1,updatedAt:now,
+    syncRevision:uuid(),syncState:'pending'
+  })).filter((item,index)=>item.name!==list[index].name||item.manualOrder!==list[index].manualOrder)
+}
+async function commitFolderNumbering(folder,revisions){
+  const db=await openDb(),scope=syncScope(),id=uuid(),createdAt=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction([STORE,CHECKPOINT_STORE],'readwrite'),store=tx.objectStore(STORE),checkpoints=tx.objectStore(CHECKPOINT_STORE),req=store.getAll();
+    let reason=null,changed=0;
+    req.onsuccess=()=>{
+      try{
+        const rows=req.result||[],patches=planFolderNumbering(rows,folder,revisions);
+        changed=patches.length;
+        if(patches.length){
+          const byId=new Map(rows.map(item=>[item.id,item]));
+          const snapshot=patches.map(next=>{const original=byId.get(next.id);return{id:next.id,name:original.name,manualOrder:original.manualOrder,expectedRevision:next.syncRevision}});
+          // The metadata recovery point and renamed rows commit together, or neither does.
+          checkpoints.add({id,scope,kind:'folder-numbering',folder,createdAt,expiresAt:createdAt+CHECKPOINT_MS,items:snapshot});
+          for(const item of patches)store.put(item)
+        }
+      }catch(e){reason=e;tx.abort()}
+    };
+    req.onerror=()=>{reason=req.error;tx.abort()};
+    tx.oncomplete=()=>resolve(changed);
+    tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_RENUMBER_FAILED'));
+    tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_RENUMBER_ABORTED'))
+  })
+}
+async function checkpointList(){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const req=db.transaction(CHECKPOINT_STORE,'readonly').objectStore(CHECKPOINT_STORE).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error||new Error('VAULT_CHECKPOINT_READ_FAILED'))
+  })
+}
+async function purgeExpiredCheckpoints(){
+  const db=await openDb(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(CHECKPOINT_STORE,'readwrite'),store=tx.objectStore(CHECKPOINT_STORE),req=store.getAll();
+    req.onsuccess=()=>{for(const entry of req.result||[])if(Number(entry.expiresAt)<=now)store.delete(entry.id)};
+    req.onerror=()=>tx.abort();
+    tx.oncomplete=()=>resolve(true);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_CHECKPOINT_PURGE_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_CHECKPOINT_PURGE_ABORTED'))
+  })
+}
+async function restoreFolderNumberingPoint(checkpointId){
+  const db=await openDb(),scope=syncScope(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction([STORE,CHECKPOINT_STORE],'readwrite'),store=tx.objectStore(STORE),checkpoints=tx.objectStore(CHECKPOINT_STORE);
+    const pointReq=checkpoints.get(checkpointId),rowsReq=store.getAll();
+    let point=null,rows=null,processed=false,reason=null;
+    const ready=()=>{
+      if(processed||point===null||rows===null)return;
+      processed=true;
+      try{
+        if(!point||point.scope!==scope||point.kind!=='folder-numbering'||Number(point.expiresAt)<=now)throw new Error('VAULT_CHECKPOINT_UNAVAILABLE');
+        if(!Array.isArray(point.items)||!point.items.length)throw new Error('VAULT_CHECKPOINT_EMPTY');
+        const byId=new Map(rows.map(x=>[x.id,x])),nowIso=new Date(now).toISOString();
+        // Refuse all restoration when any file has changed or was removed since the checkpoint.
+        for(const saved of point.items){
+          const current=byId.get(saved.id);
+          if(!current||current.deleted||String(current.syncRevision||'')!==String(saved.expectedRevision||''))throw new Error('VAULT_CHECKPOINT_CONFLICT')
+        }
+        for(const saved of point.items){
+          const current=byId.get(saved.id);
+          store.put({...current,name:saved.name,manualOrder:saved.manualOrder,updatedAt:nowIso,syncRevision:uuid(),syncState:'pending'})
+        }
+        checkpoints.delete(checkpointId)
+      }catch(e){reason=e;tx.abort()}
+    };
+    pointReq.onsuccess=()=>{point=pointReq.result||false;ready()};
+    rowsReq.onsuccess=()=>{rows=rowsReq.result||[];ready()};
+    pointReq.onerror=()=>{reason=pointReq.error;tx.abort()};
+    rowsReq.onerror=()=>{reason=rowsReq.error;tx.abort()};
+    tx.oncomplete=()=>resolve(true);
+    tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_CHECKPOINT_RESTORE_FAILED'));
+    tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_CHECKPOINT_RESTORE_ABORTED'))
+  })
+}
+async function restoreLastFolderNumbering(){
+  if(!requireVault('vaultEdit')||!requireVault('vaultRename'))return false;
+  if(!state.filter.startsWith('folder:'))return alert('افتح الحافظة المطلوب استعادة ترتيبها أولاً.'),false;
+  const folder=state.filter.slice(7);
+  try{
+    await purgeExpiredCheckpoints();
+    const points=(await checkpointList()).filter(x=>x.scope===syncScope()&&x.kind==='folder-numbering'&&x.folder===folder&&Number(x.expiresAt)>Date.now()).sort((a,b)=>b.createdAt-a.createdAt);
+    if(!points.length)return alert('لا توجد نقطة استعادة محفوظة لترقيم هذه الحافظة.'),false;
+    if(!confirm('استعادة أسماء وترتيب الملفات قبل آخر ترقيم في حافظة «'+folder+'»؟ لن يتم تغيير الصور أو المحتويات.'))return false;
+    await restoreFolderNumberingPoint(points[0].id);
+    await refresh();
+    if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
+    logOperation('restore','استعادة آخر ترقيم لحافظة '+folder);
+    return true
+  }catch(e){alert('تعذرت الاستعادة بسبب تعارض أو انتهاء نقطة الاستعادة: '+String(e?.message||e));return false}
+}
+async function renumberFolder(){
+  if(!requireVault('vaultRename')||!requireVault('vaultEdit'))return false;
+  if(!state.filter.startsWith('folder:')){alert('افتح الحافظة التي تريد ترقيم صورها أو ملفاتها أولاً.');return false}
+  const folder=state.filter.slice(7),items=folderEntries(state.items,folder);
+  if(!items.length)return false;
+  if(!confirm('ترقيم '+items.length+' ملف في حافظة «'+folder+'» حسب ترتيبها اليدوي الحالي؟ ستبقى أسماء الملفات الأصلية بعد رقم كل ملف.'))return false;
+  const revisions=new Map(items.map(item=>[item.id,String(item.syncRevision||'')]));
+  try{
+    const changed=await commitFolderNumbering(folder,revisions);
+    state.sort='manual';localStorage.setItem(SORT_KEY,'manual');if($('vSort'))$('vSort').value='manual';
+    await refresh();logOperation('rename','ترقيم تلقائي لحافظة '+folder,changed+' ملف');
+    if(changed&&autoSync()&&navigator.onLine)scheduleAutoSync(500);
+    return true
+  }catch(e){alert('تعذر الترقيم دون تغيير جزئي للملفات: '+String(e?.message||e));return false}
+}
 function folderEntries(rows,folder){
   return rows.filter(item=>!item.deleted&&String(item.folder||'')===String(folder||'')).sort((a,b)=>
     (Number.isInteger(a.manualOrder)?a.manualOrder:999999)-(Number.isInteger(b.manualOrder)?b.manualOrder:999999)||
@@ -375,7 +506,7 @@ async function organizeItem(id,kind,destination,positionOverride=null){
   if(position===null){
     const answer=prompt('ترتيب الملف داخل حافظة «'+(folder||'العامة')+'»: اكتب رقم الموضع من 1 إلى '+maximum+'.',String(maximum));
     if(answer===null)return false;
-    if(!/^\\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
+    if(!/^\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
     position=Number(answer.trim())
   }
   if(!Number.isSafeInteger(position)||position<1||position>maximum){alert('رقم الترتيب خارج حدود الحافظة.');return false}
@@ -764,6 +895,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
