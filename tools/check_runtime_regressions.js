@@ -519,9 +519,9 @@ function testGuidePreferenceSurvivesWebViewReload(){
 function testImageImportLifecycle(){
   const html=read('index.html');
   const start=html.indexOf('function onImageSelect(ev){'),end=html.indexOf('function refreshPeople()',start);
-  const clearStart=html.indexOf('function clearImages(){'),clearEnd=html.indexOf('function makePhotoCanvas(',clearStart);
-  if([start,end,clearStart,clearEnd].some(x=>x<0))throw new Error('image import/clear source missing');
-  const source=html.slice(start,end)+'\n'+html.slice(clearStart,clearEnd);
+  const removeStart=html.indexOf('function removePerson(i){'),clearEnd=html.indexOf('function makePhotoCanvas(',removeStart);
+  if([start,end,removeStart,clearEnd].some(x=>x<0))throw new Error('image import/clear source missing');
+  const source=html.slice(start,end)+'\n'+html.slice(removeStart,clearEnd);
   const factory=vm.runInNewContext(`(FileReader,Image,stats)=>{
     let uploadedImages=[],selectedIndex=-1,pageCanvases=[],imageImportEpoch=0;
     const $=()=>({style:{},classList:{remove(){}},textContent:''});
@@ -529,7 +529,7 @@ function testImageImportLifecycle(){
     function renderPaper(){stats.rendered++}
     function updatePageNav(){}
     ${source}
-    return {onImageSelect,clearImages,images:()=>uploadedImages}
+    return {onImageSelect,clearImages,removePerson,images:()=>uploadedImages}
   }`);
   const readers=[];
   class Reader{constructor(){readers.push(this)}readAsDataURL(){}}
@@ -552,6 +552,23 @@ function testImageImportLifecycle(){
   readers[4].onload({target:{result:'data:application/octet-stream;base64,generic-picture'}});
   if(app.images()[0]?.src!=='data:application/octet-stream;base64,generic-picture')
     throw new Error('generic Android MIME prevented an otherwise decodable image');
+  // A newer photo-picker selection must supersede old callbacks, otherwise
+  // a delayed old batch can change the selected photo during editing.
+  app.onImageSelect({target:{files:[{n:6}],value:'first'}});
+  app.onImageSelect({target:{files:[{n:7}],value:'second'}});
+  readers[6].onload({target:{result:'data:image/png;base64,new-selection'}});
+  readers[5].onload({target:{result:'data:image/png;base64,obsolete-selection'}});
+  if(app.images().some(x=>x.src.includes('obsolete-selection'))||
+     !app.images().some(x=>x.src.includes('new-selection')))
+    throw new Error('stale first photo selection was accepted');
+  // A removal during image decode should invalidate the outstanding import;
+  // removed photos cannot reappear later because of an Android callback.
+  app.onImageSelect({target:{files:[{n:8}],value:'pending'}});
+  app.removePerson(1);
+  readers[7].onload({target:{result:'data:image/png;base64,after-removal'}});
+  if(app.images().some(x=>x.src.includes('after-removal'))||
+     app.images().length!==1)
+    throw new Error('photo removal did not cancel an unfinished picker read');
 }
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
