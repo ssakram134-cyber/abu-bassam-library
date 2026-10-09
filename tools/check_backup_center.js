@@ -41,6 +41,14 @@ for(const marker of [
 ])need(runtime,marker,'backup list safe DOM construction: '+marker);
 for(const m of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','await loadBackupCenter();'])need(loader,m,'deterministic loader '+m);
 
+// Creating and restoring backups are independent authorizations; commit must verify its own kind.
+for(const marker of [
+  'permission:string|string[]',
+  "context(req,['backupCreate','backupRestore'])",
+  "row.backup_kind==='pre_restore'?'backupRestore':'backupCreate'",
+  'permissionEnabled(base.device,requiredPermission)'
+])need(edge,marker,'backup permission separation: '+marker);
+forbid(edge,"const base=await context(req,'backupRestore');\n      const {data:row,error}",'commit must not require restore permission for create-only devices');
 for(const m of ["const TABLE='abu_bassam_backups'","const MAX_BYTES=512*1024*1024","MAX_PARTS=120",'sha256','verifyParts','hasher.update(bytes)','BACKUP_PART_MISSING','BACKUP_SIZE_MISMATCH','BACKUP_SHA256_MISMATCH','sha256_verified:true','cleanupReady','backup_kind===\'pre_restore\'','createSignedUploadUrl','createSignedUrl','backupCreate','backupRestore','backupDelete','branch_device_id',"ready:true"])need(edge,m,'edge '+m);
 forbid(edge,'DEFAULT_ALLOWED','edge permission defaults must be explicit false');
 need(edge,"return p[key]===true",'edge secondary permission must be explicit true');
