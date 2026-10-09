@@ -35,6 +35,9 @@ const run=(version,hasItems=true)=>{
    const db=await test.open();
    assert.equal(db.version,version);
    assert.equal(test.requested(),undefined,'Never pass an old explicit version to IndexedDB');
+   assert.equal(typeof db.onversionchange,'function','Backup reader must not block a later database upgrade');
+   db.onversionchange();
+   assert.equal(test.closed(),true,'Close the connection on future migrations');
  }
  let absent=run(0,false);
  await assert.rejects(absent.open(),/AbortError/);
