@@ -210,7 +210,7 @@ function addCss(){
 .v-edit-canvas{width:100%;max-height:54vh;object-fit:contain;background:#151515;border-radius:12px}.v-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.v-controls label{font-size:8px;font-weight:900;color:#685c54}.v-controls input{width:100%}.v-ocr-source{max-width:100%;max-height:240px;display:block;margin:0 auto 9px;border-radius:10px}.v-ocr-text{width:100%;min-height:190px;border:1px solid #b9a99d;border-radius:12px;padding:10px;direction:auto;font:700 12px/1.8 Tahoma;background:#fff}.v-progress{font-size:9px;color:#087f72;padding:8px;text-align:center;font-weight:900}.v-busy{position:fixed;z-index:25000;inset:0;background:#000b;display:none;align-items:center;justify-content:center}.v-busy.show{display:flex}.v-busy-card{background:#fff;border-radius:16px;padding:20px;min-width:240px;text-align:center;color:#222;font-size:11px;font-weight:900}.v-spinner{width:36px;height:36px;border:4px solid #ddd;border-top-color:#087f72;border-radius:50%;margin:0 auto 10px;animation:vspin .9s linear infinite}@keyframes vspin{to{transform:rotate(360deg)}}@media(min-width:700px){.v-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:390px){.v-actions{grid-template-columns:1fr 1fr}.v-grid{grid-template-columns:1fr 1fr}.v-item-actions{grid-template-columns:1fr 1fr}}
 `;style.textContent+=`
 .v-grid.large{grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:13px}.v-grid.large .v-thumb{height:255px}.v-grid.large .v-thumb img{object-fit:contain}
-.v-grid.details{grid-template-columns:1fr}.v-grid.details .v-item{display:grid;grid-template-columns:105px 1fr;gap:8px}.v-grid.details .v-thumb{grid-row:1/6;height:115px}.v-grid.details .v-item-actions,.v-grid.details .v-details{grid-column:2}.v-details{font-size:9px;color:#76675d;line-height:1.7}.v-grid.details .v-name{white-space:normal}
+.v-grid.details{grid-template-columns:1fr}.v-grid.details .v-item{display:grid;grid-template-columns:105px 1fr;gap:8px}.v-grid.details .v-thumb{grid-row:1/6;height:115px}.v-grid.details .v-item-actions,.v-grid.details .v-details{grid-column:2}.v-details{font-size:9px;color:#76675d;line-height:1.7}.v-grid.details .v-name{white-space:normal}.v-drag-handle{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background:#d9eaff!important;font-size:14px!important;min-height:36px!important}.v-item.drag-source{opacity:.65;border:2px dashed #087f72}.v-item.drag-drop-target{outline:3px solid #087f72;outline-offset:-3px}
 @media(max-width:420px){.v-grid.large{grid-template-columns:1fr}.v-grid.details .v-item{grid-template-columns:85px 1fr}.v-grid.details .v-thumb{height:100px}}
 `;document.head.appendChild(style)
 }
@@ -254,6 +254,7 @@ async function build(){
   $('vBackupInput').onchange=event=>restoreBackup(event.target.files&&event.target.files[0]);
   $('vOcrInput').onchange=event=>ocrFile(event.target.files&&event.target.files[0]);
   await refresh();
+  bindTouchReorder();
   setInterval(()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{})},3600000);
   window.addEventListener('online',()=>{setSyncStatus('عاد الإنترنت • فحص جدول المزامنة');scheduleAutoSync(50)});
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
@@ -293,9 +294,9 @@ function render(){
   const clip=$('vClipboardStatus');if(clip)clip.textContent=state.clipboard?'الحافظة: '+(state.clipboard.mode==='cut'?'قص':'نسخ')+' • '+state.clipboard.name:'';
   if(['list','details','large'].includes(state.view))grid.classList.add(state.view);
   [['vGridBtn','grid'],['vLargeBtn','large'],['vDetailsBtn','details'],['vListBtn','list']].forEach(([id,mode])=>$(id)?.classList.toggle('active',state.view===mode));
-  grid.innerHTML=items.length?items.map(item=>{let thumb=isImage(item)?`<img src="${objectUrl(item.blob)}" alt="">`:`<div class="v-file-icon">${fileIcon(item)}</div>`,action=isImage(item)?'editItem':textEditable(item)?'editTextItem':'pickRevisedFile',caption=isImage(item)?'قص وتدوير':textEditable(item)?'تحرير':'نسخة معدلة';return `<article class="v-item"><button class="v-thumb" onclick="DocumentVault.openItem('${item.id}')">${thumb}${item.syncState==='pending'?'<span class="v-pending">بانتظار المزامنة</span>':''}${item.favorite?'<span class="v-favorite">★</span>':''}</button><div class="v-name" title="${esc(item.name)}">${esc(item.name)}</div>${item.folder?`<div class="v-folder">📁 ${esc(item.folder)}</div>`:''}<div class="v-meta">${state.sort==='manual'&&Number.isInteger(item.manualOrder)?'#'+item.manualOrder+' • ':''}${typeLabel(item)} • ${formatBytes(item.size)} • ${formatTime(item.updatedAt)}</div>${state.view==='details'?`<div class="v-details">تاريخ الإضافة: ${formatTime(item.createdAt)}<br>آخر تعديل: ${formatTime(item.updatedAt)}<br>آخر فتح: ${item.lastOpenedAt?formatTime(item.lastOpenedAt):'لم يُفتح بعد'}</div>`:''}<div class="v-item-actions"><button onclick="DocumentVault.${action}('${item.id}')">${caption}</button><button onclick="DocumentVault.printItem('${item.id}')">طباعة</button><button onclick="DocumentVault.saveItem('${item.id}')">حفظ</button><button class="${item.favorite?'favorite-on':''}" onclick="DocumentVault.toggleFavorite('${item.id}')">${item.favorite?'★':'☆'}</button><button onclick="DocumentVault.moveItem('${item.id}')">نقل</button><button onclick="DocumentVault.copyItem('${item.id}')">نسخ</button><button onclick="DocumentVault.cutItem('${item.id}')">قص</button><button onclick="DocumentVault.reorderItem('${item.id}')">ترتيب</button><button onclick="DocumentVault.renameItem('${item.id}')">تسمية</button><button onclick="DocumentVault.shareItem('${item.id}')">مشاركة</button><button class="danger" onclick="DocumentVault.deleteItem('${item.id}')">حذف</button></div></article>`}).join(''):'<div class="v-empty">لا توجد نتائج. ارفع صوراً أو كتباً أو ملفات من الأيقونات في الأعلى.</div>'
+  grid.innerHTML=items.length?items.map(item=>{let thumb=isImage(item)?`<img src="${objectUrl(item.blob)}" alt="">`:`<div class="v-file-icon">${fileIcon(item)}</div>`,action=isImage(item)?'editItem':textEditable(item)?'editTextItem':'pickRevisedFile',caption=isImage(item)?'قص وتدوير':textEditable(item)?'تحرير':'نسخة معدلة';return `<article class="v-item" data-vault-item="${esc(item.id)}"><button class="v-thumb" onclick="DocumentVault.openItem('${item.id}')">${thumb}${item.syncState==='pending'?'<span class="v-pending">بانتظار المزامنة</span>':''}${item.favorite?'<span class="v-favorite">★</span>':''}</button><div class="v-name" title="${esc(item.name)}">${esc(item.name)}</div>${item.folder?`<div class="v-folder">📁 ${esc(item.folder)}</div>`:''}<div class="v-meta">${state.sort==='manual'&&Number.isInteger(item.manualOrder)?'#'+item.manualOrder+' • ':''}${typeLabel(item)} • ${formatBytes(item.size)} • ${formatTime(item.updatedAt)}</div>${state.view==='details'?`<div class="v-details">تاريخ الإضافة: ${formatTime(item.createdAt)}<br>آخر تعديل: ${formatTime(item.updatedAt)}<br>آخر فتح: ${item.lastOpenedAt?formatTime(item.lastOpenedAt):'لم يُفتح بعد'}</div>`:''}<div class="v-item-actions">${state.sort==='manual'&&state.filter.startsWith('folder:')?`<button class="v-drag-handle" data-vault-drag="${esc(item.id)}" title="اسحب لتغيير ترتيب الصور والملفات" aria-label="اسحب لترتيب ${esc(item.name)}">⠿ سحب</button>`:'' }<button onclick="DocumentVault.${action}('${item.id}')">${caption}</button><button onclick="DocumentVault.printItem('${item.id}')">طباعة</button><button onclick="DocumentVault.saveItem('${item.id}')">حفظ</button><button class="${item.favorite?'favorite-on':''}" onclick="DocumentVault.toggleFavorite('${item.id}')">${item.favorite?'★':'☆'}</button><button onclick="DocumentVault.moveItem('${item.id}')">نقل</button><button onclick="DocumentVault.copyItem('${item.id}')">نسخ</button><button onclick="DocumentVault.cutItem('${item.id}')">قص</button><button onclick="DocumentVault.reorderItem('${item.id}')">ترتيب</button><button onclick="DocumentVault.renameItem('${item.id}')">تسمية</button><button onclick="DocumentVault.shareItem('${item.id}')">مشاركة</button><button class="danger" onclick="DocumentVault.deleteItem('${item.id}')">حذف</button></div></article>`}).join(''):'<div class="v-empty">لا توجد نتائج. ارفع صوراً أو كتباً أو ملفات من الأيقونات في الأعلى.</div>'
 }
-function setFilter(filter){state.filter=filter;render()}
+function setFilter(filter){state.filter=filter;if(filter.startsWith('folder:')){state.sort='manual';localStorage.setItem(SORT_KEY,'manual');if($('vSort'))$('vSort').value='manual'}render()}
 function setSort(sort){state.sort=sort;localStorage.setItem(SORT_KEY,sort);render()}
 function setView(view){state.view=['grid','list','large','details'].includes(view)?view:'grid';localStorage.setItem(VIEW_KEY,state.view);render()}
 function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));state.filter='folder:'+name;render();alert('تم إنشاء الحافظة «'+name+'» ✓')}
@@ -359,7 +360,7 @@ function folderOption(current){
   if(answer===null)return null;
   return answer.trim()?niceName(answer.trim()).slice(0,120):''
 }
-async function organizeItem(id,kind,destination){
+async function organizeItem(id,kind,destination,positionOverride=null){
   const permission=kind==='copy'?'vaultAdd':'vaultMove';
   if(!requireVault(permission)||!requireVault('vaultEdit'))return false;
   const item=findItem(id);
@@ -368,10 +369,13 @@ async function organizeItem(id,kind,destination){
   if(folder===null)return false;
   const total=folderEntries(state.items,folder).length;
   const maximum=kind==='reorder'?total:kind==='copy'?total+1:total+(folder===String(item.folder||'')?0:1);
-  const answer=prompt('ترتيب الملف داخل حافظة «'+(folder||'العامة')+'»: اكتب رقم الموضع من 1 إلى '+maximum+'.',String(maximum));
-  if(answer===null)return false;
-  if(!/^\\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
-  const position=Number(answer.trim());
+  let position=positionOverride;
+  if(position===null){
+    const answer=prompt('ترتيب الملف داخل حافظة «'+(folder||'العامة')+'»: اكتب رقم الموضع من 1 إلى '+maximum+'.',String(maximum));
+    if(answer===null)return false;
+    if(!/^\\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
+    position=Number(answer.trim())
+  }
   if(!Number.isSafeInteger(position)||position<1||position>maximum){alert('رقم الترتيب خارج حدود الحافظة.');return false}
   try{
     await commitFolderTransfer(id,folder,kind,position,item.syncRevision);
@@ -388,6 +392,49 @@ async function organizeItem(id,kind,destination){
 }
 async function moveItem(id){return organizeItem(id,'move')}
 async function reorderItem(id){return organizeItem(id,'reorder')}
+async function reorderByDrop(sourceId,targetId){
+  if(!state.filter.startsWith('folder:')||state.sort!=='manual'||sourceId===targetId)return false;
+  const folder=state.filter.slice(7),items=folderEntries(state.items,folder);
+  const source=items.findIndex(item=>item.id===sourceId),target=items.findIndex(item=>item.id===targetId);
+  if(source<0||target<0)return false;
+  return organizeItem(sourceId,'reorder',folder,target+1)
+}
+function bindTouchReorder(){
+  const grid=$('vGrid');if(!grid||grid.dataset.dragReady)return;
+  grid.dataset.dragReady='true';
+  let gesture=null;
+  const clear=()=>{
+    grid.querySelectorAll('.drag-source,.drag-drop-target').forEach(el=>el.classList.remove('drag-source','drag-drop-target'));
+    if(gesture){try{grid.releasePointerCapture(gesture.pointerId)}catch(_){}}
+    gesture=null
+  };
+  grid.addEventListener('pointerdown',event=>{
+    const handle=event.target?.closest?.('[data-vault-drag]');
+    if(!handle||!state.filter.startsWith('folder:')||state.sort!=='manual')return;
+    event.preventDefault();
+    gesture={pointerId:event.pointerId,sourceId:handle.dataset.vaultDrag,targetId:'',x:event.clientX,y:event.clientY,moved:false};
+    try{grid.setPointerCapture(event.pointerId)}catch(_){}
+    handle.closest('.v-item')?.classList.add('drag-source')
+  });
+  grid.addEventListener('pointermove',event=>{
+    if(!gesture||gesture.pointerId!==event.pointerId)return;
+    event.preventDefault();
+    if(Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y)>6)gesture.moved=true;
+    if(!gesture.moved)return;
+    const hit=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('[data-vault-item]');
+    const targetId=hit?.dataset.vaultItem||'';
+    gesture.targetId=targetId&&targetId!==gesture.sourceId?targetId:'';
+    grid.querySelectorAll('.drag-drop-target').forEach(el=>el.classList.remove('drag-drop-target'));
+    if(gesture.targetId)hit.classList.add('drag-drop-target')
+  });
+  grid.addEventListener('pointerup',event=>{
+    if(!gesture||gesture.pointerId!==event.pointerId)return;
+    const {sourceId,targetId,moved}=gesture;clear();
+    if(moved&&targetId)void reorderByDrop(sourceId,targetId)
+  });
+  grid.addEventListener('pointercancel',clear);
+  grid.addEventListener('lostpointercapture',clear)
+}
 function copyItem(id){
   if(!requireVault('vaultView')||!requireVault('vaultAdd')||!requireVault('vaultEdit'))return;
   const item=findItem(id);if(!item||item.deleted)return;
@@ -715,6 +762,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,restoreTrash,eraseTrash,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={setFilter,setSort,setView,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
