@@ -61,7 +61,30 @@ async function seal(device){
     return true
   })
 }
-async function loadTrust(){if(trustRevokedInMemory||localStorage.getItem(TRUST_REVOCATION_KEY)==='1'||!nativeAvailable())return null;const raw=String(await nativeRequest('secureGet',{key:SECURE_TRUST_KEY})||'');if(!raw)return null;let env;try{env=JSON.parse(raw)}catch(_){return null}if(!env?.body||!env?.mac)return null;const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)return null;const expected=await hmac(env.body,secret);if(!constantTime(expected,env.mac))return null;let trust;try{trust=JSON.parse(env.body)}catch(_){return null}if(trust?.schema!==2||trust?.appVersion!==APP_VERSION||trust?.device_id!==currentId()||trust?.active===false)return null;const now=Date.now(),verified=Number(trust.verifiedAt||0);if(!verified||now+CLOCK_SKEW_MS<verified||now-verified>OFFLINE_GRACE_MS)return null;return trust}
+function trustReadAllowed(epoch){
+  return epoch===trustEpoch&&!trustRevokedInMemory&&
+    localStorage.getItem(TRUST_REVOCATION_KEY)!=='1'&&nativeAvailable()
+}
+async function loadTrust(){
+  const epoch=trustEpoch;
+  if(!trustReadAllowed(epoch))return null;
+  const raw=String(await nativeRequest('secureGet',{key:SECURE_TRUST_KEY})||'');
+  if(!raw||!trustReadAllowed(epoch))return null;
+  let env;
+  try{env=JSON.parse(raw)}catch(_){return null}
+  if(!env?.body||!env?.mac)return null;
+  const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+  if(!secret||!trustReadAllowed(epoch))return null;
+  const expected=await hmac(env.body,secret);
+  if(!trustReadAllowed(epoch)||!constantTime(expected,env.mac))return null;
+  let trust;
+  try{trust=JSON.parse(env.body)}catch(_){return null}
+  if(trust?.schema!==2||trust?.appVersion!==APP_VERSION||
+     trust?.device_id!==currentId()||trust?.active===false)return null;
+  const now=Date.now(),verified=Number(trust.verifiedAt||0);
+  if(!verified||now+CLOCK_SKEW_MS<verified||now-verified>OFFLINE_GRACE_MS)return null;
+  return trustReadAllowed(epoch)?trust:null
+}
 async function clearTrust(){
   trustEpoch++;
   trustRevokedInMemory=true;
@@ -121,7 +144,17 @@ function effectiveRole(){const sec=window.AbuBassamSecurity;if(offlineSession)re
 function effectiveDevice(){const sec=window.AbuBassamSecurity;if(offlineSession)return sec?.__offlineTrust||null;if(sec?.isOnlineUnlocked?.()!==true)return null;return sec?.__baseDevice?.()||null}
 function effectiveCan(name){const sec=window.AbuBassamSecurity;if(offlineSession){if(sec?.__offlineRole==='owner')return true;return !!sec?.__offlinePermissions?.[name]}if(sec?.isOnlineUnlocked?.()!==true)return false;const device=sec?.__baseDevice?.();return !!(device&&sec?.__baseCan?.(name))}
 async function refreshLimit(){const sec=window.AbuBassamSecurity;if(!sec)return 5;let limit=Number(localStorage.getItem('abuBassamDeviceLimitV1')||5)||5;try{if(window.AbuBassamDeviceRegistry?.readLimit)limit=Number(await AbuBassamDeviceRegistry.readLimit())||limit}catch(_){}limit=Math.max(1,Math.min(50,limit));sec.maxDevices=limit;document.querySelectorAll('#abuDeviceModal .abu-device-head div div').forEach(el=>{if(/الحد الأقصى/.test(el.textContent||''))el.textContent=`الحد الأقصى ${limit} أجهزة • الرئيسي يتحكم بالفرعية`});const error=$('abuLoginError');if(error&&/الحد الأقصى/.test(error.textContent||''))error.textContent=`وصل الحساب إلى الحد الأقصى المسموح (${limit} جهازًا). غيّر الحد من الجهاز الرئيسي أو احذف جهازًا فرعيًا.`;return limit}
-async function updateOfflineButton(){const b=$('abuOfflineBtn');if(!b)return;if(online()||!nativeAvailable()){b.style.display='none';return}try{b.style.display=(await loadTrust())?'block':'none'}catch(_){b.style.display='none'}}
+let offlineButtonRequest=0;
+async function updateOfflineButton(){
+  const request=++offlineButtonRequest,b=$('abuOfflineBtn');
+  if(!b)return;
+  if(online()||!nativeAvailable()){b.style.display='none';return}
+  try{
+    const trust=await loadTrust();
+    if(request!==offlineButtonRequest)return;
+    b.style.display=!online()&&nativeAvailable()&&trust?'block':'none'
+  }catch(_){if(request===offlineButtonRequest)b.style.display='none'}
+}
 // Deduplicate server checks; a result from a prior locked/logged-out
 // session must never re-enable its roles or permissions.
 async function revalidateOfflineSession(){
