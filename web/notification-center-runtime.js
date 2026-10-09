@@ -97,7 +97,8 @@ function close(){$('abuNotificationSheet')?.classList.remove('show')}
 function refresh(){importOperations();flushAuditQueue();if(isOwner())pullOwnerActivity(false);render()}
 
 function importOperations(){try{const ops=window.AbuBassamOps?.list?.()||[];ops.slice(0,500).reverse().forEach(op=>fromOperation(op))}catch(_){}}
-function hookOperations(){const ops=window.AbuBassamOps;if(!ops||typeof ops.add!=='function'||ops.add.__abuNotifyWrapped)return false;const original=ops.add;const wrapped=function(input,...rest){const out=original.call(this,input,...rest);try{fromOperation(input||{})}catch(_){}return out};wrapped.__abuNotifyWrapped=true;wrapped.__abuOriginal=original;ops.add=wrapped;return true}
+function hasOperationWrapper(fn,flag){const seen=new Set();while(typeof fn==='function'&&!seen.has(fn)){if(fn[flag]===true)return true;seen.add(fn);fn=fn.__abuOriginal}return false}
+function hookOperations(){const ops=window.AbuBassamOps;if(!ops||typeof ops.add!=='function')return false;if(hasOperationWrapper(ops.add,'__abuNotifyWrapped'))return true;const original=ops.add;const wrapped=function(input,...rest){const out=original.call(this,input,...rest);try{fromOperation(input||{})}catch(_){}return out};wrapped.__abuNotifyWrapped=true;wrapped.__abuOriginal=original;ops.add=wrapped;return true}
 
 async function ownerContext(){if(!isOwner())throw new Error('OWNER_REQUIRED');if(!connected()||!client())throw new Error('اربط حساب المزامنة أولًا');const s=await secret(),id=deviceIdentity().id;if(!s||!id)throw new Error('تعذر التحقق من الجهاز الرئيسي');return{s,id}}
 async function loadAdminDevices(){const ctx=await ownerContext(),{data,error}=await client().rpc('abu_bassam_owner_activity_devices',{p_actor_device_id:ctx.id,p_actor_secret:ctx.s});if(error)throw error;adminDevices=Array.isArray(data)?data:[];const select=$('abuReportDevice');if(select){const current=select.value;select.innerHTML='<option value="">كل الأجهزة الفرعية</option>'+adminDevices.filter(d=>d.device_role!=='owner').map(d=>`<option value="${esc(d.device_id)}">${esc(d.device_name||d.device_id)}</option>`).join('');if([...select.options].some(o=>o.value===current))select.value=current}return adminDevices}
@@ -111,7 +112,25 @@ function exportAdmin(format){if(!isOwner())return alert('تقارير الأجه
 
 async function pullOwnerActivity(notifyNew=true){if(!isOwner()||!connected()||!client())return false;try{const ctx=await ownerContext(),from=new Date(Date.now()-7*86400000).toISOString(),{data,error}=await client().rpc('abu_bassam_owner_activity_report',{p_actor_device_id:ctx.id,p_actor_secret:ctx.s,p_from:from,p_to:null,p_target_device_id:null,p_category:null,p_limit:250});if(error)throw error;(data||[]).filter(r=>r.device_role!=='owner').reverse().forEach(r=>{const id=`audit:${r.event_id}`,exists=load().some(x=>x.id===id);add({id,category:r.category,severity:r.severity,title:`${r.device_name}: ${r.title}`,details:r.details,section:r.section,deviceId:r.device_id,deviceName:r.device_name,role:r.device_role,createdAt:r.created_at,eventType:r.event_type,source:'branch-audit',read:exists},{audit:false,keepRead:true})});return true}catch(_){return false}}
 
-function boot(){addCss();buildBell();buildSheet();const timer=setInterval(()=>{if(hookOperations()){clearInterval(timer);importOperations();flushAuditQueue();if(isOwner())pullOwnerActivity(false)}},250);setTimeout(()=>clearInterval(timer),15000);window.addEventListener('online',()=>{flushAuditQueue();if(isOwner())pullOwnerActivity(false)});setInterval(()=>{hookOperations();flushAuditQueue();if(isOwner()&&document.visibilityState!=='hidden')pullOwnerActivity(true)},120000);updateBadge()}
+function boot(){
+  addCss();buildBell();buildSheet();
+  let operationsImported=false;
+  const readyOperations=()=>{if(!hookOperations())return false;if(!operationsImported){operationsImported=true;importOperations()}return true};
+  const refreshOnline=()=>{if(!navigator.onLine)return;void flushAuditQueue();if(isOwner())void pullOwnerActivity(false)};
+  if(readyOperations())refreshOnline();
+  else{
+    const timer=setInterval(()=>{if(readyOperations()){clearInterval(timer);refreshOnline()}},250);
+    setTimeout(()=>clearInterval(timer),15000);
+  }
+  window.addEventListener('online',refreshOnline);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){readyOperations();refreshOnline()}});
+  setInterval(()=>{
+    if(document.visibilityState==='hidden')return;
+    readyOperations();
+    if(navigator.onLine){void flushAuditQueue();if(isOwner())void pullOwnerActivity(true)}
+  },120000);
+  updateBadge()
+}
 
 window.AbuBassamNotifications={add,open,close,tab,read:markRead,markAll,remove:removeOne,clearRead,refresh,list:load,unread:unreadCount,fromOperation,flushAuditQueue,loadAdminReport,exportAdmin,pullOwnerActivity};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
