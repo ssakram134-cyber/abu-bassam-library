@@ -347,7 +347,7 @@ function addCss(){
 
 function mainHtml(){return `<div class="v-shell">
   <div class="v-hero">
-    <h2>🗄️ الحفظ والمستندات</h2><p>أرشيف محلي منظم • بحث سريع • OCR • نسخ احتياطي • مزامنة بين الأجهزة</p>
+    <h2>🗄️ الحفظ والمستندات</h2><p>أرشيف فرعك المحلي • بحث وOCR • نسخ احتياطي • مزامنة ملفات هذا الفرع</p>
     <label class="v-search">🔎<input id="vSearch" placeholder="ابحث باسم أي كتاب أو صورة أو ملف..." autocomplete="off"></label>
     <div class="v-actions"><button onclick="DocumentVault.openOcr()">📷 تحويل صورة إلى نص</button><button onclick="DocumentVault.backup('save')">⬇ نسخة على الجهاز</button><button onclick="DocumentVault.backup('share')">✉ Google / Gmail</button><button onclick="DocumentVault.encryptedBackup()">🔐 نسخة مشفرة</button><button onclick="DocumentVault.syncNow()">↻ مزامنة الآن</button><button id="vOtherBranchButton" style="display:none" onclick="DocumentVault.openOtherBranches()">📱 أرشيف الفروع (قراءة فقط)</button></div>
     <div class="v-syncline"><span id="vSyncStatus">المزامنة: جاهزة</span><label class="v-auto"><input id="vAutoSync" type="checkbox" onchange="DocumentVault.setAutoSync(this.checked)"> تلقائي يومياً وعند توفر الإنترنت</label></div>
