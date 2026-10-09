@@ -65,6 +65,26 @@ Deno.serve(async(req:Request)=>{
       const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,900,{download:false});if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
       return json({ok:true,path,url:data.signedUrl,expiresIn:900});
     }
+    if(action==='owner-download-url'&&req.method==='GET'){
+      const itemId=String(url.searchParams.get('item_id')||'');
+      const targetDevice=String(url.searchParams.get('branch_device_id')||'');
+      const expected=String(url.searchParams.get('updated_at')||'');
+      if(!validItemId(itemId)||!validItemId(targetDevice)||!expected)return json({error:'VAULT_ITEM_OR_VERSION_REQUIRED'},400);
+      const base=await context(req,'vaultView');
+      if(base.device.role!=='owner')return json({error:'VAULT_OWNER_REQUIRED'},403);
+      const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault')
+        .select('data,updated_at').eq('user_id',base.user.id)
+        .eq('branch_device_id',targetDevice).eq('client_id',itemId).maybeSingle();
+      if(rowError)return json({error:'VAULT_METADATA_UNAVAILABLE'},500);
+      if(!row||row.data?.deleted===true)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
+      if(String(row.updated_at||'')!==expected)return json({error:'VAULT_VERSION_CONFLICT'},409);
+      const path=String(row.data?.storagePath||'');
+      if(!path||!isItemRevision(path,base.user.id,targetDevice,itemId))
+        return json({error:'VAULT_PATH_INVALID'},403);
+      const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,300,{download:false});
+      if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
+      return json({ok:true,path,url:data.signedUrl,expiresIn:300});
+    }
     const discardUpload=action==='discard-upload'&&req.method==='DELETE';
     if((action==='delete'&&req.method==='DELETE')||discardUpload){
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),requested=String(body?.path||'');
