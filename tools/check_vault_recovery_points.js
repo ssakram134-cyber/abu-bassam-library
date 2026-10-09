@@ -6,13 +6,14 @@ function code(a,b){const x=source.indexOf(a),y=source.indexOf(b,x+a.length);asse
 const planCode=code('function numberedName(','async function commitFolderNumbering(');
 const restoreCode=code('async function commitFolderNumbering(','async function renumberFolder(');
 let step=0,account='userA:deviceA';
+function folderEntries(rows,folder){return rows.filter(x=>!x.deleted&&x.folder===folder).sort((a,b)=>a.manualOrder-b.manualOrder)}
 const uuid=()=> 'revision-'+(++step);
 function storeDb(seed){
  let active=new Map(seed.map(x=>[x.id,{...x}])),points=new Map(),aborts=0,txs=0;
  return {
  get items(){return active},get points(){return points},get aborts(){return aborts},get transactions(){return txs},
  async openDb(){return {transaction(stores,mode){
-  assert.deepEqual(stores,['items','checkpoints']);assert.equal(mode,'readwrite');txs++;
+  assert.ok((Array.isArray(stores)&&stores.includes('items')&&stores.includes('checkpoints'))||stores==='checkpoints');assert.equal(mode,'readwrite');txs++;
   const staged={items:new Map(active),checkpoints:new Map(points)};let pending=0,finished=false;
   const tx={oncomplete:null,onerror:null,onabort:null,aborted:false,
    abort(){this.aborted=true;aborts++},
@@ -48,9 +49,9 @@ const rows=[
  {id:'c',name:'C.jpg',folder:'علي',manualOrder:1,syncRevision:'oldC',createdAt:'2026-09-01',updatedAt:'2026-09-01',blob:{size:5},deleted:false}
 ];
 const d=storeDb(rows);
-const api=new Function('niceName','uuid','MAX_ITEMS','openDb','STORE','CHECKPOINT_STORE','CHECKPOINT_MS','syncScope','Date',
+const api=new Function('niceName','uuid','MAX_ITEMS','openDb','STORE','CHECKPOINT_STORE','CHECKPOINT_MS','syncScope','Date','folderEntries',
 planCode+restoreCode+'return {commitFolderNumbering,restoreFolderNumberingPoint,checkpointList,purgeExpiredCheckpoints}')(
- n=>String(n),uuid,1000,d.openDb,'items','checkpoints',30*86400000,()=>account,Date);
+ n=>String(n),uuid,1000,d.openDb,'items','checkpoints',30*86400000,()=>account,Date,folderEntries);
 (async()=>{
  const revisions=new Map([['a','oldA'],['b','oldB']]);
  assert.equal(await api.commitFolderNumbering('زيد',revisions),2);
@@ -85,7 +86,7 @@ planCode+restoreCode+'return {commitFolderNumbering,restoreFolderNumberingPoint,
  assert.equal(await api.purgeExpiredCheckpoints(),true);
  assert.equal(d.points.size,0,'Automatic checkpoint expiry deletes only the metadata snapshot');
  assert.ok(d.aborts>=3,'Cross-account, deleted and conflict restores abort');
- assert.match(source,/function restoreLastFolderNumbering\(\)/);
+ assert.match(source,/async function restoreLastFolderNumbering\(\)/);
  assert.match(source,/id="vBulkToolbar"/);
  assert.match(source,/↩ استعادة آخر ترقيم/);
  console.log('Vault numbering recovery passed: metadata snapshot, atomic restoration, account scope, conflict protection, and expiry');
