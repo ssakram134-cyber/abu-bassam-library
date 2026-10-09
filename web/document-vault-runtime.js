@@ -289,6 +289,48 @@ async function dbApplySyncIfUnchanged(id,expected,replacement,localCopy=null){
   })
 }
 
+
+async function dbReconcileRemoteDeletionToTrashIfUnchanged(expected,{remoteEdited=null,remoteBlob=null,remoteVersion=''}={}){
+ const db=await openDb(),scope=syncScope(),now=Date.now(),trashId=uuid();
+ return new Promise((resolve,reject)=>{
+  let changed=false,reason=null,tx;
+  try{
+   tx=db.transaction([STORE,TRASH_STORE],'readwrite');
+   const store=tx.objectStore(STORE),trash=tx.objectStore(TRASH_STORE),request=store.get(expected.id);
+   const fail=e=>{reason=e;try{tx.abort()}catch(_){}};
+   request.onsuccess=()=>{
+    try{
+     const current=request.result;
+     if(!current||current.syncState!==expected.syncState||
+        String(current.remoteUpdatedAt||'')!==String(expected.remoteUpdatedAt||'')||
+        syncSnapshot(current)!==syncSnapshot(expected))return;
+     if(scope!==syncScope()||!vaultScopeOk(false))throw new Error('VAULT_TRASH_SCOPE');
+     let archived;
+     if(remoteEdited){
+      if(!current.deleted||remoteEdited.deleted||!remoteBlob||!remoteVersion)throw new Error('VAULT_DELETE_CONFLICT_INVALID');
+      const incoming=remoteItem({...remoteEdited,id:expected.id},remoteBlob,remoteVersion);
+      archived={...incoming,name:niceName(incoming.name+' (تعديل جهاز آخر قبل الحذف)')};
+     }else{
+      if(current.deleted||!current.blob)throw new Error('VAULT_TRASH_EMPTY');
+      archived=current
+     }
+     trash.add({...archived,id:trashId,sourceId:expected.id,scope,
+       deletedAtMs:now,expiresAt:now+TRASH_MS,deleted:false,syncState:'local-trash'});
+     if(remoteEdited){
+      // Record preserved remote revision: the existing deletion is uploaded on the next sync pass.
+      store.put({...current,remoteUpdatedAt:String(remoteVersion),syncRevision:uuid(),syncState:'pending'})
+     }else store.delete(expected.id);
+     changed=true
+    }catch(e){fail(e)}
+   };
+   request.onerror=()=>fail(request.error||new Error('VAULT_TRASH_READ_FAILED'));
+   tx.oncomplete=()=>resolve(changed);
+   tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_TRASH_SYNC_FAILED'));
+   tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_TRASH_SYNC_ABORTED'))
+  }catch(e){try{tx?.abort()}catch(_){}reject(e)}
+ })
+}
+
 function addCss(){
   let style=document.createElement('style');style.id='vaultStyle';style.textContent=`
 #vaultCenter{display:none;padding:12px;background:var(--bg,#f5efe8);min-height:82vh}.vault-show{display:block!important}.v-shell{max-width:920px;margin:auto;color:var(--text,#2b211d);font-family:Tahoma,Arial,sans-serif}.v-hero{border-radius:21px;padding:15px;color:#fff;background:radial-gradient(circle at 8% 12%,#55d6b655,transparent 28%),linear-gradient(135deg,#102d47,#075f65 58%,#a77932);box-shadow:0 12px 30px #102d4730}.v-hero h2{margin:0;font-size:18px}.v-hero p{font-size:9px;opacity:.88;margin:5px 0 10px}.v-search{display:flex;align-items:center;gap:7px;background:#fff;border-radius:13px;padding:3px 9px;color:#18303b}.v-search input{width:100%;border:0;outline:0;background:transparent;padding:10px 4px;font:700 12px Tahoma;color:#222}.v-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}.v-actions button{border:1px solid #ffffff3b;border-radius:10px;background:#ffffff18;color:#fff;min-height:42px;font-size:8px;font-weight:900;padding:4px}.v-syncline{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:8px}.v-auto{display:flex;align-items:center;gap:5px}
@@ -921,6 +963,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(!window.AbuBassamSecurity?.device?.()?.device_id){setSyncStatus('يلزم اعتماد الجهاز قبل المزامنة');return false}
   state.syncing=true;setSyncStatus('جاري رفع التغييرات إلى الحاوية الخاصة...');
   try{
+    let deletionConflictsSaved=0;
     const service=cloud(),pending=(await dbAll()).filter(item=>item.syncState==='pending');
     for(const item of pending){
       const row=await service.get('vault',item.id),remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
@@ -930,7 +973,13 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
           if(remote?.deleted){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
-          if(!await dbApplySyncIfUnchanged(item.id,item,remoteItem(remote,remoteBlob,remoteVersion)))autoSyncRerunRequested=true;
+          if(!await dbReconcileRemoteDeletionToTrashIfUnchanged(item,{remoteEdited:remote,remoteBlob,remoteVersion})){
+            autoSyncRerunRequested=true
+          }else{
+            deletionConflictsSaved++;
+            autoSyncRerunRequested=true;
+            logOperation('sync','حفظ تعديل الجهاز الآخر في سلة المحذوفات قبل الحذف',String(remote.name||item.name))
+          }
           continue
         }
         if(remote?.deleted){
@@ -971,11 +1020,16 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here&&!await dbApplySyncIfUnchanged(id,here,null))autoSyncRerunRequested=true;continue}
+      if(data.deleted){if(here&&!await dbReconcileRemoteDeletionToTrashIfUnchanged(here))autoSyncRerunRequested=true;continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
       if(!await dbApplySyncIfUnchanged(id,here||null,remoteItem(data,blob,remoteVersion)))autoSyncRerunRequested=true
+    }
+    if(deletionConflictsSaved){
+      await refresh();
+      setSyncStatus('حُفظت نسخ التعارض في سلة المحذوفات • الحذف بانتظار الرفع');
+      return false
     }
     syncSet(LAST_SYNC_KEY,String(Date.now()));
     await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
