@@ -162,9 +162,9 @@ async function verifyAuthStartupAndSecret(){
 
     +'const SECRET_KEY="secret",SECURE_TRUST_KEY="trust",TRUST_REVOCATION_KEY="revocation",'
     +'localStorage={getItem:()=>marker,setItem:()=>{if(options.failMarker)throw new Error("STORAGE_UNAVAILABLE");marker="1"},removeItem:()=>{marker=null}},'
-    +'window={AbuBassamSecurity:{isOnlineUnlocked:()=>true}},'
+    +'window={AbuBassamSecurity:{isOnlineUnlocked:()=>true},AbuBassamCloud:{session:()=>({user:{id:"owner"}})}},'
     +'nativeAvailable=()=>true,online=()=>true,currentId=()=>"phone",'
-    +'normalizeDevice=value=>value,cleanLegacy=()=>{},console={warn(){}},'
+    +'normalizeDevice=value=>({...value,userId:"owner"}),cleanLegacy=()=>{},console={warn(){}},'
     +'nativeRequest=async(action,payload)=>{'
     +'if(action==="secureGet")return "secret-key";'
     +'if(action==="secureSet"){writes++;if(options.waitWrite)await options.waitWrite();saved=payload.value;return true}'
