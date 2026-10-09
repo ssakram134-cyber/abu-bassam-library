@@ -78,7 +78,32 @@ function openDb(){
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
 async function dbPut(item){if(item?.syncState==='pending')item.syncRevision=uuid();let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
-async function dbPutBatch(items){if(!items.length)return;const db=await openDb();return new Promise((resolve,reject)=>{let tx;try{tx=db.transaction(STORE,'readwrite');const store=tx.objectStore(STORE);for(const item of items)store.add(item);tx.oncomplete=()=>resolve(items.length);tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ دفعة الأرشيف'));tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))}catch(error){try{tx?.abort()}catch(_){}reject(error)}})}
+async function dbPutBatch(items){
+  if(!items.length)return 0;
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let tx,reason=null;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.getAll();
+      request.onsuccess=()=>{
+        try{
+          const rows=request.result||[],existingIds=new Set(rows.map(row=>String(row.id))),
+            incomingIds=new Set(items.map(row=>String(row.id)));
+          if(incomingIds.size!==items.length||items.some(row=>!row.id||row.deleted||existingIds.has(String(row.id))))
+            throw new Error('VAULT_DUPLICATE_ITEM');
+          if(rows.filter(row=>!row.deleted).length+items.length>MAX_ITEMS)
+            throw new Error('VAULT_LIMIT_1000');
+          for(const row of items)store.add(row);
+        }catch(error){reason=error;try{tx.abort()}catch(_){reject(error)}}
+      };
+      request.onerror=()=>{reason=request.error;try{tx.abort()}catch(_){reject(reason)}};
+      tx.oncomplete=()=>resolve(items.length);
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذر حفظ دفعة الأرشيف'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
+  })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 async function dbTrashAll(){const db=await openDb();return new Promise((resolve,reject)=>{const request=db.transaction(TRASH_STORE,'readonly').objectStore(TRASH_STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error||new Error('TRASH_READ_FAILED'))})}
 function trashScopeOk(item){return !!item&&String(item.scope||'')===syncScope()&&vaultScopeOk(false)}
@@ -627,7 +652,7 @@ function pickIntoFolder(kind){if(!requireVault('vaultAdd'))return;if(!state.filt
 function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupInput').value='';$('vBackupInput').click()}
 
 function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:fileMime(name,blob.type),size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
-async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
+async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPutBatch([item]);return item}
 function previousVersionName(name){
   const text=niceName(name),match=text.match(/^(.*?)(\.[^.]*)?$/),tag=new Date().toISOString().replace(/[:.]/g,'-');
   return (match?.[1]||text)+' (الأصل قبل التعديل '+tag+')'+(match?.[2]||'')
@@ -635,38 +660,50 @@ function previousVersionName(name){
 async function commitEditedFile(previous,blob,meta,keepOriginal){
   const db=await openDb();
   return new Promise((resolve,reject)=>{
-    let tx;
+    let tx,reason=null;
     try{
       tx=db.transaction(STORE,'readwrite');
-      const store=tx.objectStore(STORE),request=store.get(previous.id);
-      request.onsuccess=()=>{
-        const current=request.result;
-        if(!current||current.deleted||current.syncRevision!==previous.syncRevision){
-          try{tx.abort()}catch(_){}
-          return
-        }
-        if(keepOriginal){
-          const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
-          original.originalOf=current.id;
-          original.favorite=current.favorite;
-          original.mime=current.mime;
-          original.size=current.size;
-          store.add(original)
-        }
-        store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),syncState:'pending',syncRevision:uuid()})
+      const store=tx.objectStore(STORE),request=store.get(previous.id),all=keepOriginal?store.getAll():null;
+      let current=null,rows=null,handled=false;
+      const commit=()=>{
+        if(handled||current===null||(keepOriginal&&rows===null))return;
+        handled=true;
+        try{
+          if(!current||current.deleted||String(current.syncRevision||'')!==String(previous.syncRevision||''))
+            throw new Error('VAULT_STALE_ITEM');
+          if(keepOriginal&&rows.filter(item=>!item.deleted).length>=MAX_ITEMS)
+            throw new Error('VAULT_LIMIT_1000');
+          if(keepOriginal){
+            const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
+            original.originalOf=current.id;
+            original.favorite=current.favorite;
+            original.mime=current.mime;
+            original.size=current.size;
+            store.add(original)
+          }
+          store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),
+            category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),
+            syncState:'pending',syncRevision:uuid()})
+        }catch(error){reason=error;try{tx.abort()}catch(_){reject(error)}}
       };
-      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      request.onsuccess=()=>{current=request.result||false;commit()};
+      request.onerror=()=>{reason=request.error;try{tx.abort()}catch(_){reject(reason)}};
+      if(all){
+        all.onsuccess=()=>{rows=all.result||[];commit()};
+        all.onerror=()=>{reason=all.error;try{tx.abort()}catch(_){reject(reason)}}
+      }
       tx.oncomplete=()=>resolve(true);
-      tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ التعديل'));
-      tx.onabort=()=>reject(new Error('أُلغي الحفظ: الملف تغيّر أثناء التحرير أو تعذر التخزين'))
-    }catch(e){try{tx?.abort()}catch(_){}reject(e)}
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذر حفظ التعديل'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغي الحفظ: الملف تغيّر أو تجاوز الأرشيف حد السعة'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
   })
 }
 async function saveEditedBlob(id,blob,meta={}){
   const required=meta.image?'vaultImageEdit':'vaultEdit';
   if(!requireVault(required))return false;
-  const previous=findItem(id);
-  if(!previous||previous.deleted||!previous.blob||!blob)return false;
+  const currentItem=findItem(id);
+  if(!currentItem||currentItem.deleted||!currentItem.blob||!blob)return false;
+  const previous={...currentItem}; // Stable revision while prompts and async DB reads run.
   if(blob.size<1||blob.size>100*1024*1024)return alert('يجب ألا يتجاوز حجم الملف المعدل 100 ميغابايت.'),false;
   const mode=prompt('طريقة حفظ التعديل:\\n1 - الاحتفاظ بالنسخة الأصلية كملف مستقل\\n2 - استبدال الملف الحالي فقط\\nإلغاء: عدم حفظ أي تغيير','1');
   if(mode===null)return false;
