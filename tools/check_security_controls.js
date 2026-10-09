@@ -161,7 +161,7 @@ async function verifyAuthStartupAndSecret(){
     +'let lastSealAt=0,offlineEpoch=0,offlineSession=false,saved=null,writes=0,deletes=0,marker=null;'
 
     +'const SECRET_KEY="secret",SECURE_TRUST_KEY="trust",TRUST_REVOCATION_KEY="revocation",'
-    +'localStorage={getItem:()=>marker,setItem:()=>{marker="1"},removeItem:()=>{marker=null}},'
+    +'localStorage={getItem:()=>marker,setItem:()=>{if(options.failMarker)throw new Error("STORAGE_UNAVAILABLE");marker="1"},removeItem:()=>{marker=null}},'
     +'window={AbuBassamSecurity:{isOnlineUnlocked:()=>true}},'
     +'nativeAvailable=()=>true,online=()=>true,currentId=()=>"phone",'
     +'normalizeDevice=value=>value,cleanLegacy=()=>{},console={warn(){}},'
@@ -208,6 +208,14 @@ async function verifyAuthStartupAndSecret(){
   if(await deletionFailure.seal({device_id:'phone',active:true})!==true||
     deletionFailure.state().marker!==null)
     throw new Error('verified online login failed to replace revoked offline trust');
+
+  const storageFailure=buildTrust({failDelete:true,failMarker:true});
+  if(await storageFailure.seal({device_id:'phone',active:true})!==true)
+    throw new Error('storage-failure fixture could not create signed trust');
+  await storageFailure.clearTrust();
+  if(storageFailure.state().marker!==null||
+    await storageFailure.loadTrust()!==null)
+    throw new Error('failed localStorage write bypassed in-memory offline revocation');
 
   const normalTrust=buildTrust({});
   if(await normalTrust.seal({device_id:'phone',active:true})!==true||
