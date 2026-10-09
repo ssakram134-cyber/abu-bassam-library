@@ -108,8 +108,8 @@ pending.then(() => {
   frame.contentDocument.readyState = 'complete';
   frame.contentWindow.location.pathname = '/library/about:blank';
   assert.equal(check(frame, 'questions-ar.html'), false);
-  assert.match(host, /if\(frameDocumentReady\(frame,'questions-ar.html'\)\)/);
-  assert.match(host, /if\(frameDocumentReady\(frame,'questions-en.html'\)\)/);
+  assert.ok(host.includes("!frameDocumentReady(frame,'questions-ar.html')"));
+  assert.ok(host.includes("!frameDocumentReady(frame,'questions-en.html')"));
   assert.doesNotMatch(host, /setTimeout\(injectCurrentQuestionRuntime,120\)/);
   console.log('Questions/compressor lifecycle checks passed: MIME allowlist, immutable active batch, cancellation, controls restored, and loaded iframe-only script injection.');
 }).catch(error => { console.error(error); process.exitCode = 1; });
