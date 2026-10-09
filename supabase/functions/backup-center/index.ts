@@ -13,13 +13,14 @@ function userClient(req:Request){return createClient(SUPABASE_URL,ANON_KEY,{glob
 function adminClient(){return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}})}
 async function sha256Hex(v:string){const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function permissionEnabled(device:{role?:string;permissions?:Record<string,unknown>},key:string){if(device?.role==='owner')return true;const p=device?.permissions&&typeof device.permissions==='object'?device.permissions:{};return p[key]===true}
-async function context(req:Request,permission:string){
+async function context(req:Request,permission:string|string[]){
   const deviceId=req.headers.get('x-device-id')||'',secret=req.headers.get('x-device-secret')||'';
   if(!deviceId||!secret)throw new Error('DEVICE_REQUIRED');
   const uc=userClient(req),{data:{user},error:ue}=await uc.auth.getUser();if(ue||!user)throw new Error('NOT_AUTHENTICATED');
   const admin=adminClient(),{data:device,error}=await admin.from('abu_bassam_devices').select('device_id,device_name,role,active,permissions,secret_hash').eq('user_id',user.id).eq('device_id',deviceId).maybeSingle();
   if(error||!device||device.active===false||!device.secret_hash||device.secret_hash!==await sha256Hex(secret))throw new Error('DEVICE_NOT_AUTHORIZED');
-  if(!permissionEnabled(device,permission))throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
+  const permitted=Array.isArray(permission)?permission.some(key=>permissionEnabled(device,key)):permissionEnabled(device,permission);
+  if(!permitted)throw new Error(Array.isArray(permission)?'BACKUP_ACCESS_NOT_ALLOWED':permission.toUpperCase()+'_NOT_ALLOWED');
   return{user,admin,deviceId,device};
 }
 function safeId(v:string){return String(v||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180)}
@@ -91,11 +92,12 @@ Deno.serve(async(req:Request)=>{
     }
     if(action==='commit'&&req.method==='POST'){
       const body=await req.json().catch(()=>({})),backupId=String(body.backup_id||''),retention=Math.max(1,Math.min(30,Number(body.retention)||7));
-      const base=await context(req,'backupRestore');
+      const base=await context(req,['backupCreate','backupRestore']);
       const {data:row,error}=await base.admin.from(TABLE).select('*').eq('user_id',base.user.id).eq('backup_id',backupId).maybeSingle();
       if(error||!row)return json({error:'BACKUP_NOT_FOUND'},404);
       if(row.branch_device_id!==base.deviceId)return json({error:'BACKUP_SCOPE_DENIED'},403);
-      if(row.backup_kind!=='pre_restore'&&!permissionEnabled(base.device,'backupCreate'))return json({error:'BACKUPCREATE_NOT_ALLOWED'},403);
+      const requiredPermission=row.backup_kind==='pre_restore'?'backupRestore':'backupCreate';
+      if(!permissionEnabled(base.device,requiredPermission))return json({error:requiredPermission.toUpperCase()+'_NOT_ALLOWED'},403);
       if(row.ready)return json({ok:true,already_ready:true});
       const parts=Array.isArray(row.parts)?row.parts.map(String):[];
       try{await verifyParts(base.admin,parts,Number(row.size_bytes),String(row.sha256||''))}
