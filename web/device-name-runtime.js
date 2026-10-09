@@ -8,7 +8,7 @@
   function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'}
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
   function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
-  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true')}
+  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.style.pointerEvents='none';splash.setAttribute('aria-hidden','true');try{splash.inert=true}catch(_){}}
   function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
   function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
   async function heartbeat(){return ensureIdentity()}
@@ -97,11 +97,11 @@
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
-    ensureIdentity();
     try{
+      ensureIdentity();
       await loadApprovedUi();
-      signalBootReady();
       dismissSplash();
+      signalBootReady();
       setTimeout(heartbeat,200)
     }catch(error){showBootFailure(error)}
   }
