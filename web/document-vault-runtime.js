@@ -226,6 +226,8 @@ async function commitEditedFile(previous,blob,meta,keepOriginal){
           const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
           original.originalOf=current.id;
           original.favorite=current.favorite;
+          original.mime=current.mime;
+          original.size=current.size;
           store.add(original)
         }
         store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),syncState:'pending',syncRevision:uuid()})
@@ -250,7 +252,7 @@ async function saveEditedBlob(id,blob,meta={}){
   if(keepOriginal&&(await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('وصل الأرشيف إلى حد 1000 ملف؛ لا توجد مساحة لنسخة أصلية جديدة.'),false;
   try{
     await commitEditedFile(previous,blob,meta,keepOriginal);
-    await refresh();
+    try{await refresh()}catch(_){setSyncStatus('التعديل محفوظ • أعد فتح القسم لتحديث العرض')}
     logOperation('edit','تحرير ملف محفوظ',keepOriginal?'تم الاحتفاظ بالأصل كملف مستقل':'تم استبدال الملف الحالي',previous.name);
     if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
     return true
