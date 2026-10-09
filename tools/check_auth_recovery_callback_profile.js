@@ -17,7 +17,7 @@ async function scenario(flow){
   const callback=new Function('native','ready','ensureProfile','show','setMsg','message','CALLBACK_KEY','CALLBACK','URL',
     'let callbackFails=0;'+fn+'\nreturn handleCallback;')(
     async(action)=>{if(action==='secureGet')return 'valid-callback';if(action==='secureDelete'){removed.push(true);return true}},
-    async()=>({auth:{exchangeCodeForSession:async()=>({error:null})}}),
+    async()=>({auth:{exchangeCodeForSession:async()=>({data:{session:{user:{id:'test-user'},access_token:'test-token'}},error:null})}}),
     async()=>{profileCalls++;throw Error('PROFILE_UNAVAILABLE')},
     page=>views.push(page),()=>{},String,'callback-key','abu-bassam-library://auth/callback',FakeURL);
   return{success:await callback(),views,removed,profileCalls}
