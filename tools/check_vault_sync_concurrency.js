@@ -152,7 +152,7 @@ function simulate(items){
 
  assert.match(source,/if\(!await dbApplySyncIfUnchanged\(item\.id,item,null,copy\)\)/);
  assert.match(source,/if\(!await dbApplySyncIfUnchanged\(item\.id,item,remoteItem\(remote,remoteBlob,remoteVersion\),localCopy\)\)/);
- assert.match(source,/if\(data\.deleted\)\{if\(here&&!await dbApplySyncIfUnchanged\(id,here,null\)\)/);
+ assert.match(source,/if\(data\.deleted\)\{if\(here&&!await dbReconcileRemoteDeletionToTrashIfUnchanged\(here\)\)/);
  assert.match(source,/if\(!await dbApplySyncIfUnchanged\(id,here\|\|null,remoteItem\(data,blob,remoteVersion\)\)\)/);
  assert.match(source,/if\(!confirmed\)autoSyncRerunRequested=true/,'Existing upload guard preserved');
  console.log('Archive sync race tests passed: guarded delete, remote replace, atomic conflict copies, new ID collision and stale revisions');
