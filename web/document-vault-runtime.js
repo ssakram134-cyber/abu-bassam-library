@@ -4,6 +4,8 @@
 const DB_NAME='AbuBassamDocumentVaultV4';
 const STORE='items';
 const TRASH_STORE='trash';
+const CHECKPOINT_STORE='checkpoints';
+const CHECKPOINT_MS=30*86400000;
 const TRASH_DAYS=30;
 const TRASH_MS=TRASH_DAYS*86400000;
 const MAX_ITEMS=1000;
@@ -229,7 +231,7 @@ function mainHtml(){return `<div class="v-shell">
   <div class="v-upload-grid"><button class="v-upload" onclick="DocumentVault.pickImages()"><span>🖼️</span>رفع صور أو كتب صورية<br>مع القص والتدوير والتحسين</button><button class="v-upload" onclick="DocumentVault.pickFiles()"><span>📚</span>رفع Word / Excel / PDF<br>وجميع أنواع الملفات</button></div>
   <div class="v-tabs"><button class="v-tab" onclick="DocumentVault.pickCollection('المستمسكات')">＋ رفع مستمسك</button><button class="v-tab" onclick="DocumentVault.pickCollection('المعاملات')">＋ رفع معاملة</button><button class="v-tab" onclick="DocumentVault.pickCollection('الباجات')">＋ رفع باج</button></div>
   <div class="v-counter"><span id="vCount">0 من 1000</span><label class="v-sort">ترتيب حسب <select id="vSort" onchange="DocumentVault.setSort(this.value)"><option value="date-desc">التاريخ — الأحدث</option><option value="date-asc">التاريخ — الأقدم</option><option value="alpha-asc">الأبجدية — أ إلى ي</option><option value="alpha-desc">الأبجدية — ي إلى أ</option><option value="size-desc">الحجم — الأكبر</option><option value="size-asc">الحجم — الأصغر</option><option value="type-asc">النوع</option><option value="manual">ترتيب يدوي داخل الحافظة</option><option value="modified-desc">آخر تعديل — الأحدث</option><option value="modified-asc">آخر تعديل — الأقدم</option><option value="opened-desc">آخر فتح</option></select></label><div class="v-view-switch"><button id="vGridBtn" title="مصغرات" onclick="DocumentVault.setView('grid')">▦</button><button id="vLargeBtn" title="صور كبيرة" onclick="DocumentVault.setView('large')">▣</button><button id="vDetailsBtn" title="عرض التفاصيل" onclick="DocumentVault.setView('details')">≡</button><button id="vListBtn" title="قائمة" onclick="DocumentVault.setView('list')">☷</button></div><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.createFolder()">＋ حافظة</button><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.pasteToFolder()">📋 لصق هنا</button><button class="v-tab" onclick="DocumentVault.pickIntoFolder('image')">🖼️ إضافة صورة هنا</button><button class="v-tab" onclick="DocumentVault.pickIntoFolder('file')">📄 إضافة ملف هنا</button><span id="vClipboardStatus" class="v-meta" aria-live="polite"></span><button class="v-tab" style="padding:5px 9px" onclick="DocumentVault.pickBackup()">استعادة نسخة</button></div>
-  <div id="vBulkToolbar" class="v-tabs" role="toolbar" aria-label="إدارة الملفات المحددة"><button class="v-tab" onclick="DocumentVault.selectVisibleFiles()">☑ تحديد المعروض</button><button class="v-tab" onclick="DocumentVault.clearFileSelection()">إلغاء التحديد</button><span id="vSelectedCount" class="v-meta" aria-live="polite">0 محددة</span><button class="v-tab" onclick="DocumentVault.renumberFolder()">123 ترقيم الحافظة</button></div>
+  <div id="vBulkToolbar" class="v-tabs" role="toolbar" aria-label="إدارة الملفات المحددة"><button class="v-tab" onclick="DocumentVault.selectVisibleFiles()">☑ تحديد المعروض</button><button class="v-tab" onclick="DocumentVault.clearFileSelection()">إلغاء التحديد</button><span id="vSelectedCount" class="v-meta" aria-live="polite">0 محددة</span><button class="v-tab" onclick="DocumentVault.renumberFolder()">123 ترقيم الحافظة</button><button class="v-tab" onclick="DocumentVault.restoreLastFolderNumbering()">↩ استعادة آخر ترقيم</button></div>
   <div id="vGrid" class="v-grid"></div>
   <input id="vImageInput" type="file" accept="image/*" multiple hidden>
   <input id="vFileInput" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.zip,.rar,.7z,.odt,.ods,.epub,.mobi,.html,.xml,.json,*/*" multiple hidden><input id="vReplaceInput" type="file" accept="*/*" hidden>
@@ -276,6 +278,7 @@ function logOperation(type,title,details='',fileName=''){if(window.AbuBassamOps&
 
 async function refresh(){
   await purgeExpiredTrash();
+  await purgeExpiredCheckpoints();
   state.items=(await dbAll()).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
   state.trashItems=(await dbTrashAll()).filter(item=>trashScopeOk(item)&&Number(item.expiresAt)>Date.now()).sort((a,b)=>Number(b.deletedAtMs)-Number(a.deletedAtMs));
   render()
@@ -324,19 +327,97 @@ function planFolderNumbering(rows,folder,revisions){
   })).filter((item,index)=>item.name!==list[index].name||item.manualOrder!==list[index].manualOrder)
 }
 async function commitFolderNumbering(folder,revisions){
-  const db=await openDb();
+  const db=await openDb(),scope=syncScope(),id=uuid(),createdAt=Date.now();
   return new Promise((resolve,reject)=>{
-    const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),req=store.getAll();
+    const tx=db.transaction([STORE,CHECKPOINT_STORE],'readwrite'),store=tx.objectStore(STORE),checkpoints=tx.objectStore(CHECKPOINT_STORE),req=store.getAll();
     let reason=null,changed=0;
     req.onsuccess=()=>{
-      try{const patches=planFolderNumbering(req.result||[],folder,revisions);changed=patches.length;for(const item of patches)store.put(item)}
-      catch(e){reason=e;tx.abort()}
+      try{
+        const rows=req.result||[],patches=planFolderNumbering(rows,folder,revisions);
+        changed=patches.length;
+        if(patches.length){
+          const byId=new Map(rows.map(item=>[item.id,item]));
+          const snapshot=patches.map(next=>{const original=byId.get(next.id);return{id:next.id,name:original.name,manualOrder:original.manualOrder,expectedRevision:next.syncRevision}});
+          // The metadata recovery point and renamed rows commit together, or neither does.
+          checkpoints.add({id,scope,kind:'folder-numbering',folder,createdAt,expiresAt:createdAt+CHECKPOINT_MS,items:snapshot});
+          for(const item of patches)store.put(item)
+        }
+      }catch(e){reason=e;tx.abort()}
     };
     req.onerror=()=>{reason=req.error;tx.abort()};
     tx.oncomplete=()=>resolve(changed);
     tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_RENUMBER_FAILED'));
     tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_RENUMBER_ABORTED'))
   })
+}
+async function checkpointList(){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const req=db.transaction(CHECKPOINT_STORE,'readonly').objectStore(CHECKPOINT_STORE).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error||new Error('VAULT_CHECKPOINT_READ_FAILED'))
+  })
+}
+async function purgeExpiredCheckpoints(){
+  const db=await openDb(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(CHECKPOINT_STORE,'readwrite'),store=tx.objectStore(CHECKPOINT_STORE),req=store.getAll();
+    req.onsuccess=()=>{for(const entry of req.result||[])if(Number(entry.expiresAt)<=now)store.delete(entry.id)};
+    req.onerror=()=>tx.abort();
+    tx.oncomplete=()=>resolve(true);
+    tx.onerror=()=>reject(tx.error||new Error('VAULT_CHECKPOINT_PURGE_FAILED'));
+    tx.onabort=()=>reject(tx.error||new Error('VAULT_CHECKPOINT_PURGE_ABORTED'))
+  })
+}
+async function restoreFolderNumberingPoint(checkpointId){
+  const db=await openDb(),scope=syncScope(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction([STORE,CHECKPOINT_STORE],'readwrite'),store=tx.objectStore(STORE),checkpoints=tx.objectStore(CHECKPOINT_STORE);
+    const pointReq=checkpoints.get(checkpointId),rowsReq=store.getAll();
+    let point=null,rows=null,processed=false,reason=null;
+    const ready=()=>{
+      if(processed||point===null||rows===null)return;
+      processed=true;
+      try{
+        if(!point||point.scope!==scope||point.kind!=='folder-numbering'||Number(point.expiresAt)<=now)throw new Error('VAULT_CHECKPOINT_UNAVAILABLE');
+        if(!Array.isArray(point.items)||!point.items.length)throw new Error('VAULT_CHECKPOINT_EMPTY');
+        const byId=new Map(rows.map(x=>[x.id,x])),nowIso=new Date(now).toISOString();
+        // Refuse all restoration when any file has changed or was removed since the checkpoint.
+        for(const saved of point.items){
+          const current=byId.get(saved.id);
+          if(!current||current.deleted||String(current.syncRevision||'')!==String(saved.expectedRevision||''))throw new Error('VAULT_CHECKPOINT_CONFLICT')
+        }
+        for(const saved of point.items){
+          const current=byId.get(saved.id);
+          store.put({...current,name:saved.name,manualOrder:saved.manualOrder,updatedAt:nowIso,syncRevision:uuid(),syncState:'pending'})
+        }
+        checkpoints.delete(checkpointId)
+      }catch(e){reason=e;tx.abort()}
+    };
+    pointReq.onsuccess=()=>{point=pointReq.result||false;ready()};
+    rowsReq.onsuccess=()=>{rows=rowsReq.result||[];ready()};
+    pointReq.onerror=()=>{reason=pointReq.error;tx.abort()};
+    rowsReq.onerror=()=>{reason=rowsReq.error;tx.abort()};
+    tx.oncomplete=()=>resolve(true);
+    tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_CHECKPOINT_RESTORE_FAILED'));
+    tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_CHECKPOINT_RESTORE_ABORTED'))
+  })
+}
+async function restoreLastFolderNumbering(){
+  if(!requireVault('vaultEdit')||!requireVault('vaultRename'))return false;
+  if(!state.filter.startsWith('folder:'))return alert('افتح الحافظة المطلوب استعادة ترتيبها أولاً.'),false;
+  const folder=state.filter.slice(7);
+  try{
+    await purgeExpiredCheckpoints();
+    const points=(await checkpointList()).filter(x=>x.scope===syncScope()&&x.kind==='folder-numbering'&&x.folder===folder&&Number(x.expiresAt)>Date.now()).sort((a,b)=>b.createdAt-a.createdAt);
+    if(!points.length)return alert('لا توجد نقطة استعادة محفوظة لترقيم هذه الحافظة.'),false;
+    if(!confirm('استعادة أسماء وترتيب الملفات قبل آخر ترقيم في حافظة «'+folder+'»؟ لن يتم تغيير الصور أو المحتويات.'))return false;
+    await restoreFolderNumberingPoint(points[0].id);
+    await refresh();
+    if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
+    logOperation('restore','استعادة آخر ترقيم لحافظة '+folder);
+    return true
+  }catch(e){alert('تعذرت الاستعادة بسبب تعارض أو انتهاء نقطة الاستعادة: '+String(e?.message||e));return false}
 }
 async function renumberFolder(){
   if(!requireVault('vaultRename')||!requireVault('vaultEdit'))return false;
@@ -814,6 +895,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
