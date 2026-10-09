@@ -714,7 +714,7 @@ async function testCardBackupRestorationCancelsPhotos(){
     +'cap=(x,a,b)=>Math.max(a,Math.min(b,Number(x)||0)),'
     +'scrubModels=x=>Array.isArray(x)?x:[],window={AbuBassamTypography:null},'
     +'STORAGE_KEY="forms",BRAND_KEY="brand",CARD_STYLE_KEY="style",HISTORY_KEY="history",'
-    +'localStorage={setItem(){}},renderAll=()=>{},confirm=()=>true;'
+    +'localStorage={getItem:()=>null,setItem(){},removeItem(){}},renderAll=()=>{},confirm=()=>true;'
     +src.slice(begin,end)
     +src.slice(restore,restoreEnd).replace('function applyBackupSnapshot(data){',
       'function applyBackupSnapshot(data){restoreCount++;')
