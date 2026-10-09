@@ -81,7 +81,7 @@ function syncSnapshot(item){
     String(item.id||''),String(item.syncRevision||''),String(item.updatedAt||''),
     String(item.name||''),String(item.category||''),String(item.mime||''),
     Number(item.size)||0,String(item.folder||''),!!item.favorite,!!item.deleted,
-    String(item.lastOpenedAt||''),Number(item.blob?.size)||0,String(item.blob?.type||'')
+    String(item.lastOpenedAt||''),Number.isInteger(item.manualOrder)?item.manualOrder:null,Number(item.blob?.size)||0,String(item.blob?.type||'')
   ])
 }
 async function dbMarkSyncedIfUnchanged(uploaded,remoteUpdatedAt){
@@ -161,7 +161,7 @@ async function build(){
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   scheduleAutoSync(5000);
   setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())void syncNow(false)},900000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleAutoSync(100)});document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleAutoSync(100)});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
@@ -523,7 +523,7 @@ async function encryptedBackup(){if(!requireVault('vaultEncryptedBackup'))return
 async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRestoreBackup'))return false;try{return await backupService().restore(file,options)}catch(e){alert(String(e?.message||e));return false}}
 
 function cloud(){return window.AbuBassamCloud}
-function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',blob,syncState:'synced',deleted:false}}
+function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',manualOrder:Number.isInteger(data.manualOrder)?data.manualOrder:null,blob,syncState:'synced',deleted:false}}
 async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(state.syncing){if(!manual)autoSyncRerunRequested=true;return false}
   if(!manual&&!automaticDue())return false;
@@ -565,7 +565,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(item.deleted){
         if(!row){await dbDelete(item.id);continue}
         const oldPath=String(remote?.storagePath||'');
-        const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
+        const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:true,storagePath:''};
         await service.upsert('vault',item.id,data);
         await dbDelete(item.id);
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
@@ -574,7 +574,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
 
       if(!item.blob)throw new Error('ملف محلي بلا محتوى فعلي: '+String(item.name||item.id));
       const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);
-      const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
+      const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:false,storagePath:newPath};
       let saved;
       try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
