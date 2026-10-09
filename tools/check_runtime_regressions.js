@@ -1048,6 +1048,59 @@ async function testEncryptedPaperPhotoCrashRecovery(){
     throw Error('paper draft stored without Native SecureStore encryption key');
 }
 
+function testPaperOutputAuthorizationAndLazyPdf(){
+  const html=read('index.html');
+  const start=html.indexOf('function telegramPermission(key){');
+  const end=html.indexOf('function saveTelegramSettings(){',start);
+  if(start<0||end<=start)throw Error('paper JPG, PDF and direct print functions missing');
+  const factory=vm.runInNewContext('(options)=>{'
+    +'const calls=[],denials=[];let pdfCalls=0;'
+    +'const pageCanvases=[0,1].map(i=>({toDataURL:type=>"data:"+type+";base64,AA"+i}));'
+    +'const window={AbuBassamSecurity:{role:()=>options.role,'
+    +'can:key=>!!options.allow?.includes(key)},'
+    +'Android:{savePagesToGallery:(...args)=>{calls.push(["gallery",...args]);return true},'
+    +'saveBase64:(...args)=>{calls.push(["pdf",...args]);return true},'
+    +'printPages:(...args)=>{calls.push(["print",...args]);return true},'
+    +'shareBase64:(...args)=>{calls.push(["share",...args]);return true}}};'
+    +'const Android=window.Android,$=()=>({checked:!!options.telegram}),'
+    +'currentPage=0,alert:value=>denials.push(value),'
+    +'makePdfData=()=>{pdfCalls++;return "data:application/pdf;base64,AAA"},'
+    +'getPaperPrintKey=()=>"A4",printDpi=()=>300,document={createElement:()=>({click(){}})};'
+    +html.slice(start,end)
+    +';return {downloadJPG,downloadPDF,printDirectly,telegramPermission,'
+    +'results:()=>({calls,denials,pdfCalls})}}');
+  const locked=factory({role:'',telegram:true});
+  locked.downloadJPG();locked.downloadPDF();locked.printDirectly();
+  if(locked.results().calls.length||locked.results().pdfCalls||
+    locked.results().denials.length!==3||locked.telegramPermission('telegramBackup'))
+    throw Error('locked session bypassed photo output authorization');
+  const readonly=factory({role:'secondary',allow:[]});
+  readonly.printDirectly();
+  if(readonly.results().calls.length||readonly.results().pdfCalls)
+    throw Error('secondary denied permission produced printed content');
+  const printable=factory({role:'secondary',allow:['printGeneral']});
+  printable.printDirectly();
+  if(printable.results().calls.filter(x=>x[0]==='print').length!==1||
+    printable.results().pdfCalls!==0)
+    throw Error('direct print generated an unnecessary PDF with sharing disabled');
+  printable.downloadJPG();printable.downloadPDF();
+  if(printable.results().calls.some(x=>x[0]==='gallery'||x[0]==='pdf'))
+    throw Error('print-only secondary exported JPG/PDF despite denied roles');
+  const sharing=factory({role:'secondary',allow:['printGeneral','telegramBackup'],
+    telegram:true});
+  sharing.printDirectly();
+  if(sharing.results().pdfCalls!==1||
+    !sharing.results().calls.some(x=>x[0]==='share')||
+    !sharing.results().calls.some(x=>x[0]==='print'))
+    throw Error('explicit Telegram-enabled print did not share or print');
+  const owner=factory({role:'owner'});
+  owner.downloadJPG();owner.downloadPDF();
+  const actions=owner.results().calls;
+  if(actions[0]?.[0]!=='gallery'||!actions[0][2]?.includes('data:image/jpeg')||
+    actions[1]?.[0]!=='pdf'||owner.results().pdfCalls!==1)
+    throw Error('owner JPG/PDF export dropped page collection');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1890,7 +1943,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testEncryptedPaperPhotoCrashRecovery(),Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testPaperOutputAuthorizationAndLazyPdf),testEncryptedPaperPhotoCrashRecovery(),Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
