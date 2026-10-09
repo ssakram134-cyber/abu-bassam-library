@@ -56,7 +56,10 @@ function normalized(items){
 }
 function changed(){
   const current=authorizedScope();
-  if(!current||current!==scope||restoring)return;
+  if(!current||current!==scope||restoring){
+    if(!current&&workspace()?.snapshot?.()?.length)warn(Error('PAPER_DRAFT_LOGIN_REQUIRED'));
+    return
+  }
   const snapshot=normalized(workspace()?.snapshot?.());
   if(!snapshot)return warn(Error('PAPER_DRAFT_ITEM_LIMIT'));
   const revision=++epoch;
@@ -65,7 +68,7 @@ function changed(){
     timer=null;
     tail=tail.catch(()=>{}).then(()=>write(current,snapshot,revision))
       .catch(warn)
-  },300)
+  },snapshot.length?300:0)
 }
 function warn(error){
   console.warn('Paper photo encrypted draft unavailable',error);
@@ -133,13 +136,12 @@ async function restore(target,revision){
 function authChanged(){
   const next=authorizedScope();
   if(next===scope)return;
-  const hadScope=!!scope;
   scope=next;
   epoch++;
   clearTimeout(timer);
   timer=null;
   // Revalidate before presenting any image previously loaded by another account.
-  if(hadScope||!next)workspace()?.clear?.();
+  workspace()?.clear?.();
   const revision=epoch;
   if(next)void restore(next,revision)
 }
