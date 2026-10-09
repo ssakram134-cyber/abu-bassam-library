@@ -184,12 +184,33 @@ function childInstitution(data){return data.institutionType==='school'?(data.sch
 function loginServices(model){let current=model.data.service||'facebook',items=[['facebook','f','فيسبوك'],['apple','●','ابل ستور'],['google','▶','سوق بلي'],['email','✉','بريد إلكتروني'],['other','●','اكاونت / غيرها']];return `<div class="cs-login-services cs-editable-text" ${textAttrs(model,'secondary','قائمة أنواع الحسابات')}><div class="cs-login-services-title">حسابات تسجيل الدخول</div>${items.map(item=>`<div class="cs-login-service ${current===item[0]?'active':''}"><span class="cs-login-service-icon">${item[1]}</span><b>${item[2]}</b></div>`).join('')}</div>`}
 function loginContact(model){let values=[model.brand.phone&&'☎ '+model.brand.phone,model.brand.email&&'✉ '+model.brand.email,model.brand.website&&'⌁ '+model.brand.website].filter(Boolean).map(esc);return `<div class="cs-login-contact cs-editable-text" ${textAttrs(model,'footer','الشريط السفلي')}>${values.join(' | ')}</div>`}
 
+function vcardEscape(value){return String(value??'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,')}
+function vcardPhone(value){return String(value||'').replace(/[^0-9+]/g,'')}
+function guardianWhatsApp(value){const digits=String(value||'').replace(/\D/g,'');return /^07\d{9}$/.test(digits)?'https://wa.me/964'+digits.slice(1):''}
 function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,b.address,b.email,b.website].filter(Boolean).join(' | ');
-  if(model.type==='personal')return ['BEGIN:VCARD','VERSION:3.0','FN:'+d.name,'TEL:'+d.phone,'EMAIL:'+d.email,'ADR:;;'+d.address,'URL:'+(d.location||('https://t.me/'+String(d.telegram||'').replace(/^@/,''))),'NOTE:Telegram '+d.telegram+' | '+d.notes+' | '+brand,'END:VCARD'].join('\n');
-  if(model.type==='child')return ['BEGIN:VCARD','VERSION:3.0','FN:'+d.name,'ORG:'+childInstitution(d),'TEL;TYPE=CELL:'+d.guardianPhone,'TEL;TYPE=WORK:'+d.driverPhone,'ADR:;;'+d.address,'NOTE:خط النقل '+d.line+' | '+d.notes+' | '+brand,'END:VCARD'].join('\n');
-  if(model.type==='login')return `الخدمة: ${serviceName(d)}\nالحساب: ${d.account}\nكلمة السر: ${d.password}\nملاحظات: ${d.notes}\nالمصدر: ${brand}`;
-  if(model.type==='wifi')return `WIFI:T:${d.security};S:${String(d.ssid).replace(/([\\;,:"])/g,'\\$1')};P:${String(d.password).replace(/([\\;,:"])/g,'\\$1')};H:${d.hidden?'true':'false'};;`;
-  let content=d.content||state.lastBarcode||'';if(d.kind==='email')return'mailto:'+content;if(d.kind==='phone')return'tel:'+content.replace(/[^0-9+]/g,'');if(d.kind==='url')return/^https?:\/\//i.test(content)?content:'https://'+content;return content||`العنوان: ${d.title||''}\nالوصف: ${d.caption||''}\nالمصدر: ${brand}`;
+  if(model.type==='personal'){
+    const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name)];
+    if(d.phone)rows.push('TEL:'+vcardPhone(d.phone));
+    if(d.email)rows.push('EMAIL:'+vcardEscape(d.email));
+    if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
+    const contactUrl=String(d.location||'').trim()||(d.telegram?'https://t.me/'+String(d.telegram).replace(/^@/,''):'');
+    if(contactUrl)rows.push('URL:'+vcardEscape(contactUrl));
+    rows.push('NOTE:'+vcardEscape('Telegram '+(d.telegram||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    return rows.join('\n');
+  }
+  if(model.type==='child'){
+    const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name),'ORG:'+vcardEscape(childInstitution(d))];
+    if(d.guardianPhone)rows.push('TEL;TYPE=CELL:'+vcardPhone(d.guardianPhone));
+    if(d.driverPhone)rows.push('TEL;TYPE=WORK:'+vcardPhone(d.driverPhone));
+    if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
+    const whatsapp=guardianWhatsApp(d.guardianPhone);
+    if(whatsapp)rows.push('URL:'+whatsapp);
+    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    return rows.join('\n');
+  }
+  if(model.type==='login')return 'الخدمة: '+serviceName(d)+'\nالحساب: '+(d.account||'')+'\nكلمة السر: '+(d.password||'')+'\nملاحظات: '+(d.notes||'')+'\nالمصدر: '+brand;
+  if(model.type==='wifi')return 'WIFI:T:'+(d.security||'WPA')+';S:'+String(d.ssid||'').replace(/([\\;,:"])/g,'\\$1')+';P:'+String(d.password||'').replace(/([\\;,:"])/g,'\\$1')+';H:'+(d.hidden?'true':'false')+';;';
+  let content=d.content||state.lastBarcode||'';if(d.kind==='email')return'mailto:'+content;if(d.kind==='phone')return'tel:'+content.replace(/[^0-9+]/g,'');if(d.kind==='url')return/^https?:\/\//i.test(content)?content:'https://'+content;return content||'العنوان: '+(d.title||'')+'\nالوصف: '+(d.caption||'')+'\nالمصدر: '+brand;
 }
 function qrSvg(text){try{if(typeof qrcode!=='function')return '<div class="cs-photo-empty">QR</div>';let qr=qrcode(0,'M');qr.addData(String(text||' '));qr.make();return qr.createSvgTag({cellSize:3,margin:12,scalable:true})}catch(e){return '<div class="cs-photo-empty">البيانات طويلة</div>'}}
 
@@ -273,7 +294,20 @@ function printDocument(){let jobs=expandedJobs();if(!jobs.length)throw new Error
 function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(_){}}}
 function renderHistory(){let el=$('csHistory');if(!el)return;el.innerHTML=state.history.length?state.history.map((item,index)=>`<div class="cs-hitem"><div><b>${esc(item.action)} — ${item.models.length} كارت</b><small>${new Date(item.time).toLocaleString('ar-IQ')} • ${esc(item.mode)}</small></div><div class="cs-hitem-actions"><button onclick="CardsStudio.loadHistory(${index})">إعادة</button><button onclick="CardsStudio.deleteHistory(${index})">حذف</button></div></div>`).join(''):'<div class="cs-empty">لا توجد عمليات طباعة محفوظة بعد.</div>'}
 
-async function domCardPng(side){let model=modelNow(),css=fullPrintCss()+freeLayoutCss(),w=2022,h=Math.round(w*(model.height/model.width)),markup=`<div xmlns="http://www.w3.org/1999/xhtml" class="root"><style>${css}.root{margin:0;width:${w}px;height:${h}px;background:transparent}.box{width:${w}px;height:${h}px}</style><div class="box">${cardHtml(model,side)}</div></div>`,svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`,url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url});let canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;let context=canvas.getContext('2d');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0);URL.revokeObjectURL(url);return canvas.toDataURL('image/png')}
+async function domCardPng(side){
+  const model=modelNow(),css=fullPrintCss()+freeLayoutCss(),w=2022,h=Math.round(w*(model.height/model.width));
+  const markup='<div xmlns="http://www.w3.org/1999/xhtml" class="root"><style>'+css+'.root{margin:0;width:'+w+'px;height:'+h+'px;background:transparent}.box{width:'+w+'px;height:'+h+'px}</style><div class="box">'+cardHtml(model,side)+'</div></div>';
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><foreignObject width="100%" height="100%">'+markup+'</foreignObject></svg>';
+  const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+  try{
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر عرض صورة الكارت للتصدير'));image.src=url});
+    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+    const context=canvas.getContext('2d');if(!context)throw new Error('محرر الصور غير متاح');
+    context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0);
+    return canvas.toDataURL('image/png');
+  }finally{URL.revokeObjectURL(url)}
+}
 function saveBase64(name,mime,data){if(window.Android&&Android.saveBase64)return Android.saveBase64(name,mime,data);let link=document.createElement('a');link.download=name;link.href=data;link.click()}
 function saveImage(name,mime,data){if(window.Android&&Android.saveToGallery)return Android.saveToGallery(name,mime,data);saveBase64(name,mime,data)}
 function logOperation(type,title,details=''){if(window.AbuBassamOps&&AbuBassamOps.add)AbuBassamOps.add({type,title,details})}
