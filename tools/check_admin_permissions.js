@@ -117,4 +117,88 @@ async function testOwnerSessionFence(){
     'asynchronous owner editor must close after lost authorization');
 }
 
-testOwnerSessionFence().then(()=>console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions synchronized exactly with the server catalog + ${legacyKeys.length} legacy compatibility flags, ${adminKeys.length} synchronized admin-only protections, native SecureStore-only owner secrets, presets, server validation, customer document edge enforcement, and cross-section runtime guards`)).catch(error=>{console.error('owner session fence: '+error.message);process.exitCode=1});
+
+async function testDeviceRegistrySessionFence(){
+  const start=devices.indexOf('function ownerScope(){');
+  const end=devices.indexOf('function rowHtml(',start);
+  if(start<0||end<=start)throw Error('device registry owner scope helpers missing');
+  const build=vm.runInNewContext('(opts)=>{'
+    +'let ownerAuthEpoch=0,stored=5,gate=true,uid="owner",waitingSecret=null,waitingRpc=null,rpcCalls=0,cacheWrites=0;'
+    +'const LIMIT_KEY="deviceLimit",CURRENT_ID=()=>"owner-phone",'
+    +'owner=()=>gate,connected=()=>true,'
+    +'window={AbuBassamCloud:{session:()=>({user:{id:uid}})}},'
+    +'localStorage={getItem:()=>String(stored),setItem:(k,v)=>{stored=Number(v);cacheWrites++}},'
+    +'secret=()=>opts.waitSecret?new Promise(resolve=>{waitingSecret=resolve}):Promise.resolve("secret"),'
+    +'client=()=>({rpc:async(name,args)=>{rpcCalls++;'
+    +'if(opts.waitRpc)return new Promise(resolve=>{waitingRpc=resolve});'
+    +'if(opts.assertArgs)opts.assertArgs(name,args);'
+    +'return {data:name==="abu_bassam_get_device_limit"?12:[{device_id:"other-phone"}],error:null}}}),'
+    +'dedupe=rows=>rows;'
+    +'function invalidateOwnerSession(){ownerAuthEpoch++}'
+    +devices.slice(start,end)
+    +';return{rows,readLimit,ownerArgs,invalidateOwnerSession,lock:()=>{gate=false},'
+    +'unlock:()=>{gate=true},get:()=>({waitingSecret,waitingRpc,rpcCalls,stored,cacheWrites})}}');
+  let app=build({waitSecret:true}),running=app.rows();
+  for(let i=0;i<10&&!app.get().waitingSecret;i++)await Promise.resolve();
+  if(!app.get().waitingSecret)throw Error('owner secret read never started');
+  app.lock();app.invalidateOwnerSession();app.unlock();
+  app.get().waitingSecret('valid-secret');
+  let denied=false;
+  try{await running}catch(error){denied=error.message==='OWNER_SESSION_CHANGED'}
+  if(!denied||app.get().rpcCalls)throw Error('old owner secret authorized after relock');
+  app=build({waitRpc:true});
+  running=app.rows();
+  for(let i=0;i<10&&!app.get().waitingRpc;i++)await Promise.resolve();
+  if(!app.get().waitingRpc)throw Error('device list RPC not started');
+  app.lock();app.invalidateOwnerSession();app.unlock();
+  app.get().waitingRpc({data:[{device_id:'old-user'}],error:null});
+  denied=false;
+  try{await running}catch(error){denied=error.message==='OWNER_SESSION_CHANGED'}
+  if(!denied)throw Error('old owner device list returned after relock');
+  app=build({waitRpc:true});
+  running=app.readLimit();
+  for(let i=0;i<10&&!app.get().waitingRpc;i++)await Promise.resolve();
+  if(!app.get().waitingRpc)throw Error('capacity RPC not started');
+  app.lock();app.invalidateOwnerSession();app.unlock();
+  app.get().waitingRpc({data:50,error:null});
+  if(await running!==5||app.get().cacheWrites||app.get().stored!==5)
+    throw Error('stale account limit modified local configuration');
+  app=build({assertArgs:(name,args)=>{
+    if(name==='abu_bassam_owner_devices'&&
+      (!args||args.p_actor_device_id!=='owner-phone'||'scope' in args))
+      throw Error('owner scope marker leaked to Supabase RPC arguments')
+  }});
+  const rows=await app.rows(),limit=await app.readLimit();
+  if(rows[0]?.device_id!=='other-phone'||limit!==12)
+    throw Error('current owner cannot read device registry and allowed capacity');
+
+  const rowStart=devices.indexOf('function rowHtml(row){');
+  const rowEnd=devices.indexOf('function syncSecurityCardLabel(){',rowStart);
+  const actionStart=devices.indexOf('function onDeviceActionClick(event){');
+  const actionEnd=devices.indexOf('function init(){',actionStart);
+  if([rowStart,rowEnd,actionStart,actionEnd].some(x=>x<0))
+    throw Error('safe device button renderer or delegated actions missing');
+  const escapeValue=value=>String(value??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+  const render=vm.runInNewContext('(esc,displayName,CURRENT_ID)=>{'
+    +devices.slice(rowStart,rowEnd)+';return rowHtml}')(
+      escapeValue,row=>row.device_name,()=> 'owner-phone');
+  const dangerousName="O'Reilly');alert(1)//";
+  const html=render({device_id:'branch-phone',device_name:dangerousName,
+    role:'secondary',active:true});
+  if(html.includes('onclick=')||!html.includes('data-abu-device-name="O&#39;Reilly'))
+    throw Error('unsafe dynamic JavaScript in device buttons');
+  let chosen=null;
+  const button={dataset:{abuDeviceId:'branch-phone',abuDeviceAction:'rename',
+    abuDeviceName:dangerousName}};
+  const onClick=vm.runInNewContext('($,owner,window)=>{'
+    +devices.slice(actionStart,actionEnd)+';return onDeviceActionClick}')(
+      ()=>({contains:target=>target===button}),()=>true,
+      {AbuBassamSecurity:{renameDevice:(id,name)=>{chosen=[id,name]}}});
+  onClick({target:{closest:()=>button},preventDefault(){}});
+  if(chosen?.[0]!=='branch-phone'||chosen[1]!==dangerousName)
+    throw Error('delegated rename lost punctuation or correct target');
+}
+
+Promise.all([testOwnerSessionFence(),testDeviceRegistrySessionFence()]).then(()=>console.log(`advanced admin permissions checks passed: ${items.length} detailed permissions synchronized exactly with the server catalog + ${legacyKeys.length} legacy compatibility flags, ${adminKeys.length} synchronized admin-only protections, native SecureStore-only owner secrets, presets, server validation, customer document edge enforcement, and cross-section runtime guards`)).catch(error=>{console.error('owner session fence: '+error.message);process.exitCode=1});
