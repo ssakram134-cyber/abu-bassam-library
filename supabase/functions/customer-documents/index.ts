@@ -7,11 +7,6 @@ const BUCKET = 'abu-bassam-customers-private';
 const MAX_FILE = 25 * 1024 * 1024;
 const SAFE_EDITED = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif','application/pdf']);
 const SAFE_ORIGINAL = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','image/avif']);
-const DEFAULT_ALLOWED = new Set([
-  'customerView','customerAdd','customerEdit','customerDelete','customerSearch',
-  'customerDocumentsView','customerDocumentsAdd','customerDocumentsEdit','customerDocumentsDelete',
-  'customerDocumentsPrint','customerDocumentsExport','customerPhoneView','customerSensitiveDataView','customerOriginalDocumentView'
-]);
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-id, x-device-secret',
@@ -26,7 +21,6 @@ function normalizedMime(value:string){ return String(value||'').split(';',1)[0].
 function revision(){ return `${Date.now()}-${crypto.randomUUID().replaceAll('-','')}`; }
 async function removeQuiet(admin:ReturnType<typeof adminClient>, paths:string[]){ const clean=[...new Set(paths.filter(Boolean))]; if(clean.length)await admin.storage.from(BUCKET).remove(clean).catch(()=>null); }
 async function sha256Hex(value:string){const bytes=new TextEncoder().encode(value);const digest=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');}
-function legacyFallback(key:string){if(/Print$/.test(key))return'print';if(/Export$/.test(key))return'export';return'edit';}
 async function allowed(admin:ReturnType<typeof adminClient>,userId:string,deviceId:string,secret:string,key:string){
   if(!userId||!deviceId||!secret)return false;
   const hash=await sha256Hex(secret);
@@ -34,9 +28,7 @@ async function allowed(admin:ReturnType<typeof adminClient>,userId:string,device
   if(error||!data||data.active===false||!data.secret_hash||data.secret_hash!==hash)return false;
   if(data.role==='owner')return true;
   const p=(data.permissions&&typeof data.permissions==='object')?data.permissions:{};
-  if(typeof p[key]==='boolean')return p[key]===true;
-  const legacy=legacyFallback(key);if(typeof p[legacy]==='boolean')return p[legacy]===true;
-  return DEFAULT_ALLOWED.has(key);
+  return p[key]===true;
 }
 
 Deno.serve(async(req:Request)=>{

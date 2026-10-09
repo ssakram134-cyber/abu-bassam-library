@@ -31,6 +31,14 @@ async function context(req:Request,permission:string){
 }
 function scopedPath(userId:string,deviceId:string,itemId:string,revision=''){const base=`${userId}/branch-vault/${safePart(deviceId)}/${safePart(itemId)}`;return revision?`${base}/${safePart(revision)}`:base}
 function isScoped(path:string,userId:string,deviceId:string){return String(path||'').startsWith(`${userId}/branch-vault/${safePart(deviceId)}/`)}
+function validItemId(value:string){return /^[A-Za-z0-9_.-]{1,180}$/.test(value)&&value!=='.'&&value!=='..'}
+function isItemRevision(path:string,userId:string,deviceId:string,itemId:string){
+  const prefix=scopedPath(userId,deviceId,itemId)+'/';
+  const text=String(path||'');
+  const suffix=text.startsWith(prefix)?text.slice(prefix.length):'';
+  return suffix.length>0&&suffix!=='.'&&suffix!=='..'&&!suffix.includes('/');
+}
+
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
@@ -38,7 +46,7 @@ Deno.serve(async(req:Request)=>{
     const url=new URL(req.url),action=url.searchParams.get('action')||'';
     if(action==='upload-url'&&req.method==='POST'){
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),mime=String(body?.mime||'application/octet-stream').split(';',1)[0].trim().toLowerCase();
-      if(!itemId)return json({error:'ITEM_ID_REQUIRED'},400);
+      if(!validItemId(itemId))return json({error:'ITEM_ID_REQUIRED'},400);
       const base=await context(req,'vaultSync');
       const {data:existing}=await base.admin.from('abu_bassam_branch_vault').select('client_id').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
       const permission=existing?'vaultEdit':'vaultAdd';
@@ -48,7 +56,7 @@ Deno.serve(async(req:Request)=>{
       return json({ok:true,path,token:data.token,mime:mime||'application/octet-stream'});
     }
     if(action==='download-url'&&req.method==='GET'){
-      const itemId=String(url.searchParams.get('item_id')||'');if(!itemId)return json({error:'ITEM_ID_REQUIRED'},400);
+      const itemId=String(url.searchParams.get('item_id')||'');if(!validItemId(itemId))return json({error:'ITEM_ID_REQUIRED'},400);
       const base=await context(req,'vaultView');
       if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
       const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
@@ -59,11 +67,16 @@ Deno.serve(async(req:Request)=>{
     }
     if(action==='delete'&&req.method==='DELETE'){
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),requested=String(body?.path||'');
+      if(!validItemId(itemId))return json({error:'VAULT_ID_REQUIRED'},400);
       const base=await context(req,'vaultDelete');
       if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
-      let path=requested;
-      if(itemId){const {data:row}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();path=path||String(row?.data?.storagePath||'')}
-      if(path&&!isScoped(path,base.user.id,base.deviceId))return json({error:'VAULT_PATH_INVALID'},403);
+      const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
+      if(rowError)return json({error:'VAULT_METADATA_UNAVAILABLE'},500);
+      const currentPath=String(row?.data?.storagePath||'');
+      const path=requested||currentPath;
+      if(path&&!isItemRevision(path,base.user.id,base.deviceId,itemId))return json({error:'VAULT_PATH_INVALID'},403);
+      // Do not remove a revision referenced by active server metadata.
+      if(path&&path===currentPath&&row?.data?.deleted!==true)return json({error:'VAULT_ACTIVE_REVISION'},409);
       if(path){const {error}=await base.admin.storage.from(BUCKET).remove([path]);if(error)return json({error:error.message},500)}
       return json({ok:true});
     }
