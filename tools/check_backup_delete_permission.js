@@ -16,7 +16,7 @@ function getBody(line){
   return line.slice(index+2).replace(/\}$/, '');
 }
 const permissionEnabled=new Function('device','key',getBody(permissionLine));
-const mayCleanup=new Function('permissionEnabled',getBody(cleanupGuardLine)+';return base=>permissionEnabled(base.device,"backupDelete")')(permissionEnabled);
+const mayCleanup=new Function('permissionEnabled','return base=>{'+getBody(cleanupGuardLine)+'}')(permissionEnabled);
 const allowed={device:{role:'secondary',permissions:{backupCreate:true,backupRestore:true,backupDelete:true}}};
 const restoreOnly={device:{role:'secondary',permissions:{backupRestore:true}}};
 const createOnly={device:{role:'secondary',permissions:{backupCreate:true}}};
@@ -46,7 +46,7 @@ assert.doesNotMatch(endpoint,/context\(req,'backupRestore'\)/);
   assert.equal(pendingCalls,0,'Unauthorized backup plan cannot remove another backup');
   assert.equal(await planFor('manual',allowed),2);
   assert.equal(pendingCalls,1,'Authorized backup plan retains cleanup');
-  const commitFn=new Function('row','base','mayCleanup','cleanupReady','retention',commit+';return cleanupDeferred');
+  const commitFn=new Function('row','base','mayCleanup','cleanupReady','retention','return (async()=>{'+commit+'return cleanupDeferred})()');
   assert.equal(await commitFn({backup_kind:'manual'},restoreOnly,mayCleanup,async()=>{readyCalls++;return 5},7),0);
   assert.equal(await commitFn({backup_kind:'manual'},createOnly,mayCleanup,async()=>{readyCalls++;return 5},7),0);
   assert.equal(readyCalls,0);
