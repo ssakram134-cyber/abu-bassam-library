@@ -978,7 +978,7 @@ async function testEncryptedPaperPhotoCrashRecovery(){
     const events={},alerts=[];
     const workspace={items:[],snapshot(){return this.items.map(
       item=>({src:item.src,transform:item.transform}))},
-      apply:items=>{this.items=items},clear(){this.items=[]}};
+      apply(items){this.items=items},clear(){this.items=[]}};
     const window={AbuBassamPaperWorkspace:workspace,
       AbuBassamSecurity:{device:()=>trusted?{device_id:'phone-1',userId:user}:null,
         role:()=>trusted?role:'',isOfflineSession:()=>!online,
