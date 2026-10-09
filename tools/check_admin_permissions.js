@@ -212,6 +212,32 @@ async function testDeviceRegistrySessionFence(){
     role:'secondary',active:true});
   if(html.includes('onclick=')||!html.includes('data-abu-device-name="O&#39;Reilly'))
     throw Error('unsafe dynamic JavaScript in device buttons');
+  const panelStart=devices.indexOf('function clearOwnerRegistryUi(){');
+  const panelEnd=devices.indexOf('function init(){',panelStart);
+  if(panelStart<0||panelEnd<=panelStart)throw Error('owner UI privacy clearing missing');
+  let currentOwner=false,refreshCount=0;
+  const box={textContent:'private device names'};
+  const modal={open:true,classList:{
+    contains:()=>modal.open,remove:()=>{modal.open=false}
+  }};
+  const input={disabled:false},save={disabled:false};
+  const elements={abuDeviceList:box,abuDeviceModal:modal,
+    abuDeviceLimitInput:input,abuDeviceLimitSave:save};
+  const view=vm.runInNewContext('($,owner,invalidateOwnerSession,render,refreshLimitUi)=>{'
+    +devices.slice(panelStart,panelEnd)
+    +';return {onOwnerSecurityState,clearOwnerRegistryUi}}')(
+    key=>elements[key]||null,()=>currentOwner,()=>{},
+    async()=>{},async()=>{refreshCount++;input.disabled=false});
+  view.onOwnerSecurityState();
+  if(modal.open||box.textContent==='private device names'||!input.disabled||!save.disabled)
+    throw Error('revoked owner retains private device registry UI');
+  currentOwner=true;
+  view.onOwnerSecurityState();
+  if(refreshCount!==1||input.disabled)
+    throw Error('valid owner cannot restore device limit editor');
+  if(!devices.includes("document.addEventListener('abu-bassam-auth-changed',()=>{invalidateOwnerSession();clearOwnerRegistryUi();"))
+    throw Error('account switch did not immediately clear old owner device rows');
+
   let chosen=null;
   const button={dataset:{abuDeviceId:'branch-phone',abuDeviceAction:'rename',
     abuDeviceName:dangerousName}};
