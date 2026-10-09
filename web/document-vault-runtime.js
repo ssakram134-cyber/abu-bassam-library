@@ -206,6 +206,32 @@ async function dbMarkSyncedIfUnchanged(uploaded,remoteUpdatedAt){
   })
 }
 
+async function dbApplySyncIfUnchanged(id,expected,replacement,localCopy=null){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let applied=false,tx;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.get(id);
+      request.onsuccess=()=>{
+        const current=request.result;
+        const unchanged=expected===null?!current:!!current&&
+          current.syncState===expected.syncState&&
+          String(current.remoteUpdatedAt||'')===String(expected.remoteUpdatedAt||'')&&
+          syncSnapshot(current)===syncSnapshot(expected);
+        if(!unchanged)return;
+        if(localCopy)store.add(localCopy);
+        if(replacement)store.put(replacement);
+        else store.delete(id);
+        applied=true
+      };
+      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      tx.oncomplete=()=>resolve(applied);
+      tx.onerror=()=>reject(tx.error||new Error('تعذرت معاملة مزامنة الملف'));
+      tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة مزامنة الملف'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
+  })
+}
 function addCss(){
   let style=document.createElement('style');style.id='vaultStyle';style.textContent=`
 #vaultCenter{display:none;padding:12px;background:var(--bg,#f5efe8);min-height:82vh}.vault-show{display:block!important}.v-shell{max-width:920px;margin:auto;color:var(--text,#2b211d);font-family:Tahoma,Arial,sans-serif}.v-hero{border-radius:21px;padding:15px;color:#fff;background:radial-gradient(circle at 8% 12%,#55d6b655,transparent 28%),linear-gradient(135deg,#102d47,#075f65 58%,#a77932);box-shadow:0 12px 30px #102d4730}.v-hero h2{margin:0;font-size:18px}.v-hero p{font-size:9px;opacity:.88;margin:5px 0 10px}.v-search{display:flex;align-items:center;gap:7px;background:#fff;border-radius:13px;padding:3px 9px;color:#18303b}.v-search input{width:100%;border:0;outline:0;background:transparent;padding:10px 4px;font:700 12px Tahoma;color:#222}.v-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}.v-actions button{border:1px solid #ffffff3b;border-radius:10px;background:#ffffff18;color:#fff;min-height:42px;font-size:8px;font-weight:900;padding:4px}.v-syncline{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:8px}.v-auto{display:flex;align-items:center;gap:5px}
@@ -832,30 +858,29 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbDelete(item.id);continue}
+          if(remote?.deleted){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
-          await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+          if(!await dbApplySyncIfUnchanged(item.id,item,remoteItem(remote,remoteBlob,remoteVersion)))autoSyncRerunRequested=true;
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbPut(copy);await dbDelete(item.id);continue
+          if(!await dbApplySyncIfUnchanged(item.id,item,null,copy))autoSyncRerunRequested=true;continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-        await dbPut(localCopy);
-        await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+        if(!await dbApplySyncIfUnchanged(item.id,item,remoteItem(remote,remoteBlob,remoteVersion),localCopy))autoSyncRerunRequested=true;
         continue
       }
 
       if(item.deleted){
-        if(!row){await dbDelete(item.id);continue}
+        if(!row){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:true,storagePath:''};
         await service.upsert('vault',item.id,data);
-        await dbDelete(item.id);
+        if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -877,11 +902,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbDelete(id);continue}
+      if(data.deleted){if(here&&!await dbApplySyncIfUnchanged(id,here,null))autoSyncRerunRequested=true;continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
-      await dbPut(remoteItem(data,blob,remoteVersion))
+      if(!await dbApplySyncIfUnchanged(id,here||null,remoteItem(data,blob,remoteVersion)))autoSyncRerunRequested=true
     }
     syncSet(LAST_SYNC_KEY,String(Date.now()));
     await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
