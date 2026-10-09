@@ -195,9 +195,31 @@ function patchSecurity(){const sec=window.AbuBassamSecurity;if(!sec||patched)ret
   refreshLimit();updateOfflineButton();return true
 }
 async function sealIfOnlineUnlocked(){if(!online()||offlineSession||Date.now()-lastSealAt<60000)return;const sec=window.AbuBassamSecurity,gate=$('abuSecurityGate'),d=sec?.__baseDevice?.();if(sec&&gate?.classList.contains('hide')&&d?.active!==false)await seal(d).catch(()=>{})}
-async function enforceOfflineSession(){if(!offlineSession)return;const trust=await loadTrust().catch(()=>null);if(!trust){lockOffline('انتهت صلاحية الفتح دون إنترنت. اتصل بالإنترنت وسجّل الدخول.');return}if(online())await revalidateOfflineSession()}
-function onVisibility(){if(document.visibilityState==='hidden'){if(offlineSession)offlineBackgroundAt=Date.now();return}updateOfflineButton();if(offlineSession){const mins=Math.max(0,Number(localStorage.getItem(LOCK_MINUTES_KEY)||5));if(offlineBackgroundAt&&Date.now()-offlineBackgroundAt>=mins*60000){lockOffline('انتهت مهلة القفل التلقائي.');return}offlineBackgroundAt=0;enforceOfflineSession()}else if(online())sealIfOnlineUnlocked()}
+async function enforceOfflineSession(){
+  if(!offlineSession)return;
+  const epoch=offlineEpoch;
+  const trust=await loadTrust().catch(()=>null);
+  // A previous offline check must not lock a newly opened online session.
+  if(!offlineSession||epoch!==offlineEpoch)return;
+  if(!trust){
+    lockOffline('انتهت صلاحية الفتح دون إنترنت. اتصل بالإنترنت وسجّل الدخول.');
+    return
+  }
+  if(online())await revalidateOfflineSession()
+}
+let offlineCheckTimer=null;
+function scheduleOfflineCheck(delay=60000){
+  clearTimeout(offlineCheckTimer);
+  offlineCheckTimer=null;
+  if(document.visibilityState==='hidden')return;
+  offlineCheckTimer=setTimeout(()=>{
+    offlineCheckTimer=null;
+    void enforceOfflineSession().catch(()=>{});
+    scheduleOfflineCheck()
+  },Math.max(1000,delay))
+}
+function onVisibility(){if(document.visibilityState==='hidden'){clearTimeout(offlineCheckTimer);offlineCheckTimer=null;if(offlineSession)offlineBackgroundAt=Date.now();return}scheduleOfflineCheck();updateOfflineButton();if(offlineSession){const mins=Math.max(0,Number(localStorage.getItem(LOCK_MINUTES_KEY)||5));if(offlineBackgroundAt&&Date.now()-offlineBackgroundAt>=mins*60000){lockOffline('انتهت مهلة القفل التلقائي.');return}offlineBackgroundAt=0;enforceOfflineSession()}else if(online())sealIfOnlineUnlocked()}
 function onSecurityState(event){updateOfflineButton();if(event?.detail?.state==='locked'){if(offlineSession)clearOfflineState();else offlineEpoch++;}if(event?.detail?.state==='unlocked'&&online())sealIfOnlineUnlocked()}
-function init(){cleanLegacy();if(!patchSecurity())throw new Error('APP_SECURITY_REQUIRED');document.addEventListener('abu-bassam-security-state',onSecurityState);document.addEventListener('abu-bassam-auth-changed',()=>{refreshLimit();updateOfflineButton();if(online())sealIfOnlineUnlocked()});window.addEventListener('online',()=>{refreshLimit();updateOfflineButton();if(offlineSession)revalidateOfflineSession();else setTimeout(sealIfOnlineUnlocked,500)});window.addEventListener('offline',updateOfflineButton);document.addEventListener('visibilitychange',onVisibility);setInterval(enforceOfflineSession,60000)}
+function init(){cleanLegacy();if(!patchSecurity())throw new Error('APP_SECURITY_REQUIRED');document.addEventListener('abu-bassam-security-state',onSecurityState);document.addEventListener('abu-bassam-auth-changed',()=>{refreshLimit();updateOfflineButton();if(online())sealIfOnlineUnlocked()});window.addEventListener('online',()=>{refreshLimit();updateOfflineButton();if(offlineSession)revalidateOfflineSession();else setTimeout(sealIfOnlineUnlocked,500)});window.addEventListener('offline',updateOfflineButton);document.addEventListener('visibilitychange',onVisibility);scheduleOfflineCheck()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
