@@ -222,6 +222,77 @@ async function verifyAuthStartupAndSecret(){
     normalTrust.state().writes!==1||!normalTrust.state().saved)
     throw new Error('online owner cannot establish legitimate signed offline trust');
 
+
+  // Trust HMAC loading spans multiple native awaits. Revocation during those
+  // awaits must prevent a once-valid signed record from being returned.
+  const trustReadStart=hardening.indexOf('function trustReadAllowed(epoch){');
+  const trustReadEnd=hardening.indexOf('async function clearTrust(){',trustReadStart);
+  const offlineButtonStart=hardening.indexOf('let offlineButtonRequest=0;');
+  const offlineButtonEnd=hardening.indexOf('// Deduplicate server checks;',offlineButtonStart);
+  if([trustReadStart,trustReadEnd,offlineButtonStart,offlineButtonEnd].some(n=>n<0))
+    throw Error('offline trust read or fingerprint button guards missing');
+  const bootOffline=vm.runInNewContext('(deps)=>{'
+    +'let trustEpoch=0,trustRevokedInMemory=false;'
+    +'const {nativeAvailable,nativeRequest,localStorage,SECURE_TRUST_KEY,TRUST_REVOCATION_KEY,SECRET_KEY,hmac,constantTime,APP_VERSION,currentId,OFFLINE_GRACE_MS,CLOCK_SKEW_MS,$,online}=deps;'
+    +hardening.slice(trustReadStart,trustReadEnd)
+    +hardening.slice(offlineButtonStart,offlineButtonEnd)
+    +';return{loadTrust,updateOfflineButton,revoke:()=>{trustEpoch++;trustRevokedInMemory=true}}}');
+  const signedBody=JSON.stringify({schema:2,device_id:'phone',active:true,
+    appVersion:'1',verifiedAt:Date.now()});
+  const signedRecord=JSON.stringify({body:signedBody,mac:'mac'});
+  function offlineFixture(opts={}){
+    let releaseSecret=null,releaseRaw=null,isOnline=false;
+    const button={style:{display:'none'}};
+    const app=bootOffline({
+      nativeAvailable:()=>true,
+      nativeRequest:(_action,data)=>{
+        if(data.key==='trust'){
+          if(opts.delayRaw)return new Promise(resolve=>{releaseRaw=resolve});
+          return Promise.resolve(signedRecord)
+        }
+        if(opts.delaySecret)return new Promise(resolve=>{releaseSecret=resolve});
+        return Promise.resolve('secret')
+      },
+      localStorage:{getItem:()=>opts.revoked?'1':null},
+      SECURE_TRUST_KEY:'trust',TRUST_REVOCATION_KEY:'flag',SECRET_KEY:'secret',
+      hmac:async()=> 'mac',constantTime:(a,b)=>a===b,
+      APP_VERSION:'1',currentId:()=> 'phone',
+      OFFLINE_GRACE_MS:12*3600000,CLOCK_SKEW_MS:300000,
+      $:()=>button,online:()=>isOnline
+    });
+    return {app,button,nowOnline:()=>{isOnline=true},
+      releaseRaw:()=>releaseRaw?.(signedRecord),
+      releaseSecret:()=>releaseSecret?.('secret'),
+      ready:()=>({releaseRaw,releaseSecret})}
+  }
+  const restarted=offlineFixture({revoked:true});
+  if(await restarted.app.loadTrust()!==null)
+    throw Error('persistent offline trust revocation marker ignored on new runtime');
+  for(const stage of ['delayRaw','delaySecret']){
+    const fixture=offlineFixture({[stage]:true});
+    const oldRead=fixture.app.loadTrust();
+    for(let i=0;i<12&&!fixture.ready().releaseRaw&&!fixture.ready().releaseSecret;i++)await Promise.resolve();
+    fixture.app.revoke();
+    fixture.releaseRaw();fixture.releaseSecret();
+    if(await oldRead!==null)
+      throw Error('in-flight signed trust '+stage+' survived revocation');
+  }
+  const buttonRace=offlineFixture({delaySecret:true});
+  const oldButton=buttonRace.app.updateOfflineButton();
+  for(let i=0;i<12&&!buttonRace.ready().releaseSecret;i++)await Promise.resolve();
+  buttonRace.nowOnline();
+  await buttonRace.app.updateOfflineButton();
+  buttonRace.releaseSecret();
+  await oldButton;
+  if(buttonRace.button.style.display!=='none')
+    throw Error('stale fingerprint button appeared after internet reconnect');
+  const validOffline=offlineFixture();
+  if((await validOffline.app.loadTrust())?.device_id!=='phone')
+    throw Error('valid signed trust rejected on fresh runtime');
+  await validOffline.app.updateOfflineButton();
+  if(validOffline.button.style.display!=='block')
+    throw Error('valid offline fingerprint button never displayed');
+
   const effectiveBegin=hardening.indexOf('function effectiveRole(){');
   const effectiveEnd=hardening.indexOf('async function refreshLimit()',effectiveBegin);
   if(effectiveBegin<0||effectiveEnd<=effectiveBegin)throw new Error('effective offline authorization functions missing');
