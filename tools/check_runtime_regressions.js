@@ -1058,6 +1058,7 @@ function testPaperOutputAuthorizationAndLazyPdf(){
     +'const pageCanvases=[0,1].map(i=>({toDataURL:type=>"data:"+type+";base64,AA"+i}));'
     +'const window={AbuBassamSecurity:{role:()=>options.role,'
     +'can:key=>!!options.allow?.includes(key)},'
+    +'AbuBassamPermissions:{can:key=>!!options.allow?.includes(key)},'
     +'Android:{savePagesToGallery:(...args)=>{calls.push(["gallery",...args]);return true},'
     +'saveBase64:(...args)=>{calls.push(["pdf",...args]);return true},'
     +'printPages:(...args)=>{calls.push(["print",...args]);return true},'
