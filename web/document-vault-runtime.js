@@ -23,6 +23,10 @@ function uuid(){return globalThis.crypto&&crypto.randomUUID?crypto.randomUUID():
 function niceName(value){return String(value||'ملف').replace(/[\\/:*?"<>|]/g,'_').trim()||'ملف'}
 function ext(name){let m=String(name||'').toLowerCase().match(/\.([a-z0-9\u0600-\u06ff]+)$/);return m?m[1]:''}
 function isImage(item){return item.category==='image'||String(item.mime||'').startsWith('image/')}
+function fileMime(name,fallback=''){
+  const types={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',ppt:'application/vnd.ms-powerpoint',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',odt:'application/vnd.oasis.opendocument.text',ods:'application/vnd.oasis.opendocument.spreadsheet',odp:'application/vnd.oasis.opendocument.presentation',txt:'text/plain',csv:'text/csv',rtf:'application/rtf',json:'application/json',xml:'application/xml',html:'text/html',zip:'application/zip',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',bmp:'image/bmp',tiff:'image/tiff'};
+  return String(fallback||'').trim()||types[ext(name)]||'application/octet-stream'
+}
 function formatBytes(size){let n=Number(size)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function formatTime(value){try{return new Date(value).toLocaleString('ar-IQ')}catch(e){return value||''}}
 function sessionOk(){return !!(window.AbuBassamCloud&&AbuBassamCloud.isConnected())}
@@ -199,7 +203,7 @@ function pickFiles(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$
 function pickCollection(folder){if(!requireVault('vaultAdd'))return;state.uploadFolder=SYSTEM_FOLDERS.includes(folder)?folder:'';$('vFileInput').value='';$('vFileInput').click()}
 function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupInput').value='';$('vBackupInput').click()}
 
-function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
+function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:fileMime(name,blob.type),size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
 async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
 function previousVersionName(name){
   const text=niceName(name),match=text.match(/^(.*?)(\.[^.]*)?$/),tag=new Date().toISOString().replace(/[:.]/g,'-');
@@ -265,7 +269,7 @@ async function replaceFromDevice(file){
   if(!id||!file)return false;
   const old=findItem(id);if(!old)return false;
   const category=String(file.type||'').startsWith('image/')?'image':'file';
-  return saveEditedBlob(id,file,{name:file.name||old.name,mime:file.type||old.mime,category,image:false})
+  return saveEditedBlob(id,file,{name:file.name||old.name,mime:fileMime(file.name,file.type),category,image:false})
 }
 function editActive(){if(!activeId)return;const item=findItem(activeId);if(!item)return;if(isImage(item))editItem(activeId);else if(textEditable(item))editTextItem(activeId);else{alert('لملفات Word وExcel وPDF: افتح الملف في التطبيق المناسب عن طريق الحفظ أو المشاركة، ثم اختر النسخة المعدلة لإعادتها إلى الأرشيف.');pickRevisedFile(activeId)}}
 async function editTextItem(id){
@@ -312,7 +316,7 @@ function findItem(id){return state.items.find(item=>item.id===id)}
 async function blobDataUrl(blob){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})}
 function saveData(name,mime,data){if(window.Android&&Android.saveBase64)return Android.saveBase64(name,mime,data);let a=document.createElement('a');a.href=data;a.download=name;a.click()}
 function shareData(name,mime,data){if(window.Android&&Android.shareBase64)return Android.shareBase64(name,mime,data);saveData(name,mime,data)}
-async function saveItem(id){if(!requireVault('vaultExport'))return;let item=findItem(id);if(!item||!item.blob)return;setBusy(true,'تجهيز الملف للحفظ...');try{saveData(item.name,item.mime,await blobDataUrl(item.blob));logOperation('save','حفظ الأصل: '+item.name,formatBytes(item.size))}finally{setBusy(false)}}
+async function saveItem(id){if(!requireVault('vaultExport'))return;let item=findItem(id);if(!item||!item.blob)return;setBusy(true,'تجهيز الملف للحفظ...');try{saveData(item.name,item.mime,await blobDataUrl(item.blob));logOperation('save','حفظ ملف من الأرشيف: '+item.name,formatBytes(item.size))}finally{setBusy(false)}}
 async function shareItem(id){if(!requireVault('vaultShare'))return;let item=findItem(id);if(!item||!item.blob)return;setBusy(true,'تجهيز الملف للمشاركة...');try{shareData(item.name,item.mime,await blobDataUrl(item.blob));logOperation('share','مشاركة ملف','',item.name)}finally{setBusy(false)}}
 let activeId='';
 async function openItem(id){if(!requireVault('vaultView'))return;
