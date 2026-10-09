@@ -892,6 +892,50 @@ async function testEncryptedCardPhotoDraft(){
   if(after.state.photo)throw Error('deleted photo restored after restart');
 }
 
+function testCardDuplexPagePairing(){
+  const src=read('cards-studio-runtime.js');
+  const start=src.indexOf('function printDocument(){');
+  const end=src.indexOf('function historyQueueSnapshot(){',start);
+  if(start<0||end<=start)throw Error('card duplex print renderer missing');
+  const renderer=vm.runInNewContext('(settings)=>{'
+    +'const state={output:settings.output,sides:settings.sides,flip:settings.flip||"horizontal",'
+    +'width:85.6,height:53.98,gap:2,marginX:7,marginY:5,bleed:1};'
+    +'const fullPrintCss=()=>"",freeLayoutCss=()=>"",'
+    +'expandedJobs=()=>settings.ids.map(id=>({id})),'
+    +'cardHtml=(item,side)=>"<article data-id=\\""+item.id+"\\" data-side=\\""+side+"\\"></article>",'
+    +'cap=(value,min,max)=>Math.max(min,Math.min(max,value));'
+    +src.slice(start,end)
+    +';return printDocument}');
+  const ids=['A','B','C'];
+  for(const output of ['cr80','a4-pairs','a4-duplex']){
+    for(const sides of ['both','front','back']){
+      const html=renderer({output,sides,ids});
+      const front=(html.match(/data-side="front"/g)||[]).length;
+      const back=(html.match(/data-side="back"/g)||[]).length;
+      if(front!==(sides==='back'?0:3)||back!==(sides==='front'?0:3))
+        throw Error(output+' did not preserve the requested card faces');
+    }
+  }
+  for(const flip of ['horizontal','vertical']){
+    const html=renderer({output:'a4-duplex',sides:'both',ids,flip});
+    const pages=html.split(/<section class="duplex-page"[^>]*>/).slice(1)
+      .map(part=>part.split('</section>')[0]);
+    if(pages.length!==2||!pages[0].includes('data-side="front"')||
+      !pages[1].includes('data-side="back"'))
+      throw Error('duplex PDF did not produce separate front/back sheets');
+    const backs=[...pages[1].matchAll(/data-id="([^"]+)"/g)].map(row=>row[1]);
+    const expected=flip==='horizontal'?['B','A','C']:['C','A','B'];
+    if(JSON.stringify(backs)!==JSON.stringify(expected))
+      throw Error('duplex '+flip+' back-side mirroring drifted');
+    if((pages[1].match(/duplex-empty/g)||[]).length!==7)
+      throw Error('duplex alignment dropped empty slots');
+  }
+  const eleven=renderer({output:'a4-duplex',sides:'both',
+    ids:'ABCDEFGHIJK'.split('')});
+  if((eleven.match(/<section class="duplex-page"/g)||[]).length!==4)
+    throw Error('multi-sheet duplex omitted a front/back page pair');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1734,7 +1778,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
