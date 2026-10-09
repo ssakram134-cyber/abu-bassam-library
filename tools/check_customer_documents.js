@@ -106,4 +106,4 @@ forbid(hard,"typeof Android.security==='function'",'direct native security bridg
 forbid(hard,"__dev_secure_",'customer hardening must not read device secrets from localStorage');
 forbid(hard,".from('abu_bassam_devices')",'direct device table read in hardening runtime');
 forbid(workflow,'سلة محذوفات','recycle bin');
-console.log('customer documents checks passed: aligned branch permission defaults, SecureStore-only device secrets, deletion, atomic revisions, server redaction and branch isolation');
+console.log('customer documents checks passed: explicit non-owner grants with no fallback, SecureStore-only device secrets, deletion, atomic revisions, server redaction and branch isolation');
