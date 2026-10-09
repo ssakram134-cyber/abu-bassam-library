@@ -52,7 +52,7 @@ async function seal(device){
     if(!sameSession())return false;
     await nativeRequest('secureSet',{key:SECURE_TRUST_KEY,value:JSON.stringify({body,mac})});
     cleanLegacy();
-    lastSealAt=Date.now();
+    if(sameSession())lastSealAt=Date.now();
     return true
   })
 }
@@ -65,6 +65,7 @@ async function clearTrust(){
       if(nativeAvailable())await nativeRequest('secureDelete',{key:SECURE_TRUST_KEY})
     })
   }catch(error){console.warn('Failed to clear offline trust in SecureStore',error)}
+  lastSealAt=0;
   cleanLegacy()
 }
 async function biometricCheck(){if(!nativeAvailable())throw new Error('الفتح دون إنترنت متاح داخل تطبيق Android فقط.');const status=await nativeRequest('biometricStatus');if(!status?.available||!status?.enrolled)throw new Error('يلزم تفعيل بصمة الجهاز لاستخدام الفتح دون إنترنت.');const result=await nativeRequest('biometricAuth',{reason:'فتح مكتبة أبو بسام دون إنترنت'});if(!result?.success)throw new Error(result?.error==='user_cancel'?'تم إلغاء البصمة.':'لم تنجح المصادقة بالبصمة.');return true}
