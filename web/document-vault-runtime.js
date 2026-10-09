@@ -25,7 +25,7 @@ function ext(name){let m=String(name||'').toLowerCase().match(/\.([a-z0-9\u0600-
 function isImage(item){return item.category==='image'||String(item.mime||'').startsWith('image/')}
 function fileMime(name,fallback=''){
   const types={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',ppt:'application/vnd.ms-powerpoint',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',odt:'application/vnd.oasis.opendocument.text',ods:'application/vnd.oasis.opendocument.spreadsheet',odp:'application/vnd.oasis.opendocument.presentation',txt:'text/plain',csv:'text/csv',rtf:'application/rtf',json:'application/json',xml:'application/xml',html:'text/html',zip:'application/zip',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',bmp:'image/bmp',tiff:'image/tiff'};
-  return String(fallback||'').trim()||types[ext(name)]||'application/octet-stream'
+  const observed=String(fallback||'').trim();return observed&&observed!=='application/octet-stream'?observed:types[ext(name)]||observed||'application/octet-stream'
 }
 function formatBytes(size){let n=Number(size)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function formatTime(value){try{return new Date(value).toLocaleString('ar-IQ')}catch(e){return value||''}}
