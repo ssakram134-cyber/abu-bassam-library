@@ -71,6 +71,138 @@ function saveDraft(){
   try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';localStorage.setItem(STORAGE_KEY,JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
 }
 
+// A single encrypted, device- and account-scoped photo working draft.
+// No passwords, document metadata, or images are stored in localStorage.
+const PHOTO_DRAFT_DB='AbuBassamCardPhotoDraftV1',PHOTO_DRAFT_STORE='drafts';
+const PHOTO_DRAFT_MAX_CHARS=8000000,PHOTO_DRAFT_MAX_AGE=30*24*60*60*1000;
+let photoDraftRevision=0,photoDraftActiveScope='',photoDraftTail=Promise.resolve();
+let photoDraftTimer=null,photoDraftWarned=false;
+function photoDraftScope(){
+  const security=window.AbuBassamSecurity,device=security?.device?.(),
+    role=security?.role?.(),id=String(device?.device_id||'');
+  if(!id||!['owner','secondary'].includes(role)||
+    !canCard('cardsView')||!canCard('cardsImportImage'))return '';
+  const offline=security?.isOfflineSession?.()===true;
+  const user=String(offline?device?.userId||'':
+    window.AbuBassamCloud?.session?.()?.user?.id||'');
+  return user&&user.length<160&&id.length<160?user+':'+id+':'+role:''
+}
+function openPhotoDraftDb(){
+  if(!window.indexedDB)return Promise.reject(new Error('INDEXEDDB_UNAVAILABLE'));
+  return new Promise((resolve,reject)=>{
+    const request=indexedDB.open(PHOTO_DRAFT_DB,1);
+    request.onupgradeneeded=()=>{
+      if(!request.result.objectStoreNames.contains(PHOTO_DRAFT_STORE))
+        request.result.createObjectStore(PHOTO_DRAFT_STORE,{keyPath:'scope'})
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error('PHOTO_DRAFT_DB_ERROR'))
+  })
+}
+async function photoDraftKey(scope){
+  const native=window.AbuBassamNativeSecurity;
+  if(!native?.available?.()||!crypto?.subtle)throw new Error('PHOTO_DRAFT_SECURESTORE_REQUIRED');
+  const secret=String(await native.request('secureGet',
+    {key:'abu_bassam_device_secret_v1'})||'');
+  if(!secret||scope!==photoDraftScope())throw new Error('PHOTO_DRAFT_SESSION_CHANGED');
+  const hash=await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(secret+':cards-photo:'+scope));
+  if(scope!==photoDraftScope())throw new Error('PHOTO_DRAFT_SESSION_CHANGED');
+  return crypto.subtle.importKey('raw',hash,{name:'AES-GCM'},false,['encrypt','decrypt'])
+}
+async function photoDraftWrite(scope,photo,transform,revision){
+  if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+  const key=photo?await photoDraftKey(scope):null;
+  if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+  let record=null;
+  if(photo){
+    if(!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(photo)||
+      photo.length>PHOTO_DRAFT_MAX_CHARS)throw new Error('PHOTO_DRAFT_TOO_LARGE');
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const plain=new TextEncoder().encode(JSON.stringify({photo,transform}));
+    const payload=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,plain);
+    record={scope,version:1,updatedAt:Date.now(),iv,payload}
+  }
+  if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+  const db=await openPhotoDraftDb();
+  try{
+    if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PHOTO_DRAFT_STORE,'readwrite');
+      if(record)tx.objectStore(PHOTO_DRAFT_STORE).put(record);
+      else tx.objectStore(PHOTO_DRAFT_STORE).delete(scope);
+      tx.oncomplete=()=>resolve(true);
+      tx.onabort=()=>reject(tx.error||new Error('PHOTO_DRAFT_ABORTED'));
+      tx.onerror=()=>reject(tx.error||new Error('PHOTO_DRAFT_WRITE_ERROR'))
+    })
+  }finally{db.close()}
+}
+function savePhotoWorkingDraft(delay=0){
+  photoDraftRevision++;
+  clearTimeout(photoDraftTimer);
+  const revision=photoDraftRevision,scope=photoDraftScope();
+  if(!scope)return;
+  const photo=state.photo,transform=clone(state.photoTransform);
+  photoDraftTimer=setTimeout(()=>{
+    photoDraftTimer=null;
+    photoDraftTail=photoDraftTail.catch(()=>{}).then(()=>
+      photoDraftWrite(scope,photo,transform,revision)).catch(error=>{
+        console.warn('Encrypted card photo draft not saved',error);
+        if(!photoDraftWarned&&photo){
+          photoDraftWarned=true;
+          alert('تعذر حفظ مسودة الصورة تلقائيًا على هذا الجهاز. احتفظ بنسخة قبل الإغلاق.')
+        }
+      })
+  },Math.max(0,delay))
+}
+async function restorePhotoWorkingDraft(scope){
+  const revision=photoDraftRevision;
+  let db=null;
+  try{
+    const key=await photoDraftKey(scope);
+    if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+    db=await openPhotoDraftDb();
+    const row=await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PHOTO_DRAFT_STORE,'readonly'),
+        request=tx.objectStore(PHOTO_DRAFT_STORE).get(scope);
+      request.onsuccess=()=>resolve(request.result||null);
+      request.onerror=()=>reject(request.error)
+    });
+    if(!row||row.version!==1||Date.now()-row.updatedAt>PHOTO_DRAFT_MAX_AGE)return false;
+    if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+    const decoded=await crypto.subtle.decrypt(
+      {name:'AES-GCM',iv:row.iv},key,row.payload);
+    const draft=JSON.parse(new TextDecoder().decode(decoded));
+    if(scope!==photoDraftScope()||revision!==photoDraftRevision)return false;
+    if(typeof draft.photo!=='string'||draft.photo.length>PHOTO_DRAFT_MAX_CHARS||
+      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(draft.photo))return false;
+    state.photo=draft.photo;
+    const t=draft.transform||{};
+    state.photoTransform={zoom:cap(t.zoom??1,1,3.5),
+      x:cap(t.x??0,-70,70),y:cap(t.y??0,-70,70),
+      rotate:cap(t.rotate??0,-180,180),
+      flipX:t.flipX===true,flipY:t.flipY===true};
+    renderForm();renderPreview();
+    return true
+  }catch(error){
+    console.warn('Card photo draft could not be restored',error);
+    return false
+  }finally{db?.close()}
+}
+function refreshPhotoDraftSession(){
+  const next=photoDraftScope();
+  if(next===photoDraftActiveScope)return;
+  photoDraftActiveScope=next;
+  photoDraftRevision++;
+  photoLoadEpoch++;
+  clearTimeout(photoDraftTimer);
+  // Never leave a previous account's photo visible after a role/account change.
+  state.photo='';
+  state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};
+  if($('cardsCenter')){renderForm();renderPreview()}
+  if(next)void restorePhotoWorkingDraft(next)
+}
+
 function referenceCardCss(printMode=false){
   const title=printMode?'5.2mm':'clamp(12px,3.7vw,30px)',brand=printMode?'3.2mm':'clamp(7px,2.1vw,17px)',body=printMode?'2.25mm':'clamp(5px,1.5vw,12px)',small=printMode?'1.8mm':'clamp(4.5px,1.22vw,9px)',stroke=printMode?'.7mm':'3px',thin=printMode?'.35mm':'2px',halo=printMode?'6mm':'24px';
   return `
