@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.58.0";
+import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { sha256 } from "npm:@noble/hashes@1.5.0/sha256";
 
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')!;
