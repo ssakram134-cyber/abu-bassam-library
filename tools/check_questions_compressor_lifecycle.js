@@ -34,12 +34,14 @@ const objectUrls = {
   createObjectURL: file => 'blob:test/' + encodeURIComponent(file.name),
   revokeObjectURL: url => revoked.push(url),
 };
-const context = vm.createContext({
-  document, window: { addEventListener() {}, parent: {} }, URL: objectUrls,
+const sandbox = {
+  document, parent: {}, addEventListener() {}, URL: objectUrls,
   crypto: { randomUUID: () => 'test-' + Math.random() }, alert: message => alerts.push(String(message)),
   setTimeout, clearTimeout, Image: class {}, FileReader: class {},
   console,
-});
+};
+sandbox.window = sandbox; // Browser window properties must resolve as globals (e.g. showResult).
+const context = vm.createContext(sandbox);
 vm.runInContext(inline[0], context);
 const run = source => vm.runInContext(source, context);
 
