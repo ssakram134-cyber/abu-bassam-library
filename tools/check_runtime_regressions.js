@@ -570,6 +570,85 @@ function testImageImportLifecycle(){
      app.images().length!==1)
     throw new Error('photo removal did not cancel an unfinished picker read');
 }
+async function testCardPhotoAndBrandLogoRace(){
+  const source=read('cards-studio-runtime.js');
+  const photoStart=source.indexOf('async function loadPhoto(file,expectedEpoch=null){');
+  const photoEnd=source.indexOf('function requestNative(mode){',photoStart);
+  const nativeStart=source.indexOf('function onPhoto(dataUrl){');
+  const nativeEnd=source.indexOf('const previousNativeResult=',nativeStart);
+  const removeStart=source.indexOf('function removePhoto(){');
+  const removeEnd=source.indexOf('function resetPhoto(){',removeStart);
+  const logoStart=source.indexOf('async function loadDefaultLogo(){');
+  const logoEnd=source.indexOf('async function resizeImage(',logoStart);
+  if([photoStart,photoEnd,nativeStart,nativeEnd,removeStart,removeEnd,logoStart,logoEnd].some(n=>n<0))
+    throw Error('card photo loader and logo race guards missing');
+  function defer(){let resolve=null;const promise=new Promise(r=>resolve=r);return{promise,complete:v=>resolve(v)}}
+  const photoReads=[],logoReads=[],nativeReads=[];
+  let reader=null,draws=0,formDraws=0;
+  const state={brand:{logo:'abu_bassam_icon.webp'},photo:'',
+    photoTransform:{zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false}};
+  const make=vm.runInNewContext('(deps)=>{'
+    +'let photoLoadEpoch=0,brandLogoEpoch=0;'
+    +'const {state,requireCard,canCard,resizeImage,renderForm,renderPreview,alert,$,'
+    +'fetch,FileReader,File}=deps;'
+    +source.slice(photoStart,photoEnd)
+    +source.slice(nativeStart,nativeEnd)
+    +source.slice(removeStart,removeEnd)
+    +source.slice(logoStart,logoEnd)
+    +';return {loadPhoto,loadBrandLogo,onPhoto,removePhoto,loadDefaultLogo,'
+    +'getEpochs:()=>({photoLoadEpoch,brandLogoEpoch})}}');
+  const page=make({state,requireCard:()=>true,canCard:()=>true,
+    resizeImage:()=>{const d=defer();photoReads.push(d);return d.promise},
+    renderForm:()=>{formDraws++},renderPreview:()=>{draws++},
+    alert:()=>{},$:()=>({value:'',src:''}),
+    fetch:async value=>{
+      if(value==='abu_bassam_icon.webp')return{ok:true,blob:async()=>({})};
+      const d=defer();nativeReads.push(d);return d.promise
+    },
+    FileReader:class{readAsDataURL(){reader=this}},
+    File:class{constructor(parts){this.parts=parts}}});
+  const first=page.loadPhoto({id:'first'});
+  const second=page.loadPhoto({id:'second'});
+  photoReads[1].complete('data:image/png;base64,second');
+  await second;
+  photoReads[0].complete('data:image/png;base64,first');
+  await first;
+  if(!state.photo.includes('second')||draws!==1)
+    throw Error('older photo decoder overwrote the newer card photo');
+  const third=page.loadPhoto({id:'third'});
+  page.removePhoto();
+  photoReads[2].complete('data:image/png;base64,third');
+  await third;
+  if(state.photo!==''||draws!==2)
+    throw Error('late photo decode recreated an explicitly deleted image');
+  const native=page.onPhoto('data:image/png;base64,native');
+  for(let i=0;i<8&&!nativeReads.length;i++)await Promise.resolve();
+  if(!nativeReads.length)throw Error('native image fetch did not start');
+  page.removePhoto();
+  nativeReads[0].complete({blob:async()=>({})});
+  await native;
+  if(state.photo!==''||photoReads.length!==3)
+    throw Error('stale native camera callback reimported a deleted photo');
+  const oldLogo=page.loadBrandLogo({id:'old'});
+  const newLogo=page.loadBrandLogo({id:'new'});
+  photoReads[4].complete('data:image/png;base64,new-logo');
+  await newLogo;
+  photoReads[3].complete('data:image/png;base64,old-logo');
+  await oldLogo;
+  if(state.brand.logo!=='data:image/png;base64,new-logo')
+    throw Error('older brand logo decoder overwrote the newer file');
+  // Verify that a default logo request cannot replace a newer custom logo.
+  state.brand.logo='abu_bassam_icon.webp';
+  const loadDefault=page.loadDefaultLogo();
+  for(let i=0;i<8&&!reader;i++)await Promise.resolve();
+  if(!reader)throw Error('default logo file decoding did not start');
+  state.brand.logo='data:image/png;base64,custom';
+  reader.onload?.();
+  await loadDefault;
+  if(state.brand.logo!=='data:image/png;base64,custom')
+    throw Error('delayed default logo overwrote the custom logo');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1412,7 +1491,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
