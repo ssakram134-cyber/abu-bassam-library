@@ -171,7 +171,7 @@ function back(fromHardware=false){if(!unlocked)return true;if(closeTopLayer())re
 function exit(){const now=Date.now();if(now-exitArmedAt<=2000){exitArmedAt=0;if(window.Android?.exitApp)Android.exitApp();return true}exitArmedAt=now;toast('اضغط مرة ثانية للخروج');return true}
 window.AbuBassamNativeBackPress=function(){back(true)};
 
-async function logout(){if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;localStorage.setItem(OFFLINE_SIGNED_OUT_KEY,'1');let failed=false;try{const result=await cloud()?.client?.auth?.signOut?.({scope:'local'});if(result?.error)throw result.error}catch(_){failed=true}currentDevice=null;showGate(failed?'تم قفل التطبيق، لكن تعذر إنهاء جلسة الخادم. أعد المحاولة عند توفر الاتصال.':'تم تسجيل الخروج.');log('تسجيل خروج')}
+async function logout(){if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return false;localStorage.setItem(OFFLINE_SIGNED_OUT_KEY,'1');let failed=false;try{const result=await cloud()?.client?.auth?.signOut?.({scope:'local'});if(result?.error)throw result.error}catch(_){failed=true}currentDevice=null;showGate(failed?'تم قفل التطبيق، لكن تعذر إنهاء جلسة الخادم. أعد المحاولة عند توفر الاتصال.':'تم تسجيل الخروج.');log('تسجيل خروج');return true}
 function lockNow(){lock('تم قفل التطبيق يدويًا')}
 
 async function boot(){
