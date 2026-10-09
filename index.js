@@ -116,6 +116,8 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [startupFailed, setStartupFailed] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -130,12 +132,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (webReady) return undefined;
-    const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
-    }, STARTUP_WATCHDOG_MS);
+    if (webReady || startupFailed) return undefined;
+    const timer = setTimeout(() => setStartupFailed(true), STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [webReady, startupFailed, startupAttempt]);
+
+  const retryStartup = useCallback(() => {
+    setWebReady(false);
+    setStartupFailed(false);
+    setStartupAttempt((attempt) => attempt + 1);
+    webRef.current?.reload();
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -361,7 +368,7 @@ function App() {
 
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    if (message.type === 'webBootReady') { setStartupFailed(false); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -394,9 +401,26 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onError={() => { setWebReady(false); setStartupFailed(true); }}
       />
-      {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {!webReady && (
+        <View style={styles.loading}>
+          {startupFailed ? (
+            <>
+              <Text style={styles.startupErrorTitle}>تعذر تشغيل مكتبة أبو بسام</Text>
+              <Text style={styles.startupErrorMessage}>لم تكتمل مكونات التطبيق بأمان. بياناتك المحفوظة لم تُحذف. أعد محاولة التحميل دون الحاجة إلى اتصال بالإنترنت.</Text>
+              <TouchableOpacity style={styles.startupRetryButton} onPress={retryStartup} accessibilityRole="button" accessibilityLabel="إعادة محاولة تشغيل التطبيق">
+                <Text style={styles.startupRetryText}>إعادة المحاولة</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="large" color="#76533e" />
+              <Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text>
+            </>
+          )}
+        </View>
+      )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -426,6 +450,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
   loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
+  startupErrorTitle: { color: '#5b4438', fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  startupErrorMessage: { color: '#5b4438', fontSize: 13, fontWeight: '600', textAlign: 'center', lineHeight: 24, marginTop: 14, marginHorizontal: 22 },
+  startupRetryButton: { marginTop: 22, backgroundColor: '#087f72', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28, minHeight: 48, justifyContent: 'center', alignItems: 'center' },
+  startupRetryText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },
   cameraShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 38 },
   cameraHeader: { width: '100%', paddingTop: 14, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
