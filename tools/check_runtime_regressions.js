@@ -1102,6 +1102,71 @@ function testPaperOutputAuthorizationAndLazyPdf(){
     throw Error('owner JPG/PDF export dropped page collection');
 }
 
+async function testPaperAiPhotoSessionRaces(){
+  const html=read('index.html');
+  const first=html.indexOf('async function runAiPro(){');
+  const last=html.indexOf('</script>',first);
+  if(first<0||last<=first)throw Error('AI photo workflow missing');
+  const factory=vm.runInNewContext('()=>{'
+    +'let imageImportEpoch=0,aiProResult=null,aiProOriginal=null,'
+    +'aiProTarget=0,aiProRequestSeq=0,selectedIndex=0,user="account-A";'
+    +'let uploadedImages=[{src:"data:image/png;base64,old"}];'
+    +'const responses=[],messages=[];let draws=0;'
+    +'const window={AbuBassamCloud:{session:()=>({user:{id:user},access_token:"valid"})}};'
+    +'const $=id=>({value:id==="aiProPrompt"?"Improve this photo":'
+    +'id==="aiProToken"?"pro-token":id==="aiProProvider"?"gemini":"",'
+    +'set src(value){},get src(){return ""}}),'
+    +'navigator={onLine:true},saveAiProSettings=()=>{},'
+    +'aiProviderName=()=>"Gemini",setBusy=()=>{},'
+    +'aiProStatus=text=>messages.push(text),alert=()=>{},'
+    +'readyAiCloudWithin=async()=>{},'
+    +'AbortController=class{abort(){}get signal(){return{}}},'
+    +'setTimeout=()=>1,clearTimeout=()=>{},'
+    +'fetch:()=>new Promise(resolve=>responses.push(resolve)),'
+    +'Image=class{set src(value){this._src=value;Promise.resolve().then(()=>this.onload?.())}},'
+    +'refreshPeople=()=>{},renderPaper=()=>{draws++},paperDraftChanged=()=>{};'
+    +html.slice(first,last)
+    +';return {runAiPro,applyAiProResult,restoreAiOriginal,'
+    +'setResult:value=>{aiProResult=value},setOriginal:value=>{aiProOriginal=value},'
+    +'setImage:value=>{uploadedImages=[{src:value}];imageImportEpoch++},'
+    +'changeUser:()=>{user="account-B";uploadedImages=[];imageImportEpoch++},'
+    +'response:(i,url)=>responses[i]({ok:true,status:200,'
+    +'text:async()=>JSON.stringify({imageDataUrl:url})}),'
+    +'count:()=>responses.length,'
+    +'state:()=>({aiProResult,images:uploadedImages,draws,messages})}}');
+  const app=factory();
+  const firstRun=app.runAiPro(),secondRun=app.runAiPro();
+  for(let i=0;i<12&&app.count()<2;i++)await Promise.resolve();
+  if(app.count()!==2)throw Error('parallel AI calls did not start');
+  app.response(1,'data:image/png;base64,new');
+  await secondRun;
+  app.response(0,'data:image/png;base64,stale');
+  await firstRun;
+  if(app.state().aiProResult!=='data:image/png;base64,new')
+    throw Error('old AI response replaced a newer prompt result');
+  const delayed=app.runAiPro();
+  for(let i=0;i<12&&app.count()<3;i++)await Promise.resolve();
+  if(app.count()<3)throw Error('AI account-switch call not started');
+  app.changeUser();
+  app.response(2,'data:image/png;base64,previous-account');
+  await delayed;
+  if(app.state().aiProResult==='data:image/png;base64,previous-account')
+    throw Error('late AI photo leaked into a different account');
+  app.setImage('data:image/png;base64,original');
+  app.setResult('data:image/png;base64,apply');
+  const apply=app.applyAiProResult();
+  app.setImage('data:image/png;base64,other');
+  await apply;
+  if(app.state().images[0].src!=='data:image/png;base64,other')
+    throw Error('old decoded AI image overwrote a newly selected photo');
+  app.setOriginal('data:image/png;base64,restore');
+  const restore=app.restoreAiOriginal();
+  app.setImage('data:image/png;base64,latest');
+  await restore;
+  if(app.state().images[0].src!=='data:image/png;base64,latest')
+    throw Error('old AI image restore overwrote a new photo');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1944,7 +2009,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testPaperOutputAuthorizationAndLazyPdf),testEncryptedPaperPhotoCrashRecovery(),Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testPaperAiPhotoSessionRaces(),Promise.resolve().then(testPaperOutputAuthorizationAndLazyPdf),testEncryptedPaperPhotoCrashRecovery(),Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
