@@ -14,7 +14,7 @@ function log(type,title,details=''){try{window.AbuBassamOps?.add?.({type,title,d
 function browserSave(name,data){const link=document.createElement('a');link.download=name;link.href=data;link.click()}
 function wantedQuestionSrc(){return language==='ar'?'questions-ar.html':'questions-en.html'}
 function frameLoaded(frame){return !!(frame&&frame.getAttribute('src')&&frame.getAttribute('src')!=='about:blank')}
-function frameDocumentReady(frame,expected){if(!frameLoaded(frame))return false;try{const doc=frame.contentDocument,actual=decodeURIComponent(frame.contentWindow?.location?.pathname?.split('/').pop()||'');return doc?.readyState==='complete'&&actual===expected}catch(_){return false}}
+function frameDocumentReady(frame,expected){if(!frameLoaded(frame))return false;try{const requested=String(frame.getAttribute('src')||'').split(/[?#]/)[0].split('/').pop(),doc=frame.contentDocument,actual=decodeURIComponent(frame.contentWindow?.location?.pathname?.split('/').pop()||'');return requested===expected&&doc?.readyState==='complete'&&actual===expected}catch(_){return false}}
 function ensureFrame(id,src){const frame=$(id);if(!frame)return null;const current=String(frame.getAttribute('src')||'');if(current==='about:blank'||!current){frame.src=src}return frame}
 function ensureQuestionFrame(){const frame=$('questionsFrame');if(!frame)return null;const wanted=wantedQuestionSrc();frame.dataset.src=wanted;if(!frameLoaded(frame)||!String(frame.getAttribute('src')||'').endsWith(wanted))frame.src=wanted;return frame}
 function ensureCompressorFrame(){return ensureFrame('compressorFrame','image-compressor.html')}
