@@ -49,7 +49,7 @@ assert.match(source,/state\.uploadFolder=state\.filter\.slice\(7\)/,'Selected fo
 assert.match(source,/onclick="DocumentVault\.pasteToFolder\(\)"/,'Folder paste control exists');
 assert.match(source,/copyItem,cutItem,pasteToFolder,moveItem,reorderItem/,'Controls exported');
 assert.match(source,/clip\.scope!==syncScope\(\)/,'Clipboard scoped to account and device');
-assert.match(source,/state\.clipboard=null;updateVaultAccessUi\(\)/,'Sign out clears temporary cut/copy');
+assert.match(source,/state\.clipboard=null;state\.selectedIds\.clear\(\);updateVaultAccessUi\(\)/,'Sign out clears temporary cut/copy and multi-select');
 assert.match(source,/manualOrder:Number\.isInteger\(item\.manualOrder\)/,'Manual order included in server metadata');
 assert.match(source,/manualOrder:Number\.isInteger\(data\.manualOrder\)/,'Order read back from server');
 assert.match(backup,/manualOrder:Number\.isInteger\(item\.manualOrder\)/,'Order included in backup manifest');
