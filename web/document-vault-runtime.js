@@ -949,6 +949,74 @@ async function backup(mode='save'){if(!requireVault('vaultBackup'))return false;
 async function encryptedBackup(){if(!requireVault('vaultEncryptedBackup'))return false;try{return await backupService().encryptedBackup()}catch(e){alert(String(e?.message||e));return false}}
 async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRestoreBackup'))return false;try{return await backupService().restore(file,options)}catch(e){alert(String(e?.message||e));return false}}
 
+
+let otherBranchRows=[],otherBranchActive=null,otherBranchUrl='',otherBranchScope='';
+function closeOtherBranches(){
+  if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
+  otherBranchRows=[];otherBranchActive=null;otherBranchScope='';
+  const modal=$('vOtherBranchModal');if(modal)modal.classList.remove('show');
+  const save=$('vOtherBranchSave');if(save)save.style.display='none'
+}
+async function openOtherBranches(){
+  if(!requireVault('vaultView')||!vaultOwner()||!vaultAllowed('vaultViewOtherBranches'))return false;
+  if(!sessionOk()||!navigator.onLine){alert('تحتاج هذه القائمة إلى اتصال سحابي موثّق. ملفات هذا الجهاز المحلية محفوظة دون إنترنت.');return false}
+  const gateway=window.AbuBassamBranchVault;
+  if(!gateway?.ownerList){alert('عارض أرشيف الفروع غير متاح في هذه النسخة.');return false}
+  closeOtherBranches();
+  otherBranchScope=syncScope();
+  showModal('vOtherBranchModal');
+  $('vOtherBranchFiles').textContent='جاري جلب قائمة ملفات الفروع...';
+  $('vOtherBranchPreview').textContent='اختر ملفاً لمعاينته.';
+  try{
+    const rows=await gateway.ownerList(5000);
+    if(syncScope()!==otherBranchScope||!vaultOwner()||!vaultScopeOk(false))throw new Error('VAULT_SCOPE_CHANGED');
+    otherBranchRows=rows;
+    $('vOtherBranchFiles').innerHTML=rows.length?rows.map((row,index)=>
+      '<button type="button" class="v-tab" style="white-space:normal;text-align:right" onclick="DocumentVault.openOtherBranchFile('+index+')">'+
+      '📁 '+esc(row.branch_name||row.branch_device_id)+' — '+esc(row.data?.name||row.client_id)+
+      ' <small>('+esc(formatBytes(row.data?.size||0))+' • '+esc(formatTime(row.updated_at))+')</small></button>'
+    ).join(''):'لا توجد ملفات سحابية ظاهرة في فروع هذا الحساب.';
+    return true
+  }catch(e){
+    if($('vOtherBranchModal')?.classList.contains('show'))$('vOtherBranchFiles').textContent='تعذر تحميل الأرشيف: '+String(e?.message||e);
+    return false
+  }
+}
+async function openOtherBranchFile(index){
+  if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||otherBranchScope!==syncScope())return false;
+  const row=otherBranchRows[index],gateway=window.AbuBassamBranchVault;
+  if(!row||!gateway?.ownerDownload)return false;
+  const preview=$('vOtherBranchPreview');
+  if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
+  otherBranchActive=null;
+  $('vOtherBranchSave').style.display='none';
+  preview.textContent='جاري تنزيل نسخة للمعاينة فقط...';
+  try{
+    const result=await gateway.ownerDownload(row);
+    if(!vaultOwner()||otherBranchScope!==syncScope()||!vaultScopeOk(false)||!$('vOtherBranchModal')?.classList.contains('show'))return false;
+    otherBranchActive=result;
+    const mime=String(result.mime||'').split(';')[0].toLowerCase();
+    if(['image/jpeg','image/png','image/webp','image/gif','image/bmp','application/pdf'].includes(mime)){
+      const safeBlob=new Blob([result.blob],{type:mime});
+      otherBranchUrl=URL.createObjectURL(safeBlob);
+      preview.innerHTML=mime==='application/pdf'?
+        '<iframe title="معاينة PDF" style="width:100%;height:65vh;border:0" src="'+esc(otherBranchUrl)+'"></iframe>':
+        '<img alt="معاينة مستند" style="max-width:100%;max-height:65vh;object-fit:contain" src="'+esc(otherBranchUrl)+'">';
+    }else{
+      preview.textContent='الملف '+result.name+' جاهز للتنزيل. هذه الصيغة لا تدعم المعاينة المباشرة.'
+    }
+    $('vOtherBranchSave').style.display='';
+    return true
+  }catch(e){preview.textContent='تعذرت معاينة الملف: '+String(e?.message||e);return false}
+}
+function saveOtherBranchFile(){
+  if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||!vaultAllowed('vaultExport')||otherBranchScope!==syncScope()||!otherBranchActive)return false;
+  const file=otherBranchActive,url=URL.createObjectURL(file.blob),anchor=document.createElement('a');
+  anchor.href=url;anchor.download=niceName(file.name);document.body.appendChild(anchor);anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  return true
+}
+
 function cloud(){return window.AbuBassamCloud}
 function remoteItem(data,blob,serverUpdatedAt=''){return{id:data.id,name:niceName(data.name),category:data.category==='image'?'image':'file',mime:data.mime||blob.type||'application/octet-stream',size:blob.size,createdAt:data.createdAt||data.updatedAt,updatedAt:data.updatedAt,remoteUpdatedAt:String(serverUpdatedAt||''),folder:data.folder||'',favorite:!!data.favorite,lastOpenedAt:data.lastOpenedAt||'',manualOrder:Number.isInteger(data.manualOrder)?data.manualOrder:null,blob,syncState:'synced',deleted:false}}
 async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
@@ -1047,6 +1115,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={openOtherBranches,openOtherBranchFile,saveOtherBranchFile,closeOtherBranches,setFilter,setSort,setView,toggleFileSelection,selectVisibleFiles,clearFileSelection,renumberFolder,restoreLastFolderNumbering,restoreTrash,eraseTrash,reorderByDrop,pickIntoFolder,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
