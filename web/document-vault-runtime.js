@@ -950,8 +950,9 @@ async function encryptedBackup(){if(!requireVault('vaultEncryptedBackup'))return
 async function restoreBackup(file,options={}){if(!file||!requireVault('vaultRestoreBackup'))return false;try{return await backupService().restore(file,options)}catch(e){alert(String(e?.message||e));return false}}
 
 
-let otherBranchRows=[],otherBranchActive=null,otherBranchUrl='',otherBranchScope='';
+let otherBranchRows=[],otherBranchActive=null,otherBranchUrl='',otherBranchScope='',otherBranchRequest=0;
 function closeOtherBranches(){
+  otherBranchRequest++;
   if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
   otherBranchRows=[];otherBranchActive=null;otherBranchScope='';
   const modal=$('vOtherBranchModal');if(modal)modal.classList.remove('show');
@@ -964,12 +965,13 @@ async function openOtherBranches(){
   if(!gateway?.ownerList){alert('عارض أرشيف الفروع غير متاح في هذه النسخة.');return false}
   closeOtherBranches();
   otherBranchScope=syncScope();
+  const request=++otherBranchRequest;
   showModal('vOtherBranchModal');
   $('vOtherBranchFiles').textContent='جاري جلب قائمة ملفات الفروع...';
   $('vOtherBranchPreview').textContent='اختر ملفاً لمعاينته.';
   try{
     const rows=await gateway.ownerList(5000);
-    if(syncScope()!==otherBranchScope||!vaultOwner()||!vaultScopeOk(false))throw new Error('VAULT_SCOPE_CHANGED');
+    if(request!==otherBranchRequest||syncScope()!==otherBranchScope||!vaultOwner()||!vaultScopeOk(false))throw new Error('VAULT_SCOPE_CHANGED');
     otherBranchRows=rows;
     $('vOtherBranchFiles').innerHTML=rows.length?rows.map((row,index)=>
       '<button type="button" class="v-tab" style="white-space:normal;text-align:right" onclick="DocumentVault.openOtherBranchFile('+index+')">'+
@@ -978,13 +980,13 @@ async function openOtherBranches(){
     ).join(''):'لا توجد ملفات سحابية ظاهرة في فروع هذا الحساب.';
     return true
   }catch(e){
-    if($('vOtherBranchModal')?.classList.contains('show'))$('vOtherBranchFiles').textContent='تعذر تحميل الأرشيف: '+String(e?.message||e);
+    if(request===otherBranchRequest&&$('vOtherBranchModal')?.classList.contains('show'))$('vOtherBranchFiles').textContent='تعذر تحميل الأرشيف: '+String(e?.message||e);
     return false
   }
 }
 async function openOtherBranchFile(index){
   if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||otherBranchScope!==syncScope())return false;
-  const row=otherBranchRows[index],gateway=window.AbuBassamBranchVault;
+  const row=otherBranchRows[index],gateway=window.AbuBassamBranchVault,request=++otherBranchRequest;
   if(!row||!gateway?.ownerDownload)return false;
   const preview=$('vOtherBranchPreview');
   if(otherBranchUrl){try{URL.revokeObjectURL(otherBranchUrl)}catch(_){}otherBranchUrl=''}
@@ -993,7 +995,7 @@ async function openOtherBranchFile(index){
   preview.textContent='جاري تنزيل نسخة للمعاينة فقط...';
   try{
     const result=await gateway.ownerDownload(row);
-    if(!vaultOwner()||otherBranchScope!==syncScope()||!vaultScopeOk(false)||!$('vOtherBranchModal')?.classList.contains('show'))return false;
+    if(request!==otherBranchRequest||!vaultOwner()||otherBranchScope!==syncScope()||!vaultScopeOk(false)||!$('vOtherBranchModal')?.classList.contains('show'))return false;
     otherBranchActive=result;
     const mime=String(result.mime||'').split(';')[0].toLowerCase();
     if(['image/jpeg','image/png','image/webp','image/gif','image/bmp','application/pdf'].includes(mime)){
@@ -1007,7 +1009,7 @@ async function openOtherBranchFile(index){
     }
     $('vOtherBranchSave').style.display='';
     return true
-  }catch(e){preview.textContent='تعذرت معاينة الملف: '+String(e?.message||e);return false}
+  }catch(e){if(request===otherBranchRequest)preview.textContent='تعذرت معاينة الملف: '+String(e?.message||e);return false}
 }
 function saveOtherBranchFile(){
   if(!vaultOwner()||!vaultScopeOk(false)||!vaultAllowed('vaultViewOtherBranches')||!vaultAllowed('vaultExport')||otherBranchScope!==syncScope()||!otherBranchActive)return false;
