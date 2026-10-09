@@ -15,7 +15,7 @@ function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.
 function syncKey(key){return key+':'+syncScope()}
 function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null&&key!==LAST_SYNC_KEY){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
-const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploading:false,uploadFolder:''};
+const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],previewUrl:'',editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploading:false,uploadFolder:''};
 let autoSyncTimer=null,autoSyncRerunRequested=false;
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
@@ -165,7 +165,7 @@ async function build(){
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
 function showModal(id){$(id).classList.add('show')}
-function closeModal(id){$(id).classList.remove('show')}
+function closeModal(id){$(id).classList.remove('show');if(id==='vViewModal'&&state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}state.previewUrl=''}}
 function setSyncStatus(text){if($('vSyncStatus'))$('vSyncStatus').textContent='المزامنة: '+text}
 function setAutoSync(value){syncSet(AUTO_SYNC_KEY,value?'1':'0');setSyncStatus(value?'تلقائية مفعّلة':'تلقائية متوقفة');scheduleAutoSync(100)}
 function hasPending(){return state.items.some(item=>item.syncState==='pending')}
@@ -177,6 +177,7 @@ async function refresh(){
 }
 function cleanupUrls(){state.urls.forEach(url=>{try{URL.revokeObjectURL(url)}catch(e){}});state.urls=[]}
 function objectUrl(blob){let url=URL.createObjectURL(blob);state.urls.push(url);return url}
+function viewObjectUrl(blob){if(state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}}state.previewUrl=URL.createObjectURL(blob);return state.previewUrl}
 function fileIcon(item){let e=ext(item.name);if(e==='pdf')return'📕';if(['doc','docx','odt','rtf'].includes(e))return'🟦';if(['xls','xlsx','ods','csv'].includes(e))return'🟩';if(['ppt','pptx'].includes(e))return'🟧';if(['zip','rar','7z'].includes(e))return'🗜️';if(['epub','mobi'].includes(e))return'📚';return'📄'}
 function typeOf(item){let e=ext(item.name);if(isImage(item))return'image';if(e==='pdf')return'pdf';if(['doc','docx','odt','rtf'].includes(e))return'word';if(['xls','xlsx','ods'].includes(e))return'excel';if(['ppt','pptx','odp'].includes(e))return'powerpoint';if(['txt','csv','json','xml','html'].includes(e))return'text';return'file'}
 function typeLabel(item){return ({image:'صورة',pdf:'PDF',word:'Word',excel:'Excel',powerpoint:'عرض',text:'نص',file:'ملف'})[typeOf(item)]||'ملف'}
@@ -323,7 +324,7 @@ async function shareItem(id){if(!requireVault('vaultShare'))return;let item=find
 let activeId='';
 async function openItem(id){if(!requireVault('vaultView'))return;
   let item=findItem(id);if(!item)return;activeId=id;item.lastOpenedAt=new Date().toISOString();await dbPut(item);$('vViewTitle').textContent=item.name;let view=$('vView');view.innerHTML='';$('vGalleryButton').textContent=isImage(item)?'حفظ في المعرض':'حفظ في الجهاز';
-  let url=objectUrl(item.blob),e=ext(item.name);
+  let url=viewObjectUrl(item.blob),e=ext(item.name);
   if(isImage(item))view.innerHTML=`<img src="${url}" alt="${esc(item.name)}">`;
   else if(e==='pdf')view.innerHTML=`<iframe src="${url}"></iframe>`;
   else if(['txt','csv','json','xml','html'].includes(e)){let pre=document.createElement('pre');pre.textContent=await item.blob.text();view.appendChild(pre)}
