@@ -905,7 +905,7 @@ function testCardDuplexPagePairing(){
     +'cardHtml=(item,side)=>"<article data-id=\\""+item.id+"\\" data-side=\\""+side+"\\"></article>",'
     +'cap=(value,min,max)=>Math.max(min,Math.min(max,value));'
     +src.slice(start,end)
-    +';return printDocument}');
+    +';return printDocument()}');
   const ids=['A','B','C'];
   for(const output of ['cr80','a4-pairs','a4-duplex']){
     for(const sides of ['both','front','back']){
