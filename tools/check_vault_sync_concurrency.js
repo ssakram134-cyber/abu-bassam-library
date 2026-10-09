@@ -1,0 +1,92 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const source=fs.readFileSync(path.join(__dirname,'..','web/document-vault-runtime.js'),'utf8');
+new vm.Script(source);
+function section(start,end){
+ const at=source.indexOf(start),until=source.indexOf(end,at+start.length);
+ assert.ok(at>=0&&until>at,'missing '+start);
+ return source.slice(at,until)
+}
+const snapshotSource=section('function syncSnapshot(', 'async function dbMarkSyncedIfUnchanged(');
+const applySource=section('async function dbApplySyncIfUnchanged(', 'function addCss()');
+const syncSnapshot=new Function(snapshotSource+';return syncSnapshot')();
+const before=(id='file-1')=>({
+ id,name:'Book.pdf',folder:'زيد',category:'file',mime:'application/pdf',size:5,
+ blob:{size:5,type:'application/pdf'},syncState:'pending',syncRevision:'r1',
+ updatedAt:'2026-10-09',remoteUpdatedAt:'server-v1',deleted:false
+});
+function simulate(items){
+ let saved=new Map(items.map(item=>[item.id,{...item}])),transactions=0,aborts=0;
+ const database={transaction(name,mode){
+   assert.equal(name,'items');assert.equal(mode,'readwrite');transactions++;
+   const next=new Map(saved),tx={
+      aborted:false,oncomplete:null,onerror:null,onabort:null,
+      abort(){this.aborted=true;aborts++},
+      objectStore(){return{
+        get(id){const request={onsuccess:null,onerror:null,result:null};queueMicrotask(()=>{
+          request.result=next.get(id);
+          request.onsuccess?.();
+          queueMicrotask(()=>{if(tx.aborted)tx.onabort?.();else{saved=next;tx.oncomplete?.()}})
+        });return request},
+        add(item){assert.equal(next.has(item.id),false,'conflict copy ID must be new');next.set(item.id,item)},
+        put(item){next.set(item.id,item)},
+        delete(id){next.delete(id)}
+      }}
+   };
+   return tx
+ }};
+ const apply=new Function('openDb','STORE','syncSnapshot',applySource+';return dbApplySyncIfUnchanged')(
+   async()=>database,'items',syncSnapshot
+ );
+ return {apply,get saved(){return saved},get transactions(){return transactions},get aborts(){return aborts}}
+}
+(async()=>{
+ const original=before(),incoming={...original,name:'RemoteBook.pdf',syncRevision:'rRemote',syncState:'synced'};
+ let db=simulate([original]);
+ assert.equal(await db.apply(original.id,original,incoming),true);
+ assert.equal(db.saved.get(original.id).name,'RemoteBook.pdf','Unchanged row may accept the new remote revision');
+
+ db=simulate([{...original,syncRevision:'locally-edited',blob:{size:8,type:'application/pdf'},size:8}]);
+ assert.equal(await db.apply(original.id,original,incoming),false,'Stale remote result cannot overwrite newer local revision');
+ assert.equal(db.saved.get(original.id).syncRevision,'locally-edited');
+
+ db=simulate([{...original,syncRevision:'locally-edited'}]);
+ assert.equal(await db.apply(original.id,original,null),false,'Stale tombstone cannot remove newer edit');
+ assert.equal(db.saved.size,1);
+
+ db=simulate([original]);
+ assert.equal(await db.apply(original.id,original,null),true,'Matching tombstone can finalize deletion');
+ assert.equal(db.saved.size,0);
+
+ db=simulate([original]);
+ const conflictCopy={...original,id:'copy-2',syncRevision:'copy-r1'};
+ assert.equal(await db.apply(original.id,original,incoming,conflictCopy),true);
+ assert.equal(db.saved.size,2,'Copy and remote revision must be committed in one transaction');
+ assert.equal(db.transactions,1);
+ assert.equal(db.saved.get('copy-2').name,'Book.pdf');
+ assert.equal(db.saved.get(original.id).name,'RemoteBook.pdf');
+
+ db=simulate([{...original,syncRevision:'r2'}]);
+ assert.equal(await db.apply(original.id,original,incoming,conflictCopy),false);
+ assert.equal(db.saved.size,1,'Conflict copy not created for outdated local state');
+ assert.equal(db.saved.has('copy-2'),false);
+
+ db=simulate([]);
+ assert.equal(await db.apply(original.id,null,incoming),true);
+ assert.equal(db.saved.get(original.id).name,'RemoteBook.pdf');
+ db=simulate([original]);
+ assert.equal(await db.apply(original.id,null,incoming),false,'Newly-created local file cannot be overwritten by cloud sync');
+ assert.equal(db.saved.get(original.id).name,'Book.pdf');
+
+ db=simulate([{...original,syncState:'synced'}]);
+ assert.equal(await db.apply(original.id,original,null),false,'Already synced status is protected');
+ db=simulate([{...original,remoteUpdatedAt:'server-v2'}]);
+ assert.equal(await db.apply(original.id,original,null),false,'Different server baseline is protected');
+
+ assert.match(source,/if\(!await dbApplySyncIfUnchanged\(item\.id,item,null,copy\)\)/);
+ assert.match(source,/if\(!await dbApplySyncIfUnchanged\(item\.id,item,remoteItem\(remote,remoteBlob,remoteVersion\),localCopy\)\)/);
+ assert.match(source,/if\(data\.deleted\)\{if\(here&&!await dbApplySyncIfUnchanged\(id,here,null\)\)/);
+ assert.match(source,/if\(!await dbApplySyncIfUnchanged\(id,here\|\|null,remoteItem\(data,blob,remoteVersion\)\)\)/);
+ assert.match(source,/if\(!confirmed\)autoSyncRerunRequested=true/,'Existing upload guard preserved');
+ console.log('Archive sync race tests passed: guarded delete, remote replace, atomic conflict copies, new ID collision and stale revisions');
+})().catch(e=>{console.error(e);process.exitCode=1});
