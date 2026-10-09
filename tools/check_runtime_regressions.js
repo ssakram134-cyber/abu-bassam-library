@@ -649,6 +649,103 @@ async function testCardPhotoAndBrandLogoRace(){
     throw Error('delayed default logo overwrote the custom logo');
 }
 
+async function testCardPrintPreviewIdentity(){
+  const src=read('cards-studio-runtime.js');
+  const begin=src.indexOf('function previewPrint(){');
+  const end=src.indexOf('async function exportPng(){',begin);
+  if(begin<0||end<=begin)throw Error('card print/preview source missing');
+  const factory=vm.runInNewContext('()=>{'
+    +'let currentHtml="<html>CR80-ORIGINAL</html>";'
+    +'const nativeCalls=[],sheetCalls=[],history=[];'
+    +'const state={output:"cr80",activePrintHtml:"",activePrintOutput:""};'
+    +'const modal={classList:{shown:false,contains:x=>x==="show"&&modal.classList.shown}};'
+    +'const frame={srcdoc:""},$=id=>id==="csPrintModal"?modal:frame;'
+    +'const requireCard=()=>true,requireCards=()=>true,requireOutputPermission=()=>true,'
+    +'printDocument=()=>currentHtml,expandedJobs=()=>[{},{},{}],'
+    +'recordHistory=x=>history.push(x),logOperation=()=>{},'
+    +'openModal=()=>{modal.classList.shown=true},alert=()=>{},setTimeout=fn=>fn();'
+    +'const window={Android:{requestOutput:async(name,payload)=>{nativeCalls.push({name,payload});return true}},'
+    +'AbuA4CardSheetEditorV2:{'
+    +'openPrint:(html,commit)=>{sheetCalls.push({type:"print",html});commit();return true},'
+    +'openPdf:(name,html,commit)=>{sheetCalls.push({type:"pdf",html});commit();return true}}};'
+    +'const Android=window.Android;'
+    +src.slice(begin,end)
+    +';return{previewPrint,printNow,savePdf,state,modal,frame,nativeCalls,sheetCalls,history,'
+    +'setHtml:value=>{currentHtml=value}}}');
+  const page=factory();
+  page.previewPrint();
+  page.setHtml('<html>NEWER</html>');
+  page.state.output='a4-pairs';
+  await page.printNow();
+  await page.savePdf();
+  if(page.frame.srcdoc!=='<html>CR80-ORIGINAL</html>'||
+    page.nativeCalls.length!==2||
+    !page.nativeCalls.every(entry=>entry.payload.html==='<html>CR80-ORIGINAL</html>')||
+    page.sheetCalls.length)
+    throw Error('visible CR80 preview and PDF/print output diverged');
+  page.modal.classList.shown=false;
+  await page.printNow();
+  await page.savePdf();
+  if(page.sheetCalls.length!==2||
+    !page.sheetCalls.every(entry=>entry.html==='<html>NEWER</html>'))
+    throw Error('closed preview did not follow latest A4 editor output');
+}
+async function testCardBackupRestorationCancelsPhotos(){
+  const src=read('cards-studio-runtime.js');
+  const begin=src.indexOf('async function loadPhoto(file,expectedEpoch=null){');
+  const end=src.indexOf('async function loadBrandLogo(file){',begin);
+  const restore=src.indexOf('function applyBackupSnapshot(data){');
+  const restoreEnd=src.indexOf('function exportBackup(snapshot){',restore);
+  const importStart=src.indexOf('async function importBackupFile(file){');
+  const importEnd=src.indexOf('function restoreResetBackup(){',importStart);
+  if([begin,end,restore,restoreEnd,importStart,importEnd].some(n=>n<0))
+    throw Error('card backup/photo source missing');
+  let finish=null;
+  const factory=vm.runInNewContext('(deps)=>{'
+    +'let photoLoadEpoch=0,brandLogoEpoch=0;'
+    +'const state={brand:{logo:"old"},forms:{},photo:"",queue:[],textStyles:{},history:[]};'
+    +'let restoreCount=0;'
+    +'const requireCard=()=>deps.allowed(),canCard=()=>deps.allowed(),'
+    +'resizeImage=()=>new Promise(resolve=>deps.prepare(resolve)),$=()=>({value:""}),'
+    +'renderForm=()=>{},renderPreview=()=>{},alert=()=>{},clone=v=>JSON.parse(JSON.stringify(v)),'
+    +'DEFAULT_BRAND={logo:"default"},'
+    +'DEFAULT_FORMS={personal:{name:""},login:{password:""},wifi:{password:""}},'
+    +'TYPE_LABELS={personal:"person"},MAX_CARDS=25,'
+    +'cap=(x,a,b)=>Math.max(a,Math.min(b,Number(x)||0)),'
+    +'scrubModels=x=>Array.isArray(x)?x:[],window={AbuBassamTypography:null},'
+    +'STORAGE_KEY="forms",BRAND_KEY="brand",CARD_STYLE_KEY="style",HISTORY_KEY="history",'
+    +'localStorage={setItem(){}},renderAll=()=>{},confirm=()=>true;'
+    +src.slice(begin,end)
+    +src.slice(restore,restoreEnd).replace('function applyBackupSnapshot(data){',
+      'function applyBackupSnapshot(data){restoreCount++;')
+    +src.slice(importStart,importEnd)
+    +';return{state,loadPhoto,applyBackupSnapshot,importBackupFile,'
+    +'restores:()=>restoreCount,epochs:()=>[photoLoadEpoch,brandLogoEpoch]}}');
+  let allowed=true,resolveImage=null;
+  const app=factory({allowed:()=>allowed,prepare:done=>{resolveImage=done}});
+  const photoJob=app.loadPhoto({name:'before-backup'});
+  app.applyBackupSnapshot({brand:{logo:'restored'},forms:{personal:{name:'restored'}},
+    workspace:{photo:'data:image/png;base64,restored'}});
+  resolveImage('data:image/png;base64,older');
+  await photoJob;
+  if(app.state.photo!=='data:image/png;base64,restored'||
+    app.state.brand.logo!=='restored'||app.epochs()[1]<1)
+    throw Error('outstanding image decoder overwrote restored backup');
+  let finishFile=null;
+  const data={brand:{logo:'changed'},forms:{personal:{name:'changed'}},
+    workspace:{photo:''}};
+  const oldCount=app.restores();
+  const file={size:100,text:()=>new Promise(resolve=>{finishFile=resolve})};
+  const restoreJob=app.importBackupFile(file);
+  for(let i=0;i<8&&!finishFile;i++)await Promise.resolve();
+  if(!finishFile)throw Error('backup file read did not start');
+  allowed=false;
+  finishFile(JSON.stringify(data));
+  await restoreJob;
+  if(app.restores()!==oldCount||app.state.brand.logo!=='restored')
+    throw Error('revoked restore permission accepted delayed backup file');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1491,7 +1588,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
