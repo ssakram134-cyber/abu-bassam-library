@@ -1010,10 +1010,10 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:false,storagePath:newPath};
       let saved;
       try{saved=await service.upsert('vault',item.id,data,remoteVersion||null)}
-      catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
+      catch(error){await service.removeVault(newPath,true).catch(()=>{});throw error}
       const confirmed=await dbMarkSyncedIfUnchanged(item,saved?.updated_at);
       if(!confirmed)autoSyncRerunRequested=true;
-      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
+      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath,true).catch(()=>{})
     }
 
     setSyncStatus('جاري استقبال تغييرات الأجهزة...');
