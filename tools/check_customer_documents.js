@@ -84,10 +84,9 @@ forbid(permissionMigration,'jsonb_object_length(p_permissions)','unsupported jso
 need(edge,"SUPABASE_SERVICE_ROLE_KEY",'server-only file gateway');
 need(edge,"x-device-id",'edge device identity');
 need(edge,"x-device-secret",'edge device secret');
-need(edge,"DEFAULT_ALLOWED = new Set([",'explicit default permission set');
-for(const key of ['customerView','customerAdd','customerEdit','customerDelete','customerDocumentsView','customerDocumentsAdd','customerDocumentsEdit','customerDocumentsDelete','customerDocumentsPrint','customerDocumentsExport','customerPhoneView','customerSensitiveDataView','customerOriginalDocumentView'])need(edge,`'${key}'`,`aligned default permission ${key}`);
-need(edge,"if(typeof p[key]==='boolean')return p[key]===true",'explicit permission override');
-need(edge,"return DEFAULT_ALLOWED.has(key)",'closed default permission fallback');
+need(edge,"return p[key]===true;",'explicit permission required for secondary device');
+forbid(edge,'DEFAULT_ALLOWED','private documents must not allow missing permissions');
+forbid(edge,'legacyFallback(','old edit/print/export grants may not authorize sensitive documents');
 forbid(edge,'defaultValue=false','obsolete divergent default-value argument');
 forbid(edge,'return defaultValue','implicit caller-defined permission default');
 need(edge,"action==='delete-customer'",'customer delete storage cleanup');
@@ -107,4 +106,4 @@ forbid(hard,"typeof Android.security==='function'",'direct native security bridg
 forbid(hard,"__dev_secure_",'customer hardening must not read device secrets from localStorage');
 forbid(hard,".from('abu_bassam_devices')",'direct device table read in hardening runtime');
 forbid(workflow,'سلة محذوفات','recycle bin');
-console.log('customer documents checks passed: aligned branch permission defaults, SecureStore-only device secrets, deletion, atomic revisions, server redaction and branch isolation');
+console.log('customer documents checks passed: explicit non-owner permissions without implicit grants, SecureStore-only device secrets, deletion, atomic revisions, server redaction and branch isolation');
