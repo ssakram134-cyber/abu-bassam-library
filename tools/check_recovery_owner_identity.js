@@ -31,9 +31,9 @@ async function passwordScenario(email){
  let mutations=0,signouts=0,errors=[];
  const controls={abuNewPassword:{value:'ExampleStrong123@'},abuNewPasswordConfirm:{value:'ExampleStrong123@'},abuSaveNewPassword:{disabled:false},abuLoginPass:{focus(){}}};
  const obj={auth:{getUser:async()=>({data:{user:{id:'user-id',email}},error:null}),updateUser:async()=>{mutations++;return{data:{user:{email}},error:null}},signOut:async()=>{signouts++;return {error:null}}}};
- const mutate=new Function('$','window','client','verifyOwnerSession','resetStatus','closeResetModal','setLoginMessage',
+ const mutate=new Function('$','window','client','verifyOwnerSession','accountEmail','resetStatus','closeResetModal','setLoginMessage',
   'let passwordBusy=false;'+changeSrc+'\nreturn saveNewPassword')(
-    id=>controls[id]||null,{AbuBassamStrongPasswordWeakness:()=>''},()=>obj,verify,
+    id=>controls[id]||null,{AbuBassamStrongPasswordWeakness:()=>''},()=>obj,verify,()=>ownerEmail,
     m=>errors.push(String(m)),async()=>{},()=>{});
  await mutate();return{mutations,signouts,errors}
 }
