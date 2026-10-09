@@ -1135,7 +1135,9 @@ async function testPaperAiPhotoSessionRaces(){
     +'count:()=>responses.length,'
     +'state:()=>({aiProResult,images:uploadedImages,draws,messages})}}');
   const app=factory();
-  const firstRun=app.runAiPro(),secondRun=app.runAiPro();
+  const firstRun=app.runAiPro();
+  for(let i=0;i<12&&app.count()<1;i++)await Promise.resolve();
+  const secondRun=app.runAiPro();
   for(let i=0;i<12&&app.count()<2;i++)await Promise.resolve();
   if(app.count()!==2)throw Error('parallel AI calls did not start');
   app.response(1,'data:image/png;base64,new');
