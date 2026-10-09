@@ -5,6 +5,7 @@ const sql=read('supabase/migrations/202610090001_vault_atomic_compare_and_swap.s
 const vault=read('web/document-vault-runtime.js');
 const adapter=read('web/branch-vault-runtime.js');
 const cloudSource=read('web/secure-sync-runtime.js');
+const edgeSource=read('supabase/functions/branch-vault/index.ts');
 for(const src of [vault,adapter,cloudSource])new vm.Script(src);
 function slice(s,a,b){
  const start=s.indexOf(a),end=s.indexOf(b,start+a.length);
@@ -24,6 +25,10 @@ assert.match(sql,/grant execute on function public\.abu_bassam_vault_upsert_cas\
 assert.match(sql,/_abu_bassam_vault_authorized\(p_device_id,p_device_secret,'vaultSync'\)/);
 for(const perm of ['vaultDelete','vaultEdit','vaultAdd'])assert.ok(sql.includes("'"+perm+"'"));
 assert.doesNotMatch(sql,/on conflict[^;]*do update/i,'No last-writer-wins SQL fallback');
+assert.match(edgeSource,/discardUpload=action==='discard-upload'&&req.method==='DELETE'/);
+assert.match(edgeSource,/discardUpload\?await context\(req,'vaultSync'\):await context\(req,'vaultDelete'\)/);
+assert.match(edgeSource,/if\(discardUpload&&path===currentPath\)return json\(\{error:'VAULT_ACTIVE_REVISION'\},409\)/);
+assert.match(adapter,/edge\(orphanOnly\?'discard-upload':'delete'/);
 const adapterFunc=slice(adapter,'async function vaultUpsert(','async function edge(');
 const cloudFunc=slice(cloudSource,'  async function upsert(','  async function list(');
 assert.match(adapterFunc,/abu_bassam_vault_upsert_cas/);
@@ -63,7 +68,7 @@ const cloudUpsert=new Function('vaultAdapter','TABLE','client','uuid','cloud','g
   async list(){return []},
   async uploadVault(){return 'staged/unique-revision'},
   async upsert(kind,id,data,expected){serverWrites.push({kind,id,data,expected});throw new Error('VAULT_VERSION_CONFLICT')},
-  async removeVault(path){removed.push(path)}
+  async removeVault(path,orphanOnly){removed.push({path,orphanOnly})}
  };
  const deps={
   state:{syncing:false,items:[local]},requireVault:()=>true,automaticDue:()=>true,
@@ -87,7 +92,7 @@ const cloudUpsert=new Function('vaultAdapter','TABLE','client','uuid','cloud','g
  assert.equal(deps.state.syncing,false,'Sync lock must release');
  assert.equal(serverWrites.length,1);
  assert.equal(serverWrites[0].expected,null);
- assert.deepEqual(removed,['staged/unique-revision']);
+ assert.deepEqual(removed,[{path:'staged/unique-revision',orphanOnly:true}]);
  assert.ok(schedules.includes(100),'A retry must be scheduled after version conflicts');
  assert.ok(statuses.some(x=>x.includes('التغييرات المحلية محفوظة')));
 
