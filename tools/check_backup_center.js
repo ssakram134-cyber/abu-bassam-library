@@ -30,6 +30,8 @@ if(!htmlEscaper)throw new Error('backup center check failed: HTML escaper missin
 const escapeHtml=vm.runInNewContext(htmlEscaper+'; escapeHtml');
 if(escapeHtml(`<img src=x onerror="alert('x')">&`)!=='&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;')
   throw new Error('backup center check failed: cloud metadata HTML escaping');
+if((runtime.match(/stateRemove\(LASTFP\);stateRemove\(LAST\);/g)||[]).length!==2)
+  throw new Error('backup center check failed: cloud restore and deletion must invalidate cached checkpoint');
 for(const marker of [
   "escapeHtml(b.branch_name||'هذا الفرع')",
   'data-restore="${escapeHtml(b.backup_id)}"',
