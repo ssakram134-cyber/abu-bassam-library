@@ -6,7 +6,7 @@ const DB_NAME='AbuBassamDocumentVaultV4',STORE='items',MAX_SOURCE_PIXELS=1200000
 let st=null,url='';
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
-function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('تعذر فتح الأرشيف'))})}
+function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,2);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains('items'))db.createObjectStore('items',{keyPath:'id'});if(!db.objectStoreNames.contains('trash')){const trash=db.createObjectStore('trash',{keyPath:'id'});trash.createIndex('expiresAt','expiresAt')}};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('تعذر فتح الأرشيف'))})}
 async function getItem(id){const db=await openDb();return new Promise((resolve,reject)=>{const r=db.transaction(STORE,'readonly').objectStore(STORE).get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
 async function putItem(item){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 function addCss(){if($('abuVaultAdvancedCss'))return;const s=document.createElement('style');s.id='abuVaultAdvancedCss';s.textContent=`
