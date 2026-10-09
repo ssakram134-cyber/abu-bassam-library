@@ -11,6 +11,8 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const owner=()=>window.AbuBassamSecurity?.role?.()==='owner'&&window.AbuBassamSecurity?.isOnlineUnlocked?.()===true;
 const client=()=>window.AbuBassamCloud?.client||null;
 const connected=()=>!!window.AbuBassamCloud?.isConnected?.();
+let ownerAuthEpoch=0;
+function invalidateOwnerSession(){ownerAuthEpoch++}
 function time(v){let n=Date.parse(v||0);return Number.isFinite(n)?n:0}
 function displayName(row){let name=String(row?.device_name||'').trim(),model=String(row?.model||'').trim();if(!name||name==='جهاز المكتبة'||/^android$/i.test(name))return model||name||'جهاز';return name}
 function dedupe(rows){
@@ -30,12 +32,12 @@ function dedupe(rows){
 }
 function nativeRequest(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('SECURE_STORAGE_REQUIRED'));return api.request(action,payload)}
 async function secret(){return String(await nativeRequest('secureGet',{key:SECRET_KEY})||'')}
-function ownerScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||''),id=CURRENT_ID();return owner()&&connected()&&uid&&id?uid+':'+id:''}
+function ownerScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||''),id=CURRENT_ID();return owner()&&connected()&&uid&&id?uid+':'+id+':'+ownerAuthEpoch:''}
 function requireOwnerScope(scope){if(!scope||ownerScope()!==scope)throw new Error('OWNER_SESSION_CHANGED')}
 async function ownerArgs(){const scope=ownerScope();requireOwnerScope(scope);const p_actor_device_id=CURRENT_ID(),p_actor_secret=await secret();requireOwnerScope(scope);if(!p_actor_device_id||!p_actor_secret)throw new Error('OWNER_REQUIRED');return{p_actor_device_id,p_actor_secret,scope}}
 async function rows(){const scope=ownerScope();requireOwnerScope(scope);const {scope:_scope,...args}=await ownerArgs();const r=await client().rpc('abu_bassam_owner_devices',args);requireOwnerScope(scope);if(r.error)throw r.error;return dedupe(r.data||[])}
 async function count(){const scope=ownerScope();requireOwnerScope(scope);const {scope:_scope,...args}=await ownerArgs();const r=await client().rpc('abu_bassam_owner_device_count',args);requireOwnerScope(scope);if(r.error)throw r.error;return Math.max(0,Number(r.data)||0)}
-async function readLimit(){const cached=Math.max(1,Math.min(50,Number(localStorage.getItem(LIMIT_KEY)||5)||5));if(!client()||!connected())return cached;try{const r=await client().rpc('abu_bassam_get_device_limit');if(r.error)throw r.error;const n=Math.max(1,Math.min(50,Number(r.data)||5));localStorage.setItem(LIMIT_KEY,String(n));return n}catch(_){return cached}}
+async function readLimit(){const cached=Math.max(1,Math.min(50,Number(localStorage.getItem(LIMIT_KEY)||5)||5)),scope=ownerScope();if(!scope||!client())return cached;try{const r=await client().rpc('abu_bassam_get_device_limit');if(scope!==ownerScope())return cached;if(r.error)throw r.error;const n=Math.max(1,Math.min(50,Number(r.data)||5));localStorage.setItem(LIMIT_KEY,String(n));return n}catch(_){return cached}}
 function rowHtml(row){
   const current=row.device_id===CURRENT_ID(),isOwner=row.role==='owner';
   const when=row.last_seen||row.first_seen,name=displayName(row);
@@ -75,7 +77,7 @@ function onDeviceActionClick(event){
   else if(action==='permissions')void api?.permissionsDevice?.(id);
   else if(action==='remove')void api?.removeDevice?.(id)
 }
-function init(){document.addEventListener('click',onDeviceActionClick);if(!patch())throw new Error('AbuBassamSecurity غير جاهز لإدارة الأجهزة');document.addEventListener('abu-bassam-auth-changed',()=>setTimeout(()=>{render();refreshLimitUi();syncSecurityCardLabel()},100));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&owner())setTimeout(()=>{refreshLimitUi();syncSecurityCardLabel()},100)})}
+function init(){document.addEventListener('click',onDeviceActionClick);document.addEventListener('abu-bassam-security-state',invalidateOwnerSession);if(!patch())throw new Error('AbuBassamSecurity غير جاهز لإدارة الأجهزة');document.addEventListener('abu-bassam-auth-changed',()=>{invalidateOwnerSession();setTimeout(()=>{render();refreshLimitUi();syncSecurityCardLabel()},100)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&owner())setTimeout(()=>{refreshLimitUi();syncSecurityCardLabel()},100)})}
 window.AbuBassamDeviceRegistry={rows,count,readLimit,render,refreshLimitUi};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
