@@ -590,7 +590,7 @@ async function testCardPhotoAndBrandLogoRace(){
   const make=vm.runInNewContext('(deps)=>{'
     +'let photoLoadEpoch=0,brandLogoEpoch=0;'
     +'const {state,requireCard,canCard,resizeImage,renderForm,renderPreview,alert,$,'
-    +'fetch,FileReader,File}=deps;'
+    +'fetch,FileReader,File,savePhotoWorkingDraft}=deps;'
     +source.slice(photoStart,photoEnd)
     +source.slice(nativeStart,nativeEnd)
     +source.slice(removeStart,removeEnd)
@@ -605,6 +605,7 @@ async function testCardPhotoAndBrandLogoRace(){
       if(value==='abu_bassam_icon.webp')return{ok:true,blob:async()=>({})};
       const d=defer();nativeReads.push(d);return d.promise
     },
+    savePhotoWorkingDraft:()=>{},
     FileReader:class{readAsDataURL(){reader=this}},
     File:class{constructor(parts){this.parts=parts}}});
   const first=page.loadPhoto({id:'first'});
@@ -704,7 +705,7 @@ async function testCardBackupRestorationCancelsPhotos(){
   const factory=vm.runInNewContext('(deps)=>{'
     +'let photoLoadEpoch=0,brandLogoEpoch=0;'
     +'const state={brand:{logo:"old"},forms:{},photo:"",queue:[],textStyles:{},history:[]};'
-    +'let restoreCount=0;'
+    +'let restoreCount=0;const savePhotoWorkingDraft=()=>{};'
     +'const requireCard=()=>deps.allowed(),canCard=()=>deps.allowed(),'
     +'resizeImage=()=>new Promise(resolve=>deps.prepare(resolve)),$=()=>({value:""}),'
     +'renderForm=()=>{},renderPreview=()=>{},alert=()=>{},clone=v=>JSON.parse(JSON.stringify(v)),'
@@ -752,7 +753,7 @@ function testCardBackupQuotaRollback(){
   const b=source.indexOf('function exportBackup(snapshot){',a);
   if(a<0||b<=a)throw Error('backup restoration implementation missing');
   const factory=vm.runInNewContext('(fail)=>{'
-    +'let photoLoadEpoch=0,brandLogoEpoch=0,renders=0;'
+    +'let photoLoadEpoch=0,brandLogoEpoch=0,renders=0;const savePhotoWorkingDraft=()=>{};'
     +'const state={brand:{logo:"orig"},forms:{personal:{name:"unchanged"}},'
     +'photo:"data:image/png;base64,original",photoTransform:{zoom:1},history:[],'
     +'textStyles:{},queue:[],type:"personal",width:85.6,output:"cr80"};'
