@@ -310,7 +310,7 @@ function setView(view){state.view=['grid','list','large','details'].includes(vie
 function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));state.filter='folder:'+name;render();alert('تم إنشاء الحافظة «'+name+'» ✓')}
 function readFolders(){try{return [...new Set([...SYSTEM_FOLDERS,...JSON.parse(localStorage.getItem('abuBassamVaultFoldersV5')||'[]')])]}catch(e){return SYSTEM_FOLDERS.slice()}}
 function numberedName(name,position){
-  const cleaned=niceName(name).replace(/^\\d{3,}\\s*[-_]\\s*/,'');
+  const cleaned=niceName(name).replace(/^\d{3,}\s*[-_]\s*/,'');
   return String(position).padStart(3,'0')+'_'+cleaned
 }
 function planFolderNumbering(rows,folder,revisions){
@@ -425,7 +425,7 @@ async function organizeItem(id,kind,destination,positionOverride=null){
   if(position===null){
     const answer=prompt('ترتيب الملف داخل حافظة «'+(folder||'العامة')+'»: اكتب رقم الموضع من 1 إلى '+maximum+'.',String(maximum));
     if(answer===null)return false;
-    if(!/^\\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
+    if(!/^\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
     position=Number(answer.trim())
   }
   if(!Number.isSafeInteger(position)||position<1||position>maximum){alert('رقم الترتيب خارج حدود الحافظة.');return false}
