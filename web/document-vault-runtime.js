@@ -234,29 +234,61 @@ async function dbMarkSyncedIfUnchanged(uploaded,remoteUpdatedAt){
 async function dbApplySyncIfUnchanged(id,expected,replacement,localCopy=null){
   const db=await openDb();
   return new Promise((resolve,reject)=>{
-    let applied=false,tx;
+    let applied=false,tx,reason=null;
     try{
       tx=db.transaction(STORE,'readwrite');
       const store=tx.objectStore(STORE),request=store.get(id);
+      const fail=error=>{reason=error;try{tx.abort()}catch(_){}};
       request.onsuccess=()=>{
-        const current=request.result;
-        const unchanged=expected===null?!current:!!current&&
-          current.syncState===expected.syncState&&
-          String(current.remoteUpdatedAt||'')===String(expected.remoteUpdatedAt||'')&&
-          syncSnapshot(current)===syncSnapshot(expected);
-        if(!unchanged)return;
-        if(localCopy)store.add(localCopy);
-        if(replacement)store.put(replacement);
-        else store.delete(id);
-        applied=true
+        try{
+          const current=request.result;
+          const unchanged=expected===null?!current:!!current&&
+            current.syncState===expected.syncState&&
+            String(current.remoteUpdatedAt||'')===String(expected.remoteUpdatedAt||'')&&
+            syncSnapshot(current)===syncSnapshot(expected);
+          if(!unchanged)return;
+          // All checks and writes must share this transaction with other local uploads.
+          const activeBefore=!!current&&!current.deleted;
+          const activeAfter=!!replacement&&!replacement.deleted;
+          const activeCopy=!!localCopy&&!localCopy.deleted;
+          const growth=Number(activeAfter)+Number(activeCopy)-Number(activeBefore);
+          const commit=()=>{
+            try{
+              if(localCopy)store.add(localCopy);
+              if(replacement)store.put(replacement);
+              else store.delete(id);
+              applied=true
+            }catch(error){fail(error)}
+          };
+          if(growth<=0){commit();return}
+          // A cursor counts live records without materializing up to 1000 large Blobs.
+          // It also sees the transaction's current snapshot, so two concurrent
+          // downloads/conflict copies cannot each consume the last free slot.
+          let count=0;
+          const cursor=store.openCursor();
+          cursor.onsuccess=()=>{
+            try{
+              const entry=cursor.result;
+              if(entry){
+                if(!entry.value.deleted)count++;
+                entry.continue();
+                return
+              }
+              if(count+growth>MAX_ITEMS)throw new Error('VAULT_LIMIT_1000');
+              commit()
+            }catch(error){fail(error)}
+          };
+          cursor.onerror=()=>fail(cursor.error||new Error('VAULT_CAPACITY_READ_FAILED'))
+        }catch(error){fail(error)}
       };
-      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      request.onerror=()=>fail(request.error||new Error('VAULT_SYNC_READ_FAILED'));
       tx.oncomplete=()=>resolve(applied);
-      tx.onerror=()=>reject(tx.error||new Error('تعذرت معاملة مزامنة الملف'));
-      tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة مزامنة الملف'))
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذرت معاملة مزامنة الملف'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغيت معاملة مزامنة الملف'))
     }catch(error){try{tx?.abort()}catch(_){}reject(error)}
   })
 }
+
 function addCss(){
   let style=document.createElement('style');style.id='vaultStyle';style.textContent=`
 #vaultCenter{display:none;padding:12px;background:var(--bg,#f5efe8);min-height:82vh}.vault-show{display:block!important}.v-shell{max-width:920px;margin:auto;color:var(--text,#2b211d);font-family:Tahoma,Arial,sans-serif}.v-hero{border-radius:21px;padding:15px;color:#fff;background:radial-gradient(circle at 8% 12%,#55d6b655,transparent 28%),linear-gradient(135deg,#102d47,#075f65 58%,#a77932);box-shadow:0 12px 30px #102d4730}.v-hero h2{margin:0;font-size:18px}.v-hero p{font-size:9px;opacity:.88;margin:5px 0 10px}.v-search{display:flex;align-items:center;gap:7px;background:#fff;border-radius:13px;padding:3px 9px;color:#18303b}.v-search input{width:100%;border:0;outline:0;background:transparent;padding:10px 4px;font:700 12px Tahoma;color:#222}.v-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}.v-actions button{border:1px solid #ffffff3b;border-radius:10px;background:#ffffff18;color:#fff;min-height:42px;font-size:8px;font-weight:900;padding:4px}.v-syncline{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:8px}.v-auto{display:flex;align-items:center;gap:5px}
