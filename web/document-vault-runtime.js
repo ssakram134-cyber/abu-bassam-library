@@ -200,7 +200,119 @@ function setSort(sort){state.sort=sort;localStorage.setItem(SORT_KEY,sort);rende
 function setView(view){state.view=['grid','list','large','details'].includes(view)?view:'grid';localStorage.setItem(VIEW_KEY,state.view);render()}
 function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));alert('تم إنشاء المجلد «'+name+'» ✓')}
 function readFolders(){try{return [...new Set([...SYSTEM_FOLDERS,...JSON.parse(localStorage.getItem('abuBassamVaultFoldersV5')||'[]')])]}catch(e){return SYSTEM_FOLDERS.slice()}}
-async function moveItem(id){if(!requireVault('vaultMove'))return;let item=findItem(id);if(!item)return;let folders=readFolders(),answer=prompt('اكتب اسم المجلد الذي تريد نقل الملف إليه:\n'+(folders.length?'المجلدات: '+folders.join('، '):'يمكنك كتابة اسم مجلد جديد.'),item.folder||'');if(answer===null)return;answer=niceName(answer);if(answer&&!folders.includes(answer)){folders.push(answer);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}item.folder=answer;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh();logOperation('move','نقل ملف إلى مجلد',answer,item.name)}
+function folderEntries(rows,folder){
+  return rows.filter(item=>!item.deleted&&String(item.folder||'')===String(folder||'')).sort((a,b)=>
+    (Number.isInteger(a.manualOrder)?a.manualOrder:999999)-(Number.isInteger(b.manualOrder)?b.manualOrder:999999)||
+    (Date.parse(b.createdAt||b.updatedAt)||0)-(Date.parse(a.createdAt||a.updatedAt)||0)||
+    String(a.id).localeCompare(String(b.id)))
+}
+function planFolderTransfer(rows,id,destination,kind,position,expectedRevision){
+  if(!['copy','move','reorder'].includes(kind))throw new Error('VAULT_ACTION_INVALID');
+  const source=rows.find(item=>item.id===id&&!item.deleted);
+  if(!source||String(source.syncRevision||'')!==String(expectedRevision||''))throw new Error('VAULT_STALE_ITEM');
+  const folder=String(destination||''),oldFolder=String(source.folder||'');
+  if(kind==='reorder'&&folder!==oldFolder)throw new Error('VAULT_FOLDER_MISMATCH');
+  if(kind==='copy'&&rows.filter(item=>!item.deleted).length>=MAX_ITEMS)throw new Error('VAULT_LIMIT_1000');
+  const from=folderEntries(rows,oldFolder),to=folder===oldFolder?from:folderEntries(rows,folder);
+  let entry;
+  if(kind==='copy'){
+    entry={...source,id:uuid(),copyOf:source.id,folder,createdAt:new Date().toISOString(),lastOpenedAt:'',remoteUpdatedAt:'',syncRevision:uuid(),syncState:'pending'};
+  }else{
+    const index=from.findIndex(item=>item.id===id);
+    if(index<0)throw new Error('VAULT_ITEM_NOT_FOUND');
+    entry=from.splice(index,1)[0];
+  }
+  if(!Number.isSafeInteger(position)||position<1||position>to.length+1)throw new Error('VAULT_POSITION_INVALID');
+  to.splice(position-1,0,entry);
+  const changed=new Map(),now=new Date().toISOString();
+  for(const [items,targetFolder] of (from===to?[[to,folder]]:[[from,oldFolder],[to,folder]])){
+    items.forEach((item,index)=>{
+      const order=index+1,requires=item.id===entry.id||item.manualOrder!==order||String(item.folder||'')!==targetFolder;
+      if(requires)changed.set(item.id,{...item,folder:targetFolder,manualOrder:order,syncRevision:uuid(),syncState:'pending',updatedAt:now})
+    })
+  }
+  return [...changed.values()]
+}
+async function commitFolderTransfer(id,destination,kind,position,expectedRevision){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let tx,reason=null;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.getAll();
+      request.onsuccess=()=>{
+        try{
+          const revisions=planFolderTransfer(request.result||[],id,destination,kind,position,expectedRevision);
+          for(const row of revisions)store.put(row)
+        }catch(error){reason=error;try{tx.abort()}catch(_){reject(error)}}
+      };
+      request.onerror=()=>{reason=request.error;try{tx.abort()}catch(_){reject(reason)}};
+      tx.oncomplete=()=>resolve(true);
+      tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_TRANSFER_FAILED'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_TRANSFER_ABORTED'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
+  })
+}
+function folderOption(current){
+  const labels=[...new Set([...readFolders(),...state.items.map(item=>String(item.folder||'')).filter(Boolean)])];
+  const answer=prompt('إلى أي حافظة؟ اكتب اسم الحافظة (يمكن إنشاء اسم جديد).\\nالحافظات: '+labels.join('، ')+'\\nاتركه فارغًا للملفات العامة.',String(current||''));
+  if(answer===null)return null;
+  return answer.trim()?niceName(answer.trim()).slice(0,120):''
+}
+async function organizeItem(id,kind,destination){
+  const permission=kind==='copy'?'vaultAdd':'vaultMove';
+  if(!requireVault(permission))return false;
+  const item=findItem(id);
+  if(!item||item.deleted)return false;
+  const folder=destination===undefined?(kind==='reorder'?String(item.folder||''):folderOption(item.folder)):String(destination||'');
+  if(folder===null)return false;
+  const total=folderEntries(state.items,folder).length;
+  const maximum=kind==='reorder'?total:kind==='copy'?total+1:total+(folder===String(item.folder||'')?0:1);
+  const answer=prompt('ترتيب الملف داخل حافظة «'+(folder||'العامة')+'»: اكتب رقم الموضع من 1 إلى '+maximum+'.',String(maximum));
+  if(answer===null)return false;
+  if(!/^\\d+$/.test(answer.trim())){alert('أدخل رقم ترتيب صحيحًا.');return false}
+  const position=Number(answer.trim());
+  if(!Number.isSafeInteger(position)||position<1||position>maximum){alert('رقم الترتيب خارج حدود الحافظة.');return false}
+  try{
+    await commitFolderTransfer(id,folder,kind,position,item.syncRevision);
+    if(folder){const names=readFolders();if(!names.includes(folder))localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify([...names,folder]))}
+    state.filter=folder?'folder:'+folder:'all';
+    state.sort='manual';
+    localStorage.setItem(SORT_KEY,'manual');
+    if($('vSort'))$('vSort').value='manual';
+    await refresh();
+    logOperation(kind==='copy'?'copy':'move',kind==='copy'?'نسخ ملف بين الحافظات':kind==='reorder'?'إعادة ترتيب ملف داخل الحافظة':'نقل ملف بين الحافظات',item.name+' ← '+(folder||'العامة')+' #'+position);
+    if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
+    return true
+  }catch(error){alert('تعذرت العملية ولم تُطبّق جزئيًا: '+String(error?.message||error));return false}
+}
+async function moveItem(id){return organizeItem(id,'move')}
+async function reorderItem(id){return organizeItem(id,'reorder')}
+function copyItem(id){
+  if(!requireVault('vaultView')||!requireVault('vaultAdd'))return;
+  const item=findItem(id);if(!item||item.deleted)return;
+  state.clipboard={id,revision:String(item.syncRevision||''),scope:syncScope(),mode:'copy',name:item.name};
+  render()
+}
+function cutItem(id){
+  if(!requireVault('vaultView')||!requireVault('vaultMove'))return;
+  const item=findItem(id);if(!item||item.deleted)return;
+  state.clipboard={id,revision:String(item.syncRevision||''),scope:syncScope(),mode:'cut',name:item.name};
+  render()
+}
+async function pasteToFolder(){
+  const clip=state.clipboard;
+  if(!clip){alert('اختر «نسخ» أو «قص» من الملف أولًا.');return false}
+  if(clip.scope!==syncScope()){state.clipboard=null;alert('لا يمكن اللصق بعد تبديل حساب المكتبة أو الجهاز.');return false}
+  const item=findItem(clip.id);
+  if(!item||item.deleted||String(item.syncRevision||'')!==clip.revision){state.clipboard=null;alert('تغيّر الملف بعد نسخه أو قصه. أعد تحديده.');return false}
+  const destination=state.filter.startsWith('folder:')?state.filter.slice(7):folderOption(item.folder);
+  if(destination===null)return false;
+  const pasted=await organizeItem(item.id,clip.mode==='cut'?'move':'copy',destination);
+  if(pasted&&clip.mode==='cut')state.clipboard=null;
+  if(pasted)render();
+  return pasted
+}
 async function toggleFavorite(id){if(!requireVault('vaultFavorite'))return;let item=findItem(id);if(!item)return;item.favorite=!item.favorite;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh()}
 function pickImages(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$('vImageInput').value='';$('vImageInput').click()}
 function pickFiles(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$('vFileInput').value='';$('vFileInput').click()}
@@ -495,6 +607,6 @@ async function stats(){let items=state.items.length?state.items:await dbAll(),ac
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='ocr')return onOcrPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
-window.DocumentVault={setFilter,setSort,setView,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
+window.DocumentVault={setFilter,setSort,setView,copyItem,cutItem,pasteToFolder,moveItem,reorderItem,saveEditedBlob,editActive,editTextItem,saveTextEdit,pickRevisedFile,createFolder,moveItem,toggleFavorite,pickImages,pickFiles,pickCollection,pickBackup,openItem,editItem,renameItem,deleteItem,saveItem,shareItem,printItem,saveGalleryItem,savePdfItem,saveActive,shareActive,saveGalleryActive,savePdfActive,printActive,closeModal,editorChanged,resetEditor,clarify,saveEditor,saveEditorGallery,saveEditorPdf,printEditor,openOcr,ocrCamera,ocrGallery,ocrFilePicker,clearOcr,copyOcr,selectOcr,shareOcr,saveOcrText,saveOcrPdf,saveOcrWithImage,reOcr,printOcr,useOcrLogin,backup,encryptedBackup,syncNow,setAutoSync,onShow,stats};
 window.addEventListener('DOMContentLoaded',build);
 })();
