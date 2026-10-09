@@ -936,6 +936,118 @@ function testCardDuplexPagePairing(){
     throw Error('multi-sheet duplex omitted a front/back page pair');
 }
 
+async function testEncryptedPaperPhotoCrashRecovery(){
+  const script=read('paper-photo-draft-runtime.js');
+  const records=new Map();
+  const db={objectStoreNames:{contains:()=>true},close(){},
+    transaction(){
+      const tx={};
+      tx.abort=()=>tx.onabort?.();
+      tx.objectStore=()=>({
+        get:id=>{
+          const req={};Promise.resolve().then(()=>{
+            req.result=records.get(id)||null;req.onsuccess?.()
+          });return req
+        },
+        put:row=>{records.set(row.scope,row);Promise.resolve().then(()=>tx.oncomplete?.())},
+        delete:id=>{records.delete(id);Promise.resolve().then(()=>tx.oncomplete?.())}
+      });
+      return tx
+    }
+  };
+  const indexedDB={open:()=>{
+    const req={};Promise.resolve().then(()=>{req.result=db;req.onsuccess?.()});
+    return req
+  }};
+  const Encoder=class{encode(text){return Uint8Array.from(
+    [...String(text)].map(char=>char.charCodeAt(0)&255))}};
+  const Decoder=class{decode(value){return [...new Uint8Array(value)]
+    .map(v=>String.fromCharCode(v)).join('')}};
+  // Test double exercises boundaries, not cryptographic security.
+  const crypto={getRandomValues:buffer=>{buffer.fill(7);return buffer},subtle:{
+    digest:async(_algorithm,bytes)=>Uint8Array.from(new Uint8Array(bytes).map(v=>v^12)).buffer,
+    importKey:async(_format,bytes)=>new Uint8Array(bytes),
+    encrypt:async(_options,key,bytes)=>Uint8Array.from(
+      new Uint8Array(bytes).map(v=>v^key[0]^7)).buffer,
+    decrypt:async(_options,key,bytes)=>Uint8Array.from(
+      new Uint8Array(bytes).map(v=>v^key[0]^7)).buffer
+  }};
+  function build(options={}){
+    let user=options.user||'owner-A',online=!options.offline,
+      trusted=options.trusted!==false,role=options.role||'owner';
+    const events={},alerts=[];
+    const workspace={items:[],snapshot(){return this.items.map(
+      item=>({src:item.src,transform:item.transform}))},
+      apply:items=>{this.items=items},clear(){this.items=[]}};
+    const window={AbuBassamPaperWorkspace:workspace,
+      AbuBassamSecurity:{device:()=>trusted?{device_id:'phone-1',userId:user}:null,
+        role:()=>trusted?role:'',isOfflineSession:()=>!online,
+        can:()=>true},
+      AbuBassamCloud:{session:()=>({user:{id:user}})},
+      AbuBassamNativeSecurity:{available:()=>options.native!==false,
+        request:async()=> 'device-secret'},
+      indexedDB,alert:text=>alerts.push(text)};
+    const document={readyState:'complete',
+      addEventListener:(name,handler)=>{events[name]=handler}};
+    const FakeImage=class{set src(value){
+      this._src=value;Promise.resolve().then(()=>this.onload?.())
+    }get src(){return this._src}};
+    let nextTimer=0;
+    const pendingTimers=new Map();
+    const context={window,document,indexedDB,crypto,
+      TextEncoder:Encoder,TextDecoder:Decoder,Image:FakeImage,
+      console:{warn(){}},
+      setTimeout:callback=>{
+        const id=++nextTimer;pendingTimers.set(id,callback);
+        Promise.resolve().then(()=>{
+          if(pendingTimers.has(id)){pendingTimers.delete(id);callback()}
+        });return id
+      },
+      clearTimeout:id=>pendingTimers.delete(id)};
+    vm.runInNewContext(script,context);
+    const api=window.AbuBassamPaperDraft;
+    if(!api)throw Error('paper photo draft API missing');
+    return {api,workspace,alerts,setUser:id=>{user=id},
+      setTrusted:flag=>{trusted=flag},
+      event:name=>events[name]?.(),scope:()=>api.scope()}
+  }
+  const settle=async()=>{for(let i=0;i<140;i++)await Promise.resolve()};
+  let page=build();await settle();
+  page.workspace.items=[{src:'data:image/png;base64,QUJD',
+    transform:{zoom:2,x:12,y:-4,rot:15}}];
+  page.api.changed();await settle();
+  const savedScope=page.scope(),record=records.get(savedScope);
+  if(!record?.cipher||JSON.stringify(record).includes('QUJD'))
+    throw Error('paper photos saved in plaintext or were not saved');
+  page=build();await settle();
+  if(page.workspace.items.length!==1||
+    page.workspace.items[0].transform.zoom!==2||
+    page.workspace.items[0].transform.x!==12)
+    throw Error('paper photos or crop lost across WebView restart');
+  page.setUser('owner-B');
+  page.event('abu-bassam-auth-changed');await settle();
+  if(page.workspace.items.length)
+    throw Error('account B can see account A customer photos');
+  const offline=build({offline:true});await settle();
+  if(offline.workspace.items.length!==1)
+    throw Error('verified offline owner cannot restore own pictures');
+  const untrusted=build({offline:true,trusted:false});await settle();
+  if(untrusted.workspace.items.length)
+    throw Error('unverified offline device received customer pictures');
+  offline.workspace.items=[];
+  offline.api.changed();await settle();
+  if(records.has(savedScope))
+    throw Error('cleared paper layout resurrected from draft database');
+  page=build();await settle();
+  if(page.workspace.items.length)
+    throw Error('deleted paper layout returned after restart');
+  const noNative=build({native:false});await settle();
+  noNative.workspace.items=[{src:'data:image/png;base64,QUJD'}];
+  noNative.api.changed();await settle();
+  if(records.has(noNative.scope()))
+    throw Error('paper draft stored without Native SecureStore encryption key');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1778,7 +1890,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([testEncryptedPaperPhotoCrashRecovery(),Promise.resolve().then(testCardDuplexPagePairing),testEncryptedCardPhotoDraft(),Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
