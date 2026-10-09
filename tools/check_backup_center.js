@@ -8,7 +8,7 @@ for(const m of ['__ABU_BACKUP_CENTER_V1__','CHUNK=5*1024*1024','MAX_ZIP=120*1024
 forbid(runtime,'__dev_secure_','device secret must never use web storage');
 forbid(runtime,'window.AbuBassamNativeSecurityResult','Backup Center must not install another native callback');
 // Regression: unscoped legacy backup checkpoints must never suppress a new account's first backup.
-const stateReader=runtime.match(/^function stateGet\\(key\\)\\{.*\\}$/m)?.[0];
+const stateReader=runtime.match(/^function stateGet\(key\)\{.*\}$/m)?.[0];
 if(!stateReader)throw new Error('backup center check failed: state reader missing');
 const memory=new Map([
   ['abuBassamBackupLastFingerprintV1','legacy-same-fingerprint'],
@@ -25,7 +25,7 @@ if(readState('abuBassamBackupLastFingerprintV1')!==null||readState('abuBassamBac
 if(readState('abuBassamBackupAutoV1')!=='0')
   throw new Error('backup center check failed: legacy user preference not preserved');
 // Regression: cloud metadata must be text-escaped, including quoted HTML attributes.
-const htmlEscaper=runtime.match(/^function escapeHtml\\(value\\)\\{.*\\}$/m)?.[0];
+const htmlEscaper=runtime.match(/^function escapeHtml\(value\)\{.*\}$/m)?.[0];
 if(!htmlEscaper)throw new Error('backup center check failed: HTML escaper missing');
 const escapeHtml=vm.runInNewContext(htmlEscaper+'; escapeHtml');
 if(escapeHtml(`<img src=x onerror="alert('x')">&`)!=='&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;')
