@@ -1046,6 +1046,12 @@ async function testEncryptedPaperPhotoCrashRecovery(){
   noNative.api.changed();await settle();
   if(records.has(noNative.scope()))
     throw Error('paper draft stored without Native SecureStore encryption key');
+  const generic=build();await settle();
+  generic.workspace.items=[{src:'data:application/octet-stream;base64,QUJD'}];
+  generic.api.changed();await settle();
+  const genericRestart=build();await settle();
+  if(genericRestart.workspace.items[0]?.src!=='data:application/octet-stream;base64,QUJD')
+    throw Error('valid decoded Android image with generic MIME lost on restart');
 }
 
 function testPaperOutputAuthorizationAndLazyPdf(){
