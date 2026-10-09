@@ -1063,7 +1063,7 @@ function testPaperOutputAuthorizationAndLazyPdf(){
     +'printPages:(...args)=>{calls.push(["print",...args]);return true},'
     +'shareBase64:(...args)=>{calls.push(["share",...args]);return true}}};'
     +'const Android=window.Android,$=()=>({checked:!!options.telegram}),'
-    +'currentPage=0,alert:value=>denials.push(value),'
+    +'currentPage=0,alert=value=>denials.push(value),'
     +'makePdfData=()=>{pdfCalls++;return "data:application/pdf;base64,AAA"},'
     +'getPaperPrintKey=()=>"A4",printDpi=()=>300,document={createElement:()=>({click(){}})};'
     +html.slice(start,end)
