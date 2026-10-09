@@ -6,6 +6,7 @@ window.__ABU_SECURITY_HARDENING_V2__=true;
 const $=id=>document.getElementById(id);
 const LEGACY_TRUST_KEY='abuBassamSecurityTrustV1';
 const SECURE_TRUST_KEY='abu_bassam_offline_trust_v2';
+const TRUST_REVOCATION_KEY='abuBassamOfflineTrustRevocationPendingV1';
 const SECRET_KEY='abu_bassam_device_secret_v1';
 const APP_VERSION=String(window.__ABU_APP_META__?.version||'');
 const OFFLINE_GRACE_MS=12*60*60*1000;
@@ -52,18 +53,26 @@ async function seal(device){
     if(!sameSession())return false;
     await nativeRequest('secureSet',{key:SECURE_TRUST_KEY,value:JSON.stringify({body,mac})});
     cleanLegacy();
-    if(sameSession())lastSealAt=Date.now();
+    if(sameSession()){
+      localStorage.removeItem(TRUST_REVOCATION_KEY);
+      lastSealAt=Date.now()
+    }
     return true
   })
 }
-async function loadTrust(){if(!nativeAvailable())return null;const raw=String(await nativeRequest('secureGet',{key:SECURE_TRUST_KEY})||'');if(!raw)return null;let env;try{env=JSON.parse(raw)}catch(_){return null}if(!env?.body||!env?.mac)return null;const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)return null;const expected=await hmac(env.body,secret);if(!constantTime(expected,env.mac))return null;let trust;try{trust=JSON.parse(env.body)}catch(_){return null}if(trust?.schema!==2||trust?.appVersion!==APP_VERSION||trust?.device_id!==currentId()||trust?.active===false)return null;const now=Date.now(),verified=Number(trust.verifiedAt||0);if(!verified||now+CLOCK_SKEW_MS<verified||now-verified>OFFLINE_GRACE_MS)return null;return trust}
+async function loadTrust(){if(localStorage.getItem(TRUST_REVOCATION_KEY)==='1'||!nativeAvailable())return null;const raw=String(await nativeRequest('secureGet',{key:SECURE_TRUST_KEY})||'');if(!raw)return null;let env;try{env=JSON.parse(raw)}catch(_){return null}if(!env?.body||!env?.mac)return null;const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)return null;const expected=await hmac(env.body,secret);if(!constantTime(expected,env.mac))return null;let trust;try{trust=JSON.parse(env.body)}catch(_){return null}if(trust?.schema!==2||trust?.appVersion!==APP_VERSION||trust?.device_id!==currentId()||trust?.active===false)return null;const now=Date.now(),verified=Number(trust.verifiedAt||0);if(!verified||now+CLOCK_SKEW_MS<verified||now-verified>OFFLINE_GRACE_MS)return null;return trust}
 async function clearTrust(){
   trustEpoch++;
   lastSealAt=0;
+  // Persist the denial before trying Android's asynchronous secure deletion.
+  // If SecureStore is unavailable, this flag blocks stale trust on next boot.
+  localStorage.setItem(TRUST_REVOCATION_KEY,'1');
   try{
     await queueTrustMutation(async()=>{
-      if(nativeAvailable())await nativeRequest('secureDelete',{key:SECURE_TRUST_KEY})
-    })
+      if(!nativeAvailable())throw new Error('NATIVE_SECURITY_UNAVAILABLE');
+      await nativeRequest('secureDelete',{key:SECURE_TRUST_KEY})
+    });
+    localStorage.removeItem(TRUST_REVOCATION_KEY)
   }catch(error){console.warn('Failed to clear offline trust in SecureStore',error)}
   lastSealAt=0;
   cleanLegacy()
