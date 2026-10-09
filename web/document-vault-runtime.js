@@ -155,12 +155,14 @@ async function addFiles(fileList,category,input){
   const files=[...(fileList||[])];if(!files.length)return false;
   if(state.uploading){alert('جاري حفظ دفعة أخرى. انتظر اكتمالها قبل إضافة ملفات جديدة.');if(input)input.value='';return false}
   state.uploading=true;setBusy(true,'جاري حفظ الملفات بأسمائها الأصلية...');
+  let committed=false;
   try{
     const saved=await dbAll(),count=saved.filter(item=>!item.deleted).length,room=MAX_ITEMS-count;
     if(files.length>room)throw new Error(room<=0?'وصل الأرشيف إلى الحد الأقصى: 1000 عنصر':`المتاح ${room} فقط من أصل ${files.length}. لم يُحفظ أي ملف.`);
     const folder=state.uploadFolder;
     const records=files.map(file=>newVaultItem(file.name,file,category,undefined,folder));
     await dbPutBatch(records); // IndexedDB transaction is all-or-nothing on quota, abort or duplicate ID.
+    committed=true;
     state.filter=folder?'folder:'+folder:category;
     await refresh();
     logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',records.length+' عنصر');
@@ -168,6 +170,7 @@ async function addFiles(fileList,category,input){
     if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),700);
     return true
   }catch(e){
+    if(committed){setSyncStatus('الملفات محفوظة محلياً • تعذر تحديث العرض');alert('حُفظت الدفعة داخل الأرشيف، لكن تعذر تحديث عرضها. أعد فتح القسم. '+(e?.message||e));return true}
     alert('لم تُحفظ الدفعة: '+(e?.message||e));
     return false
   }finally{state.uploading=false;setBusy(false);state.uploadFolder='';if(input)input.value=''}
