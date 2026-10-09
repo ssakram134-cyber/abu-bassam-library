@@ -746,6 +746,49 @@ async function testCardBackupRestorationCancelsPhotos(){
     throw Error('revoked restore permission accepted delayed backup file');
 }
 
+function testCardBackupQuotaRollback(){
+  const source=read('cards-studio-runtime.js');
+  const a=source.indexOf('function applyBackupSnapshot(data){');
+  const b=source.indexOf('function exportBackup(snapshot){',a);
+  if(a<0||b<=a)throw Error('backup restoration implementation missing');
+  const factory=vm.runInNewContext('(fail)=>{'
+    +'let photoLoadEpoch=0,brandLogoEpoch=0,renders=0;'
+    +'const state={brand:{logo:"orig"},forms:{personal:{name:"unchanged"}},'
+    +'photo:"data:image/png;base64,original",photoTransform:{zoom:1},history:[],'
+    +'textStyles:{},queue:[],type:"personal",width:85.6,output:"cr80"};'
+    +'const STORAGE_KEY="forms",BRAND_KEY="brand",CARD_STYLE_KEY="styles",HISTORY_KEY="history";'
+    +'const map=new Map([["forms","oldForms"],["brand","oldBrand"],'
+    +'["styles","oldStyles"],["history","oldHistory"]]);'
+    +'let once=true;'
+    +'const localStorage={getItem:key=>map.has(key)?map.get(key):null,'
+    +'setItem:(key,value)=>{if(fail&&key==="styles"&&once){once=false;throw Error("QUOTA_EXCEEDED")}'
+    +'map.set(key,value)},removeItem:key=>map.delete(key)};'
+    +'const clone=value=>JSON.parse(JSON.stringify(value)),DEFAULT_BRAND={logo:"default"},'
+    +'DEFAULT_FORMS={personal:{name:""},login:{password:""},wifi:{password:""}},'
+    +'TYPE_LABELS={personal:"personal"},MAX_CARDS=25,'
+    +'cap=(x,a,b)=>Math.max(a,Math.min(b,Number(x)||0)),'
+    +'scrubModels=x=>Array.isArray(x)?x:[],window={},renderAll=()=>{renders++};'
+    +source.slice(a,b)
+    +';return{restore:applyBackupSnapshot,state,saved:()=>[...map]}}');
+  const backup={forms:{personal:{name:'restored'}},brand:{logo:'restored-logo'},
+    workspace:{photo:'data:image/png;base64,restored'}};
+  const broken=factory(true);
+  let rejected=false;
+  try{broken.restore(backup)}catch(e){rejected=e.message==='QUOTA_EXCEEDED'}
+  if(!rejected||broken.state.photo!=='data:image/png;base64,original'||
+    broken.state.forms.personal.name!=='unchanged'||broken.state.brand.logo!=='orig')
+    throw Error('failed restore lost the original card workspace');
+  const old=[['forms','oldForms'],['brand','oldBrand'],
+    ['styles','oldStyles'],['history','oldHistory']];
+  if(JSON.stringify(broken.saved())!==JSON.stringify(old))
+    throw Error('partial backup wrote over surviving localStorage records');
+  const good=factory(false);
+  good.restore(backup);
+  if(good.state.photo!=='data:image/png;base64,restored'||
+    good.state.forms.personal.name!=='restored')
+    throw Error('valid backup failed after transactional rollback guard');
+}
+
 // Barcode native callbacks may arrive several times before React state updates.
 // The scanner must synchronously latch the first code and reset only for a new
 // explicit camera session.
@@ -1588,7 +1631,7 @@ async function testBackupIndexedDbConnectionLifecycle(){
   try{await unexpected.run()}catch(e){threw=/DB_TRANSACTION_FAILED/.test(e.message)}
   if(!threw||unexpected.state.closed!==1)throw new Error('backup transaction creation failure leaked database connection');
 }
-Promise.all([testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
+Promise.all([Promise.resolve().then(testCardBackupQuotaRollback),testCardPrintPreviewIdentity(),testCardBackupRestorationCancelsPhotos(),testCardPhotoAndBrandLogoRace(),testVaultTransactionSessionRevocation(),Promise.resolve().then(testVaultSyncTimerVisibility),testVaultSyncAccountFence(),testVaultStaleDeleteGuard(),testRestoreSettingsValidatedBeforeDatabaseCommit(),testVaultDownloadRevisionConsistency(),testVaultMetadataAndEditorRace(),testVaultBatchImportLifecycle(),Promise.resolve().then(testVaultPendingSyncSchedule),testVaultDeleteAckPreservesNewEdits(),testBackupRestoreExclusiveLock(),testVaultConflictCommitIsolation(),Promise.resolve().then(testVaultSyncConflictRules),testSecureDeviceHeartbeatLifecycle(),Promise.resolve().then(testWebViewGenerationRecovery),testCameraCaptureCancelledAfterClose(),testNativeOutputFailures(),testBoundedSegmentation(),testRuntimeScriptLoader(),testAdvancedRuntimeLoader(),testOfflineOcrRecovery(),testReportExcelLoader(),testBackupIndexedDbConnectionLifecycle(),Promise.resolve().then(testGuidePreferenceSurvivesWebViewReload),Promise.resolve().then(testBackLayerFallback),Promise.resolve().then(testMissingSheetCannotBlockTouch),Promise.resolve().then(testImageImportLifecycle),Promise.resolve().then(testBarcodeScanDeduplication),testAiCloudStartupTimeout(),Promise.resolve().then(testPhotoPreviewClearedWhenEmpty)]).then(()=>{
   if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;return}
   process.stdout.write('Runtime regression checks passed: reliable script loader retries and timeouts, offline-first secure gate, bounded image segmentation, native bridge boot, and touch/backdrop cleanup.\n');
 }).catch(error=>{
