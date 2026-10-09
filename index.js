@@ -4,6 +4,7 @@ import {
   Alert,
   AppState,
   BackHandler,
+  DeviceEventEmitter,
   Linking,
   Platform,
   SafeAreaView,
@@ -28,6 +29,7 @@ const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
+const AUTH_CALLBACK_KEY = 'abu_bassam_auth_callback_v1';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
@@ -161,6 +163,29 @@ function App() {
       if (webReady) inject('AbuBassamNativeAppState', { state, at: Date.now() });
     });
     return () => subscription.remove();
+  }, [inject, webReady]);
+
+  // A recovery link may arrive when Android is already foregrounded, without
+  // an AppState transition. Also check any callback saved during a cold launch.
+  useEffect(() => {
+    if (!webReady) return undefined;
+    let mounted = true;
+    const notifyIfPending = async () => {
+      try {
+        const saved = await SecureStore.getItemAsync(AUTH_CALLBACK_KEY);
+        if (mounted && saved) {
+          // Only signal availability; never inject the one-time code into JavaScript.
+          inject('AbuBassamNativeAppState', { state: 'active', authCallbackPending: true, at: Date.now() });
+        }
+      } catch (_) {
+        // Leave the securely stored callback intact for the next foreground event.
+      }
+    };
+    const subscription = DeviceEventEmitter.addListener('abu-bassam-auth-callback-saved', () => {
+      void notifyIfPending();
+    });
+    void notifyIfPending();
+    return () => { mounted = false; subscription.remove(); };
   }, [inject, webReady]);
 
   const openCamera = useCallback(async (mode, frameKind = 'paper') => {
