@@ -43,6 +43,7 @@ function duplexCells(body) {
   return cells;
 }
 assert.match(source, /align-content:center;direction:ltr;page-break-after:always/);
+assert.match(source, /\.duplex-page:last-of-type,\.single-page:last-of-type\{page-break-after:auto;break-after:auto\}/, 'The last sheet must not force an extra blank page');
 assert.match(source, /\.duplex-empty\{width:var\(--cw\);height:var\(--ch\)\}/);
 assert.match(source, /card\.style\.aspectRatio=\x60\$\{model\.width\} \/ \$\{model\.height\}\x60/);
 assert.equal((source.match(/\.cs-row span\{min-width:0;font-weight:700;white-space:normal;overflow-wrap:anywhere/g)||[]).length,2);
