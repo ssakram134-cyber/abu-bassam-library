@@ -68,9 +68,38 @@ function openDb(){
   return dbPromise
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
-async function dbPut(item){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function dbPut(item){if(item?.syncState==='pending')item.syncRevision=uuid();let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 async function dbPutBatch(items){if(!items.length)return;const db=await openDb();return new Promise((resolve,reject)=>{let tx;try{tx=db.transaction(STORE,'readwrite');const store=tx.objectStore(STORE);for(const item of items)store.add(item);tx.oncomplete=()=>resolve(items.length);tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ دفعة الأرشيف'));tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))}catch(error){try{tx?.abort()}catch(_){}reject(error)}})}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+
+function syncSnapshot(item){
+  return JSON.stringify([
+    String(item.id||''),String(item.syncRevision||''),String(item.updatedAt||''),
+    String(item.name||''),String(item.category||''),String(item.mime||''),
+    Number(item.size)||0,String(item.folder||''),!!item.favorite,!!item.deleted,
+    String(item.lastOpenedAt||''),Number(item.blob?.size)||0,String(item.blob?.type||'')
+  ])
+}
+async function dbMarkSyncedIfUnchanged(uploaded,remoteUpdatedAt){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let marked=false,tx;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.get(uploaded.id);
+      request.onsuccess=()=>{
+        const current=request.result;
+        if(!current||current.syncState!=='pending'||syncSnapshot(current)!==syncSnapshot(uploaded))return;
+        store.put({...current,remoteUpdatedAt:String(remoteUpdatedAt||''),syncState:'synced'});
+        marked=true
+      };
+      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      tx.oncomplete=()=>resolve(marked);
+      tx.onerror=()=>reject(tx.error||new Error('تعذر تحديث حالة مزامنة الملف'));
+      tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة تحديث حالة المزامنة'))
+    }catch(error){reject(error)}
+  })
+}
 
 function addCss(){
   let style=document.createElement('style');style.id='vaultStyle';style.textContent=`
@@ -160,7 +189,7 @@ function pickFiles(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$
 function pickCollection(folder){if(!requireVault('vaultAdd'))return;state.uploadFolder=SYSTEM_FOLDERS.includes(folder)?folder:'';$('vFileInput').value='';$('vFileInput').click()}
 function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupInput').value='';$('vBackupInput').click()}
 
-function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncState:'pending',deleted:false}}
+function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
 async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
 async function addFiles(fileList,category,input){
   const files=[...(fileList||[])];if(!files.length)return false;
@@ -334,7 +363,8 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       let saved;
       try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
-      item.remoteUpdatedAt=String(saved?.updated_at||'');item.syncState='synced';await dbPut(item);
+      const confirmed=await dbMarkSyncedIfUnchanged(item,saved?.updated_at);
+      if(!confirmed)autoSyncRerunRequested=true;
       if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
 
