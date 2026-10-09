@@ -38,7 +38,7 @@ async function secretKey(forScope){
   return crypto.subtle.importKey('raw',material,{name:'AES-GCM'},false,['encrypt','decrypt'])
 }
 const validImage=s=>typeof s==='string'&&s.length<MAX_BYTES&&
-  /^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/.test(s);
+  /^data:(?:image\/(?:png|jpe?g|webp)|application\/octet-stream);base64,[a-zA-Z0-9+/=]+$/i.test(s);
 function normalized(items){
   if(!Array.isArray(items)||items.length>MAX_ITEMS)return null;
   const safe=[];
