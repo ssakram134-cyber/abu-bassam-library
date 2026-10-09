@@ -95,8 +95,8 @@ const testWork=(async()=>{
     const put=async arr=>{local.push(...arr);changes.push(arr.length)};
     const uploader=new Function('state','dbAll','dbPutBatch','newVaultItem','MAX_ITEMS','setBusy','alert','refresh','logOperation','setSyncStatus','autoSync','navigator','setTimeout','syncNow',addFiles+'\nreturn addFiles;')(
       uploadState,dbAll,put,
-      new Function('niceName','uuid',newItem+'\nreturn newVaultItem;')(
-        n=>String(n),(()=>{let i=0;return()=>String(++i)+'-new'})()),
+      new Function('niceName','uuid','fileMime',newItem+'\nreturn newVaultItem;')(
+        n=>String(n),(()=>{let i=0;return()=>String(++i)+'-new'})(),(_name,mime)=>mime||'application/octet-stream'),
       1000,(on)=>busy.push(on),msg=>alerts.push(String(msg)),
       ()=>refreshFails?Promise.reject(Error('VIEW_RENDER_FAILED')):Promise.resolve(),
       ()=>{},msg=>statuses.push(msg),()=>true,{onLine:false},fn=>timers.push(fn),()=>{});

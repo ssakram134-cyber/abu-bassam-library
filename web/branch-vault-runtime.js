@@ -3,7 +3,7 @@
 if(window.__ABU_BRANCH_VAULT_V1__)return;
 window.__ABU_BRANCH_VAULT_V1__=true;
 const SECRET_KEY='abu_bassam_device_secret_v1',BUCKET='abu-bassam-private',SCOPE_KEY='abuBassamVaultLocalScopeV1';
-const LABELS={vaultView:'عرض ملفات الحفظ',vaultAdd:'إضافة ملفات للحفظ',vaultEdit:'تعديل الملفات',vaultRename:'إعادة تسمية الملفات',vaultMove:'نقل الملفات',vaultFolders:'إدارة المجلدات',vaultFavorite:'إدارة المفضلة',vaultDelete:'حذف الملفات',vaultExport:'تصدير الملفات',vaultShare:'مشاركة الملفات',vaultPrint:'طباعة الملفات',vaultSaveGallery:'حفظ في المعرض',vaultSavePdf:'حفظ PDF',vaultSync:'مزامنة ملفات الفرع',vaultBackup:'إنشاء نسخة احتياطية',vaultRestoreBackup:'استعادة نسخة احتياطية'};
+const LABELS={vaultView:'عرض ملفات الحفظ',vaultAdd:'إضافة ملفات للحفظ',vaultEdit:'تعديل الملفات',vaultImageEdit:'تحرير الصور',vaultEnhance:'تحسين الصور',vaultRename:'إعادة تسمية الملفات',vaultMove:'نقل الملفات',vaultFolders:'إدارة المجلدات',vaultFavorite:'إدارة المفضلة',vaultDelete:'حذف الملفات',vaultExport:'تصدير الملفات',vaultShare:'مشاركة الملفات',vaultPrint:'طباعة الملفات',vaultSaveGallery:'حفظ في المعرض',vaultSavePdf:'حفظ PDF',vaultSync:'مزامنة ملفات الفرع',vaultBackup:'إنشاء نسخة احتياطية',vaultRestoreBackup:'استعادة نسخة احتياطية'};
 const pathToId=new Map();let adapterRegistered=false;
 function role(){return window.AbuBassamSecurity?.role?.()||''}
 function device(){const s=window.AbuBassamSecurity?.device?.()||{},d=window.AbuBassamDevices?.ensure?.()||{};return{id:String(s.device_id||s.id||d.device_id||d.id||localStorage.getItem('abuBassamLockedDeviceIdV3')||'').trim(),name:String(s.device_name||s.name||d.device_name||d.name||localStorage.getItem('abuBassamLockedDeviceNameV3')||'هذا الفرع').trim()||'هذا الفرع',permissions:s.permissions||{}}}
