@@ -122,6 +122,9 @@ async function testDeviceRegistrySessionFence(){
   const start=devices.indexOf('function ownerScope(){');
   const end=devices.indexOf('function rowHtml(',start);
   if(start<0||end<=start)throw Error('device registry owner scope helpers missing');
+  const manageStart=devices.indexOf('async function manageDevice(');
+  const manageEnd=devices.indexOf('async function renameDevice(',manageStart);
+  if(manageStart<0||manageEnd<=manageStart)throw Error('device mutation handler missing');
   const build=vm.runInNewContext('(opts)=>{'
     +'let ownerAuthEpoch=0,stored=5,gate=true,uid="owner",waitingSecret=null,waitingRpc=null,rpcCalls=0,cacheWrites=0;'
     +'const LIMIT_KEY="deviceLimit",CURRENT_ID=()=>"owner-phone",'
@@ -135,8 +138,8 @@ async function testDeviceRegistrySessionFence(){
     +'return {data:name==="abu_bassam_get_device_limit"?12:[{device_id:"other-phone"}],error:null}}}),'
     +'dedupe=rows=>rows;'
     +'function invalidateOwnerSession(){ownerAuthEpoch++}'
-    +devices.slice(start,end)
-    +';return{rows,readLimit,ownerArgs,invalidateOwnerSession,lock:()=>{gate=false},'
+    +devices.slice(start,end)+devices.slice(manageStart,manageEnd)
+    +';return{rows,readLimit,ownerArgs,manageDevice,invalidateOwnerSession,lock:()=>{gate=false},'
     +'unlock:()=>{gate=true},get:()=>({waitingSecret,waitingRpc,rpcCalls,stored,cacheWrites})}}');
   let app=build({waitSecret:true}),running=app.rows();
   for(let i=0;i<10&&!app.get().waitingSecret;i++)await Promise.resolve();
@@ -171,6 +174,26 @@ async function testDeviceRegistrySessionFence(){
   const rows=await app.rows(),limit=await app.readLimit();
   if(rows[0]?.device_id!=='other-phone'||limit!==12)
     throw Error('current owner cannot read device registry and allowed capacity');
+
+  app=build({waitSecret:true});
+  running=app.manageDevice('secondary-phone',{name:'new name'});
+  for(let i=0;i<10&&!app.get().waitingSecret;i++)await Promise.resolve();
+  if(!app.get().waitingSecret)throw Error('device mutation did not request SecureStore');
+  app.lock();app.invalidateOwnerSession();app.unlock();
+  app.get().waitingSecret('valid-secret');
+  denied=false;
+  try{await running}catch(error){denied=error.message==='OWNER_SESSION_CHANGED'}
+  if(!denied||app.get().rpcCalls)
+    throw Error('revoked owner initiated device mutation after credential read');
+  app=build({waitRpc:true});
+  running=app.manageDevice('secondary-phone',{active:false});
+  for(let i=0;i<10&&!app.get().waitingRpc;i++)await Promise.resolve();
+  if(!app.get().waitingRpc)throw Error('device mutation RPC did not start');
+  app.lock();app.invalidateOwnerSession();app.unlock();
+  app.get().waitingRpc({data:{device_id:'secondary-phone',active:false},error:null});
+  denied=false;
+  try{await running}catch(error){denied=error.message==='OWNER_SESSION_CHANGED'}
+  if(!denied)throw Error('late mutation result crossed owner session boundary');
 
   const rowStart=devices.indexOf('function rowHtml(row){');
   const rowEnd=devices.indexOf('function syncSecurityCardLabel(){',rowStart);
