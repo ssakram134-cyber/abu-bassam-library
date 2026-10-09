@@ -158,19 +158,22 @@ async function verifyAuthStartupAndSecret(){
   if([trustWriteBegin,trustWriteEnd,trustDeleteBegin,trustDeleteEnd].some(x=>x<0))
     throw new Error('offline SecureStore trust serialization code missing');
   const buildTrust=vm.runInNewContext('(options)=>{'
-    +'let lastSealAt=0,offlineEpoch=0,offlineSession=false,saved=null,writes=0,deletes=0;'
-    +'const SECRET_KEY="secret",SECURE_TRUST_KEY="trust",'
+    +'let lastSealAt=0,offlineEpoch=0,offlineSession=false,saved=null,writes=0,deletes=0,marker=null;'
+
+    +'const SECRET_KEY="secret",SECURE_TRUST_KEY="trust",TRUST_REVOCATION_KEY="revocation",'
+    +'localStorage={getItem:()=>marker,setItem:()=>{marker="1"},removeItem:()=>{marker=null}},'
     +'window={AbuBassamSecurity:{isOnlineUnlocked:()=>true}},'
     +'nativeAvailable=()=>true,online=()=>true,currentId=()=>"phone",'
     +'normalizeDevice=value=>value,cleanLegacy=()=>{},console={warn(){}},'
     +'nativeRequest=async(action,payload)=>{'
     +'if(action==="secureGet")return "secret-key";'
     +'if(action==="secureSet"){writes++;if(options.waitWrite)await options.waitWrite();saved=payload.value;return true}'
-    +'if(action==="secureDelete"){deletes++;saved=null;return true}},'
+    +'if(action==="secureDelete"){deletes++;if(options.failDelete)throw new Error("SECURESTORE_DELETE_FAILED");saved=null;return true}},'
     +'hmac=async()=>options.waitMac?await options.waitMac():"signed";'
     +hardening.slice(trustWriteBegin,trustWriteEnd)
+    +hardening.slice(trustWriteEnd,hardening.indexOf('async function clearTrust(){',trustWriteEnd))
     +hardening.slice(trustDeleteBegin,trustDeleteEnd)
-    +';return{seal,clearTrust,state:()=>({lastSealAt,writes,deletes,saved})}}');
+    +';return{seal,clearTrust,loadTrust,state:()=>({lastSealAt,writes,deletes,saved,marker})}}');
   let finishWrite=null;
   const pendingWrite=buildTrust({waitWrite:()=>new Promise(resolve=>{finishWrite=resolve})});
   const writing=pendingWrite.seal({device_id:'phone',active:true});
@@ -194,6 +197,18 @@ async function verifyAuthStartupAndSecret(){
   if(await signing!==false||delayedMac.state().writes!==0||
     delayedMac.state().saved!==null)
     throw new Error('revoked offline trust resealed after delayed HMAC');
+  const deletionFailure=buildTrust({failDelete:true});
+  if(await deletionFailure.seal({device_id:'phone',active:true})!==true)
+    throw new Error('failed deletion test could not create trust');
+  await deletionFailure.clearTrust();
+  const failedState=deletionFailure.state();
+  if(failedState.marker!=='1'||!failedState.saved||
+    await deletionFailure.loadTrust()!==null)
+    throw new Error('SecureStore deletion failure allowed old signed trust to open offline');
+  if(await deletionFailure.seal({device_id:'phone',active:true})!==true||
+    deletionFailure.state().marker!==null)
+    throw new Error('verified online login failed to replace revoked offline trust');
+
   const normalTrust=buildTrust({});
   if(await normalTrust.seal({device_id:'phone',active:true})!==true||
     normalTrust.state().writes!==1||!normalTrust.state().saved)
