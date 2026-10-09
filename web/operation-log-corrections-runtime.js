@@ -66,7 +66,32 @@ async function safeSync(manual=true){setStatus('جاري تحديث سجل ال�
 function clearLocal(){if(!confirm('سيتم مسح سجل العمليات المحلي من هذا الجهاز فقط. لن يُحذف سجل التدقيق الآمن الموجود لدى الحساب الرئيسي. متابعة؟'))return;localStorage.setItem(OPS_KEY,'[]');localStorage.removeItem(SCOPE_KEY);selected.clear();render();setStatus('تم مسح السجل المحلي فقط ✓')}
 function retargetButtons(){document.querySelectorAll('.top-actions .icon-btn').forEach(b=>{if(String(b.title||'').trim()==='سجل العمليات'){b.onclick=open;b.dataset.abuOpsV2='1'}})}
 function patch(){const ops=window.AbuBassamOps;if(!ops||typeof ops.add!=='function'||typeof ops.list!=='function')return false;if(!ops.add.__abuOpsPrivacyV2){const original=ops.add;const wrapped=function(input,...rest){return original.call(this,safeOperation(input),...rest)};wrapped.__abuOpsPrivacyV2=true;wrapped.__abuOriginal=original;ops.add=wrapped}ops.open=open;ops.sync=()=>safeSync(true);window.openOps=open;retargetButtons();patched=true;return true}
-function boot(){build();let attempts=0;const fast=setInterval(()=>{attempts++;patch();if(attempts>80)clearInterval(fast)},150);setInterval(patch,2500);new MutationObserver(()=>{retargetButtons();if(!patched)patch()}).observe(document.documentElement,{childList:true,subtree:true});window.addEventListener('online',()=>safeSync(false));document.addEventListener('abu-bassam-auth-changed',()=>{adminRows=[];adminDevices=[];renderDeviceOptions();render()})}
+function boot(){
+  build();
+  let attempts=0;
+  const fast=setInterval(()=>{
+    attempts++;
+    if(patch()||attempts>=80)clearInterval(fast);
+  },150);
+  // Restrict DOM observation to the toolbar; report rendering must not trigger a global scan.
+  const toolbar=document.querySelector('.top-actions');
+  if(toolbar){
+    const observer=new MutationObserver(records=>{
+      if(records.some(record=>Array.from(record.addedNodes).some(node=>
+        node.nodeType===1&&(node.matches?.('.icon-btn')||node.querySelector?.('.icon-btn'))
+      )))retargetButtons();
+    });
+    observer.observe(toolbar,{childList:true,subtree:true});
+  }
+  // Refresh at low frequency and on lifecycle signals in case the underlying operation API is replaced.
+  setInterval(()=>{if(document.visibilityState!=='hidden')patch()},60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')patch()});
+  document.addEventListener('abu-runtime-loaded',event=>{
+    if(['secure-sync-runtime.js','operation-log-runtime.js'].includes(String(event.detail?.src||'')))patch();
+  });
+  window.addEventListener('online',()=>safeSync(false));
+  document.addEventListener('abu-bassam-auth-changed',()=>{adminRows=[];adminDevices=[];renderDeviceOptions();render()});
+}
 window.AbuBassamOperationLogV2={open,close,refresh:()=>safeSync(true),render,exportRows,clearLocal,scrub:safeOperation};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
