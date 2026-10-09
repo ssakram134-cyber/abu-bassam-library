@@ -21,7 +21,8 @@ for(const js of [source,hard,advanced]){
 assert.match(source,/data-filter="trash"/);
 assert.match(source,/TRASH_DAYS=30/);
 assert.match(source,/if\(state\.filter==='trash'\)\{renderTrash\(\);return\}/);
-assert.match(source,/setInterval\(\(\)=>\{if\(document\.visibilityState!=='hidden'\)void refresh\(\)\.catch\(\(\)=>\{\}\)\},3600000\)/);
+assert.match(source,/setInterval\(\(\)=>\{if\(document\.visibilityState!=='hidden'\)void purgeExpiredTrash\(\)/,'Hourly trash cleanup is lightweight');
+assert.match(source,/if\(filter==='trash'\)\{void refresh\(\)\.catch/,'Entering recycle bin refreshes expiry');
 assert.match(source,/async function deleteItem\(id\)/);
 assert.match(source,/await trashFile\(item\)/);
 assert.match(branch,/vaultRestoreDeleted:'استعادة الملفات المحذوفة'/);
