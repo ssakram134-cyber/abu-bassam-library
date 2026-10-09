@@ -1118,7 +1118,7 @@ async function testPaperAiPhotoSessionRaces(){
     +'set src(value){},get src(){return ""}}),'
     +'navigator={onLine:true},saveAiProSettings=()=>{},'
     +'aiProviderName=()=>"Gemini",setBusy=()=>{},'
-    +'aiProStatus=text=>messages.push(text),alert=()=>{},'
+    +'aiProStatus=text=>messages.push(text),alert=()=>{},AI_PRO_ENDPOINT="https://unit.test",'
     +'readyAiCloudWithin=async()=>{},'
     +'AbortController=class{abort(){}get signal(){return{}}},'
     +'setTimeout=()=>1,clearTimeout=()=>{},'
