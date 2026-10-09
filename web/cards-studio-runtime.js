@@ -10,6 +10,7 @@ const LAYOUT_KEY='abuBassamCardFreeLayoutV1';
 const RESET_BACKUP_KEY='abuBassamCardsResetBackupV1';
 const ROLE_SELECTORS={photo:'.cs-photo-frame',qr:'.cs-qr-box',info:'.cs-info',title:'.cs-card-title,.cs-personal-title,.cs-back-title',brand:'.cs-brandline,.cs-personal-brand,.cs-child-brand,.cs-login-brand',name:'.cs-card-name,.cs-personal-front-name,.cs-child-school',footer:'.cs-card-footer',panel:'.cs-login-panel',callqr:'.cs-call-qr',calllabel:'.cs-call-label'};
 const MAX_CARDS=25;
+let photoLoadEpoch=0,brandLogoEpoch=0;
 const TYPE_LABELS={personal:'الباج التعريفي',child:'باج الروضة والمدرسة',login:'بطاقة تسجيل الدخول',wifi:'كارت Wi‑Fi',qr:'تكوين QR',reader:'قارئ الباركود'};
 const SERVICE_LABELS={facebook:'Facebook',google:'Google Play',apple:'Apple / App Store',email:'البريد الإلكتروني',other:'خدمة أخرى'};
 const DEFAULT_BRAND={name:'مكتبة أبو بسام للتصوير والقرطاسية',phone:'07829667521',address:'',email:'AKRAMA1992@GMAIL.COM',website:'www.maktabah-abubassam.com',logo:'abu_bassam_icon.webp'};
@@ -255,10 +256,50 @@ function queueCount(){return state.queue.reduce((sum,item)=>sum+(item.copies||1)
 function renderQueue(){let el=$('csQueue');if(!el)return;if(!state.queue.length){el.innerHTML='<div class="cs-empty">قائمة الطباعة فارغة. يمكن الطباعة مباشرة أو إضافة أنواع مختلفة للتجميع المختلط.</div>';renderStatus();return}el.innerHTML=state.queue.map((item,index)=>`<div class="cs-qitem"><div><b>${esc(TYPE_LABELS[item.model.type])}</b><small>${item.copies} نسخة • ${item.model.width}×${item.model.height} ملم</small></div><button onclick="CardsStudio.removeQueue(${index})">حذف</button></div>`).join('');renderStatus()}
 function renderAll(){document.querySelectorAll('.cs-type').forEach(button=>{button.classList.toggle('active',button.dataset.type===state.type);if(button.dataset.type==='qr')button.disabled=!canCard('cardsQr');else if(button.dataset.type==='reader')button.disabled=!canCard('cardsBarcode');else if(button.dataset.type)button.disabled=!canCard('cardsView')});renderForm();renderPreview();renderPrintSettings();renderQueue()}
 
-async function loadDefaultLogo(){if(state.brand.logo!=='abu_bassam_icon.webp')return;try{let response=await fetch('abu_bassam_icon.webp'),blob=await response.blob(),reader=new FileReader();reader.onload=()=>{state.brand.logo=reader.result;saveDraft();renderPreview()};reader.readAsDataURL(blob)}catch(e){}}
+async function loadDefaultLogo(){
+  if(state.brand.logo!=='abu_bassam_icon.webp')return;
+  const epoch=++brandLogoEpoch;
+  try{
+    const response=await fetch('abu_bassam_icon.webp');
+    if(!response.ok)throw new Error('DEFAULT_LOGO_UNAVAILABLE');
+    const blob=await response.blob(),reader=new FileReader();
+    reader.onload=()=>{
+      if(epoch!==brandLogoEpoch||state.brand.logo!=='abu_bassam_icon.webp')return;
+      state.brand.logo=reader.result;saveDraft();renderPreview()
+    };
+    reader.readAsDataURL(blob)
+  }catch(e){}
+}
 async function resizeImage(file,maxDimension=2200,quality=.92){let src=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=src});let width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;if(!width||!height)throw new Error('INVALID_IMAGE_DIMENSIONS');let max=Math.max(width,height),limit=cap(maxDimension,320,3200);if(max<=limit)return src;let scale=limit/max,outW=Math.max(1,Math.round(width*scale)),outH=Math.max(1,Math.round(height*scale)),canvas=document.createElement('canvas');canvas.width=outW;canvas.height=outH;let context=canvas.getContext('2d');if(!context)throw new Error('CANVAS_UNAVAILABLE');context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';context.drawImage(image,0,0,outW,outH);let type=file.type==='image/png'?'image/png':file.type==='image/webp'?'image/webp':'image/jpeg';return canvas.toDataURL(type,type==='image/png'?undefined:cap(quality,.72,.96))}
-async function loadPhoto(file){if(!file||!requireCard('cardsImportImage'))return;try{state.photo=await resizeImage(file,2200,.92);state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};renderForm();renderPreview()}catch(e){alert('تعذر فتح الصورة')}finally{$('csPhotoInput').value='';$('csPhotoCameraInput').value=''}}
-async function loadBrandLogo(file){if(!file||!requireCard('cardsImportImage'))return;try{state.brand.logo=await resizeImage(file,1200,.9);$('csBrandLogoPreview').src=state.brand.logo;saveDraft();renderPreview()}catch(e){alert('تعذر فتح الشعار')}finally{$('csBrandLogoInput').value=''}}
+async function loadPhoto(file,expectedEpoch=null){
+  if(!file||!requireCard('cardsImportImage'))return;
+  const epoch=expectedEpoch===null?++photoLoadEpoch:expectedEpoch;
+  try{
+    const photo=await resizeImage(file,2200,.92);
+    if(epoch!==photoLoadEpoch||!canCard('cardsImportImage'))return;
+    state.photo=photo;
+    state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};
+    renderForm();renderPreview()
+  }catch(e){if(epoch===photoLoadEpoch)alert('تعذر فتح الصورة')}
+  finally{
+    if(epoch===photoLoadEpoch){
+      if($('csPhotoInput'))$('csPhotoInput').value='';
+      if($('csPhotoCameraInput'))$('csPhotoCameraInput').value=''
+    }
+  }
+}
+async function loadBrandLogo(file){
+  if(!file||!requireCard('cardsImportImage'))return;
+  const epoch=++brandLogoEpoch;
+  try{
+    const logo=await resizeImage(file,1200,.9);
+    if(epoch!==brandLogoEpoch||!canCard('cardsImportImage'))return;
+    state.brand.logo=logo;
+    if($('csBrandLogoPreview'))$('csBrandLogoPreview').src=logo;
+    saveDraft();renderPreview()
+  }catch(e){if(epoch===brandLogoEpoch)alert('تعذر فتح الشعار')}
+  finally{if(epoch===brandLogoEpoch&&$('csBrandLogoInput'))$('csBrandLogoInput').value=''}
+}
 function requestNative(mode){try{if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){window.ReactNativeWebView.postMessage(JSON.stringify({type:'openCamera',mode}));return true}}catch(e){}return false}
 
 function bindPhotoGestures(){let stage=document.querySelector('#csCardPair .cs-photo-stage');if(!stage)return;let start=null,last=null,startZoom=state.photoTransform.zoom;stage.ontouchstart=event=>{if(event.touches.length===2){start=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);startZoom=state.photoTransform.zoom}else if(event.touches.length===1)last={x:event.touches[0].clientX,y:event.touches[0].clientY};event.preventDefault()};stage.ontouchmove=event=>{if(event.touches.length===2&&start){let distance=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);state.photoTransform.zoom=cap(startZoom*distance/start,1,3.5)}else if(event.touches.length===1&&last){let point=event.touches[0],rect=stage.getBoundingClientRect();state.photoTransform.x=cap(state.photoTransform.x+(point.clientX-last.x)/rect.width*100,-70,70);state.photoTransform.y=cap(state.photoTransform.y+(point.clientY-last.y)/rect.height*100,-70,70);last={x:point.clientX,y:point.clientY}}document.querySelectorAll('#csCardPair .cs-photo-img').forEach(image=>image.style.transform=photoTransformCss(state.photoTransform));event.preventDefault()};stage.ontouchend=()=>{start=null;last=null;syncPhotoControls()}}
@@ -290,7 +331,20 @@ function logOperation(type,title,details=''){if(window.AbuBassamOps&&AbuBassamOp
 
 async function decodeBarcodeImage(file){if(!file)return;try{let data=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=data});if(!('BarcodeDetector'in window))throw new Error('استخدم الكاميرا الأصلية داخل تطبيق Android');let detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});let result=await detector.detect(image);if(!result.length)throw new Error('لم يتم العثور على باركود');onBarcode({data:result[0].rawValue,barcodeType:result[0].format})}catch(e){alert(e.message||'تعذرت قراءة الباركود')}finally{$('csBarcodeImageInput').value=''}}
 function onBarcode(result){let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
-function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;let blob=fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}))).catch(()=>{state.photo=dataUrl;state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};renderForm();renderPreview()});return blob}
+function onPhoto(dataUrl){
+  if(!dataUrl||!canCard('cardsImportImage'))return;
+  const epoch=++photoLoadEpoch;
+  return fetch(dataUrl).then(response=>response.blob())
+    .then(blob=>{
+      if(epoch!==photoLoadEpoch||!canCard('cardsImportImage'))return;
+      return loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}),epoch)
+    }).catch(()=>{
+      if(epoch!==photoLoadEpoch||!canCard('cardsImportImage'))return;
+      state.photo=dataUrl;
+      state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};
+      renderForm();renderPreview()
+    })
+}
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='barcode')return onBarcode(result);if(result&&result.mode==='cardPhoto')return onPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
@@ -299,21 +353,21 @@ function selectType(type){if(!requireCard('cardsView')||!TYPE_LABELS[type])retur
 function openModal(id){$(id).classList.add('show')}
 function closeModal(id){$(id).classList.remove('show')}
 function openBrand(){if(!requireCard('cardsEdit'))return;$('csBrandName').value=state.brand.name;$('csBrandPhone').value=state.brand.phone;$('csBrandAddress').value=state.brand.address;$('csBrandEmail').value=state.brand.email||'';$('csBrandWebsite').value=state.brand.website||'';$('csBrandLogoPreview').src=state.brand.logo;openModal('csBrandModal')}
-function saveBrand(){if(!requireCard('cardsEdit'))return;state.brand.name=$('csBrandName').value.trim()||DEFAULT_BRAND.name;state.brand.phone=$('csBrandPhone').value.trim();state.brand.address=$('csBrandAddress').value.trim();state.brand.email=$('csBrandEmail').value.trim();state.brand.website=$('csBrandWebsite').value.trim();saveDraft();renderPreview();closeModal('csBrandModal')}
-function resetBrand(){if(!requireCard('cardsEdit'))return;state.brand=clone(DEFAULT_BRAND);saveDraft();loadDefaultLogo();openBrand();renderPreview()}
+function saveBrand(){if(!requireCard('cardsEdit'))return;brandLogoEpoch++;state.brand.name=$('csBrandName').value.trim()||DEFAULT_BRAND.name;state.brand.phone=$('csBrandPhone').value.trim();state.brand.address=$('csBrandAddress').value.trim();state.brand.email=$('csBrandEmail').value.trim();state.brand.website=$('csBrandWebsite').value.trim();saveDraft();renderPreview();closeModal('csBrandModal')}
+function resetBrand(){if(!requireCard('cardsEdit'))return;brandLogoEpoch++;state.brand=clone(DEFAULT_BRAND);saveDraft();loadDefaultLogo();openBrand();renderPreview()}
 function pickBrandLogo(){if(!requireCard('cardsImportImage'))return;$('csBrandLogoInput').click()}
 function openHistory(){if(!requireCard('cardsView'))return;renderHistory();openModal('csHistoryModal')}
 function deleteHistory(index){if(!requireCard('cardsDelete'))return;state.history.splice(index,1);localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history));renderHistory()}
 function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;if(Array.isArray(item.queue))state.queue=scrubModels(item.queue).slice(0,MAX_CARDS);else state.queue=(item.models||[]).map(model=>({model:clone(model),copies:1}));state.output=item.mode||'a4-pairs';renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
 function pickPhoto(){if(!requireCard('cardsImportImage'))return;$('csPhotoInput').click()}
 function cameraPhoto(){if(!requireCard('cardsImportImage'))return;if(!requestNative('cardPhoto'))$('csPhotoCameraInput').click()}
-function removePhoto(){if(!requireCard('cardsEditImage'))return;state.photo='';renderForm();renderPreview()}
+function removePhoto(){if(!requireCard('cardsEditImage'))return;photoLoadEpoch++;state.photo='';renderForm();renderPreview()}
 function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};renderForm();renderPreview()}
 function photoControl(){if(!canCard('cardsEditImage'))return;state.photoTransform={...state.photoTransform,zoom:Number($('csPhotoZoom').value),x:Number($('csPhotoX').value),y:Number($('csPhotoY').value),rotate:Number($('csPhotoRotate').value)};renderPreview()}
 function flipPhoto(axis){if(!requireCard('cardsEditImage'))return;if(axis==='x')state.photoTransform.flipX=!state.photoTransform.flipX;else if(axis==='y')state.photoTransform.flipY=!state.photoTransform.flipY;renderPreview()}
 function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPhotoTools');if(!tools)return alert('هذا النوع من الكروت لا يحتاج صورة');tools.scrollIntoView({behavior:'smooth',block:'center'})}
 function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];renderPrintSettings();renderPreview();renderStatus()}
-function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};state.copies=1;saveDraft();renderAll()}
+function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;photoLoadEpoch++;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0,flipX:false,flipY:false};state.copies=1;saveDraft();renderAll()}
 function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);if($('csCopies'))$('csCopies').value=state.copies;renderPreview();renderStatus()}
 function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
@@ -335,7 +389,7 @@ function exportBackup(snapshot){if(!requireCard('backupCreate'))return false;let
 function pickBackup(){if(!requireCard('backupRestore'))return;let input=$('csBackupInput');if(input){input.value='';input.click()}}
 async function importBackupFile(file){if(!file||!requireCard('backupRestore'))return;try{if(file.size>12*1024*1024)throw new Error('BACKUP_TOO_LARGE');let raw=await file.text(),data=JSON.parse(raw);if(!confirm('استيراد النسخة سيستبدل بيانات البطاقات الحالية وإعدادات الطباعة. متابعة؟'))return;applyBackupSnapshot(data);alert('تم استيراد نسخة البطاقات الاحتياطية بنجاح. كلمات السر الحساسة لا تُستعاد من النسخ.')}catch(e){alert('تعذر استيراد النسخة الاحتياطية لأنها غير صالحة أو كبيرة جداً.')}finally{if($('csBackupInput'))$('csBackupInput').value=''}}
 function restoreResetBackup(){if(!requireCard('backupRestore'))return;let raw='';try{raw=localStorage.getItem(RESET_BACKUP_KEY)||''}catch(e){}if(!raw)return alert('لا توجد نسخة محلية سابقة لإعادة الضبط.');if(!confirm('استعادة آخر نسخة محلية محفوظة قبل إعادة الضبط؟'))return;try{applyBackupSnapshot(JSON.parse(raw));alert('تمت استعادة آخر نسخة محلية قبل إعادة الضبط.')}catch(e){alert('تعذر استعادة النسخة المحلية لأنها غير صالحة.')}}
-function resetData(){if(!requireCards(['cardsDelete','backupCreate']))return;if(!confirm('سيتم حفظ نسخة محلية مؤكدة وتصدير نسخة احتياطية قبل إعادة ضبط بيانات الكروت. متابعة؟'))return;let snapshot=backupSnapshot(),json=JSON.stringify(snapshot);try{localStorage.setItem(RESET_BACKUP_KEY,json);if(localStorage.getItem(RESET_BACKUP_KEY)!==json)throw new Error('BACKUP_VERIFY_FAILED')}catch(e){alert('تعذر تثبيت النسخة الاحتياطية المحلية، لذلك لم يتم حذف أي بيانات.');return}exportBackup(snapshot);state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';state.textStyles={};try{localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(HISTORY_KEY);localStorage.removeItem(CARD_STYLE_KEY)}catch(e){}renderAll();closeModal('csBrandModal');alert('تمت إعادة الضبط. آخر نسخة محلية قبل المسح ما زالت متاحة للاستعادة.')}
+function resetData(){if(!requireCards(['cardsDelete','backupCreate']))return;if(!confirm('سيتم حفظ نسخة محلية مؤكدة وتصدير نسخة احتياطية قبل إعادة ضبط بيانات الكروت. متابعة؟'))return;let snapshot=backupSnapshot(),json=JSON.stringify(snapshot);try{localStorage.setItem(RESET_BACKUP_KEY,json);if(localStorage.getItem(RESET_BACKUP_KEY)!==json)throw new Error('BACKUP_VERIFY_FAILED')}catch(e){alert('تعذر تثبيت النسخة الاحتياطية المحلية، لذلك لم يتم حذف أي بيانات.');return}exportBackup(snapshot);photoLoadEpoch++;brandLogoEpoch++;state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';state.textStyles={};try{localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(HISTORY_KEY);localStorage.removeItem(CARD_STYLE_KEY)}catch(e){}renderAll();closeModal('csBrandModal');alert('تمت إعادة الضبط. آخر نسخة محلية قبل المسح ما زالت متاحة للاستعادة.')}
 function onShow(){renderPreview();renderStatus()}
 function getTextStyle(role){return clone(state.textStyles[state.type]&&state.textStyles[state.type][role]||{})}
 function setTextStyle(role,value){if(!requireCard('cardsEditText'))return;state.textStyles[state.type]=state.textStyles[state.type]||{};state.textStyles[state.type][role]=clone(value||{});saveDraft();renderPreview()}
