@@ -148,6 +148,57 @@ async function verifyAuthStartupAndSecret(){
   // Reproduce a stale base owner session while a different verified offline
   // secondary session is active. Neither role, device nor permissions may leak.
   const hardening=read('web/security-hardening-runtime.js');
+
+  // A SecureStore write may finish after logout started. Deletion must
+  // serialize after that write; unfinished HMAC work must not reseal trust.
+  const trustWriteBegin=hardening.indexOf('let trustEpoch=0');
+  const trustWriteEnd=hardening.indexOf('async function loadTrust(){',trustWriteBegin);
+  const trustDeleteBegin=hardening.indexOf('async function clearTrust(){',trustWriteEnd);
+  const trustDeleteEnd=hardening.indexOf('async function biometricCheck(){',trustDeleteBegin);
+  if([trustWriteBegin,trustWriteEnd,trustDeleteBegin,trustDeleteEnd].some(x=>x<0))
+    throw new Error('offline SecureStore trust serialization code missing');
+  const buildTrust=vm.runInNewContext('(options)=>{'
+    +'let lastSealAt=0,offlineEpoch=0,offlineSession=false,saved=null,writes=0,deletes=0;'
+    +'const SECRET_KEY="secret",SECURE_TRUST_KEY="trust",'
+    +'window={AbuBassamSecurity:{isOnlineUnlocked:()=>true}},'
+    +'nativeAvailable=()=>true,online=()=>true,currentId=()=>"phone",'
+    +'normalizeDevice=value=>value,cleanLegacy=()=>{},console={warn(){}},'
+    +'nativeRequest=async(action,payload)=>{'
+    +'if(action==="secureGet")return "secret-key";'
+    +'if(action==="secureSet"){writes++;if(options.waitWrite)await options.waitWrite();saved=payload.value;return true}'
+    +'if(action==="secureDelete"){deletes++;saved=null;return true}},'
+    +'hmac=async()=>options.waitMac?await options.waitMac():"signed";'
+    +hardening.slice(trustWriteBegin,trustWriteEnd)
+    +hardening.slice(trustDeleteBegin,trustDeleteEnd)
+    +';return{seal,clearTrust,state:()=>({lastSealAt,writes,deletes,saved})}}');
+  let finishWrite=null;
+  const pendingWrite=buildTrust({waitWrite:()=>new Promise(resolve=>{finishWrite=resolve})});
+  const writing=pendingWrite.seal({device_id:'phone',active:true});
+  for(let i=0;i<12&&!finishWrite;i++)await Promise.resolve();
+  if(!finishWrite)throw new Error('SecureStore seal did not start');
+  const deleting=pendingWrite.clearTrust();
+  if(pendingWrite.state().deletes!==0)
+    throw new Error('SecureStore deletion jumped ahead of pending seal');
+  finishWrite();
+  await Promise.all([writing,deleting]);
+  const ended=pendingWrite.state();
+  if(ended.saved!==null||ended.deletes!==1||ended.writes!==1||ended.lastSealAt!==0)
+    throw new Error('offline trust resurrected or marked sealed after logout');
+  let finishMac=null;
+  const delayedMac=buildTrust({waitMac:()=>new Promise(resolve=>{finishMac=resolve})});
+  const signing=delayedMac.seal({device_id:'phone',active:true});
+  for(let i=0;i<12&&!finishMac;i++)await Promise.resolve();
+  if(!finishMac)throw new Error('HMAC test was never started');
+  await delayedMac.clearTrust();
+  finishMac('signed');
+  if(await signing!==false||delayedMac.state().writes!==0||
+    delayedMac.state().saved!==null)
+    throw new Error('revoked offline trust resealed after delayed HMAC');
+  const normalTrust=buildTrust({});
+  if(await normalTrust.seal({device_id:'phone',active:true})!==true||
+    normalTrust.state().writes!==1||!normalTrust.state().saved)
+    throw new Error('online owner cannot establish legitimate signed offline trust');
+
   const effectiveBegin=hardening.indexOf('function effectiveRole(){');
   const effectiveEnd=hardening.indexOf('async function refreshLimit()',effectiveBegin);
   if(effectiveBegin<0||effectiveEnd<=effectiveBegin)throw new Error('effective offline authorization functions missing');
