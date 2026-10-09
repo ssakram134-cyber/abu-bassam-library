@@ -293,6 +293,59 @@ async function verifyAuthStartupAndSecret(){
   if(validOffline.button.style.display!=='block')
     throw Error('valid offline fingerprint button never displayed');
 
+
+  // A delayed offline expiration check must not lock a newly unlocked
+  // account. Only one foreground timer should run and hidden timers stop.
+  const checkStart=hardening.indexOf('async function enforceOfflineSession(){');
+  const checkEnd=hardening.indexOf('function onSecurityState(',checkStart);
+  if(checkStart<0||checkEnd<=checkStart)
+    throw Error('offline expiration timer/epoch validation missing');
+  const buildOfflineTimer=vm.runInNewContext('(options)=>{'
+    +'let offlineSession=true,offlineEpoch=1,offlineBackgroundAt=0,locks=0,nextTimer=0;'
+    +'const callbacks=new Map(),document={visibilityState:"visible"},'
+    +'LOCK_MINUTES_KEY="auto",localStorage={getItem:()=>5},'
+    +'loadTrust=()=>options.loadTrust?options.loadTrust():Promise.resolve(null),'
+    +'lockOffline=()=>{locks++;offlineSession=false;offlineEpoch++},'
+    +'online=()=>false,revalidateOfflineSession=async()=>{},'
+    +'clearTimeout=id=>callbacks.delete(id),'
+    +'setTimeout=fn=>{const id=++nextTimer;callbacks.set(id,fn);return id},'
+    +'updateOfflineButton=()=>{},sealIfOnlineUnlocked=()=>{};'
+    +hardening.slice(checkStart,checkEnd)
+    +';return {enforceOfflineSession,scheduleOfflineCheck,onVisibility,'
+    +'exit:()=>{offlineSession=false;offlineEpoch++},visibility:x=>{document.visibilityState=x},'
+    +'timers:()=>callbacks.size,locks:()=>locks}}');
+  let completeOldCheck=null;
+  const previous=buildOfflineTimer({
+    loadTrust:()=>new Promise(resolve=>{completeOldCheck=resolve})
+  });
+  const oldCheck=previous.enforceOfflineSession();
+  if(!completeOldCheck)throw Error('offline expiration read did not start');
+  previous.exit();
+  completeOldCheck(null);
+  await oldCheck;
+  if(previous.locks()!==0)
+    throw Error('old offline check locked an unrelated newer session');
+  const expired=buildOfflineTimer({loadTrust:async()=>null});
+  await expired.enforceOfflineSession();
+  if(expired.locks()!==1)
+    throw Error('expired offline trust was not locked');
+  const valid=buildOfflineTimer({loadTrust:async()=>({schema:2})});
+  await valid.enforceOfflineSession();
+  if(valid.locks())throw Error('valid offline trust was incorrectly locked');
+  valid.scheduleOfflineCheck();
+  valid.scheduleOfflineCheck();
+  if(valid.timers()!==1)throw Error('offline checker scheduled duplicate timers');
+  valid.visibility('hidden');
+  valid.onVisibility();
+  if(valid.timers()!==0)
+    throw Error('offline checker continued while WebView was hidden');
+  valid.visibility('visible');
+  valid.onVisibility();
+  if(valid.timers()!==1)
+    throw Error('offline checker did not restart after WebView became visible');
+  if(hardening.includes('setInterval(enforceOfflineSession,60000)'))
+    throw Error('obsolete security interval still runs in background');
+
   const effectiveBegin=hardening.indexOf('function effectiveRole(){');
   const effectiveEnd=hardening.indexOf('async function refreshLimit()',effectiveBegin);
   if(effectiveBegin<0||effectiveEnd<=effectiveBegin)throw new Error('effective offline authorization functions missing');
