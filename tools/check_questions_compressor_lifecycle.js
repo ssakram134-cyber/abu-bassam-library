@@ -12,6 +12,7 @@ const inline = [...compressorHtml.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/scr
 assert.equal(inline.length, 1, 'Compressor must have exactly one inline runtime');
 new vm.Script(inline[0], { filename: 'image-compressor.html' });
 new vm.Script(host, { filename: 'productivity-tools-runtime.js' });
+assert.match(compressorHtml, /if\(b\.type!==mime\)/, 'Encoder must reject unsupported MIME fallback');
 
 // Reject unsupported image formats instead of silently saving HEIC/GIF/SVG bytes as JPEG.
 const elements = new Map(), alerts = [], revoked = [], preset = { dataset: { q: '80' }, disabled: false, classList: { toggle() {} } };
@@ -105,6 +106,9 @@ pending.then(() => {
   };
   assert.equal(check(frame, 'questions-ar.html'), true);
   assert.equal(check(frame, 'questions-en.html'), false);
+  frame.getAttribute = () => 'questions-en.html';
+  assert.equal(check(frame, 'questions-ar.html'), false, 'Requested source and loaded document must agree');
+  frame.getAttribute = () => 'questions-ar.html';
   frame.contentDocument.readyState = 'loading';
   assert.equal(check(frame, 'questions-ar.html'), false);
   frame.contentDocument.readyState = 'complete';
