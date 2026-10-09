@@ -42,6 +42,7 @@ async function seal(device){
     const sec=window.AbuBassamSecurity;
     return epoch===trustEpoch&&offlineStart===offlineEpoch&&online()&&
       record.device_id===currentId()&&
+      record.userId===String(window.AbuBassamCloud?.session?.()?.user?.id||'')&&
       (offlineSession||sec?.isOnlineUnlocked?.()===true)
   };
   if(!sameSession())return false;
