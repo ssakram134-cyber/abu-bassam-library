@@ -7,9 +7,9 @@ const client=read('web/branch-vault-runtime.js');
 function body(source,start,end){
  const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
  assert.ok(a>=0&&b>a,'Missing source '+start);
- const chunk=source.slice(a,b),begin=chunk.indexOf('{');
- assert.ok(begin>0);
- return chunk.slice(begin+1)
+ const chunk=source.slice(a,b),begin=chunk.indexOf('{'),close=chunk.lastIndexOf('}');
+ assert.ok(begin>0&&close>begin);
+ return chunk.slice(begin+1,close)
 }
 assert.doesNotMatch(customer,/DEFAULT_ALLOWED|legacyFallback\(/);
 const cStart="  if(data.role==='owner')return true;";
@@ -40,9 +40,9 @@ for(const p of [
  'user/branch-vault/device/item1/..',
  'user/branch-vault/device/item1/.'
 ])assert.equal(valid(p),false,'Wrong item/path must fail: '+p);
-const idFn=new Function('pathToId',body(client,'function vaultItemId(','\nasync function downloadVault(')+';return vaultItemId')(new Map());
-assert.equal(idFn('user/branch-vault/device/item1/rev1'),'item1','Use item id not revision');
-assert.equal(idFn('user/branch-vault/device/item1'),'');
+const idFn=new Function('path','pathToId',body(client,'function vaultItemId(','\nasync function downloadVault('));
+assert.equal(idFn('user/branch-vault/device/item1/rev1',new Map()),'item1','Use item id not revision');
+assert.equal(idFn('user/branch-vault/device/item1',new Map()),'');
 assert.match(branch,/if\(path&&!isItemRevision\(path,base\.user\.id,base\.deviceId,itemId\)\)/);
 assert.match(branch,/if\(path&&path===currentPath&&row\?\.data\?\.deleted!==true\)/);
 assert.equal((branch.match(/if\(!validItemId\(itemId\)\)return json/g)||[]).length,3);
