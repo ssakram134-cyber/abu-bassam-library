@@ -225,7 +225,7 @@ function planFolderTransfer(rows,id,destination,kind,position,expectedRevision){
   if(!Number.isSafeInteger(position)||position<1||position>to.length+1)throw new Error('VAULT_POSITION_INVALID');
   to.splice(position-1,0,entry);
   const changed=new Map(),now=new Date().toISOString();
-  for(const [items,targetFolder] of (from===to?[[to,folder]]:[[from,oldFolder],[to,folder]])){
+  for(const [items,targetFolder] of (from===to?[[to,folder]]:kind==='copy'?[[to,folder]]:[[from,oldFolder],[to,folder]])){
     items.forEach((item,index)=>{
       const order=index+1,requires=item.id===entry.id||item.manualOrder!==order||String(item.folder||'')!==targetFolder;
       if(requires)changed.set(item.id,{...item,folder:targetFolder,manualOrder:order,syncRevision:uuid(),syncState:'pending',updatedAt:now})
@@ -261,7 +261,7 @@ function folderOption(current){
 }
 async function organizeItem(id,kind,destination){
   const permission=kind==='copy'?'vaultAdd':'vaultMove';
-  if(!requireVault(permission))return false;
+  if(!requireVault(permission)||!requireVault('vaultEdit'))return false;
   const item=findItem(id);
   if(!item||item.deleted)return false;
   const folder=destination===undefined?(kind==='reorder'?String(item.folder||''):folderOption(item.folder)):String(destination||'');
@@ -289,13 +289,13 @@ async function organizeItem(id,kind,destination){
 async function moveItem(id){return organizeItem(id,'move')}
 async function reorderItem(id){return organizeItem(id,'reorder')}
 function copyItem(id){
-  if(!requireVault('vaultView')||!requireVault('vaultAdd'))return;
+  if(!requireVault('vaultView')||!requireVault('vaultAdd')||!requireVault('vaultEdit'))return;
   const item=findItem(id);if(!item||item.deleted)return;
   state.clipboard={id,revision:String(item.syncRevision||''),scope:syncScope(),mode:'copy',name:item.name};
   render()
 }
 function cutItem(id){
-  if(!requireVault('vaultView')||!requireVault('vaultMove'))return;
+  if(!requireVault('vaultView')||!requireVault('vaultMove')||!requireVault('vaultEdit'))return;
   const item=findItem(id);if(!item||item.deleted)return;
   state.clipboard={id,revision:String(item.syncRevision||''),scope:syncScope(),mode:'cut',name:item.name};
   render()
