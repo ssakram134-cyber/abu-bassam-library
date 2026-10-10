@@ -72,11 +72,13 @@ assert.equal(callbacks,0,'Unavailable PDF bridge must not log');
 assert.ok(editorApi.active(),'Editor must remain open after a failed PDF send');
 const rejected=editorApi.active();
 native.savePdfHtml=()=>{throw Error('NATIVE_STORAGE_UNAVAILABLE')};
+window.Android=native;
 assert.equal(editorApi.run(),false,'Native bridge throwing should keep editor and avoid false audit');
 assert.equal(callbacks,0);
 assert.equal(editorApi.active(),rejected);
 assert.ok(alerts.some(x=>x.includes('NATIVE_STORAGE_UNAVAILABLE')));
 delete native.savePdfHtml;
+delete window.Android;
 
 accepted=true;
 assert.equal(editorApi.run(),true,'Accepted PDF dispatch should complete');
