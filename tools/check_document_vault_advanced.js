@@ -23,6 +23,8 @@ need(advanced,'avaSaturation','saturation control');
 need(advanced,'function homography','true projective homography');
 need(advanced,'MAX_SOURCE_PIXELS','source memory guard');
 need(advanced,'MAX_OUTPUT_PIXELS','output memory guard');
+need(advanced,"document.addEventListener('abu-bassam-auth-changed',close)",'advanced editor must close on account change');
+need(advanced,'epoch!==sessionEpoch','advanced editor must reject stale session work');
 need(advanced,"syncState:'pending'",'new or replaced images must re-enter sync queue');
 need(offline,"createWorker('ara+eng'",'Arabic and English OCR');
 need(offline,"workerPath:'vendor/tesseract/worker.min.js'",'local OCR worker');
@@ -47,6 +49,7 @@ for(const token of ['__ABU_DOCUMENT_VAULT_ENCRYPTED_V1__','strongPassword','12 Ù
 if(fs.existsSync('web/encrypted-vault-hardening-runtime.js'))throw new Error('document vault advanced check failed: obsolete encrypted-vault hardening patch returned');
 const canonicalVault=read('web/document-vault-runtime.js');
 new Function(canonicalVault);
+for(const token of ['function clearVaultPrivateView()','handleVaultAuthChanged','epoch!==vaultSessionEpoch','folderKey(){return FOLDER_KEY'])need(canonicalVault,token,'account-isolated archive state and folders');
 for(const marker of ["TRASH_RETENTION_MS=30*24*60*60*1000","data-filter=\"trash\"","function restoreTrash(","function purgeTrash(","function purgeExpiredTrash(","deletedAt:now","remoteUpdatedAt:remoteVersion,syncState:'synced'","function render("] )need(canonicalVault,marker,'30-day trash and sync preservation');
 if(canonicalVault.includes("blob:null,syncState:'pending',deleted:true"))throw new Error('Legacy destructive vault deletion returned');
 (async()=>{
