@@ -14,7 +14,7 @@ assert.ok(src.includes('pdfjsLib.getDocument({data:ab,isEvalSupported:false})'),
 for(const domain of ['https://unpkg.com/','https://cdnjs.cloudflare.com/']){
  assert.ok(!src.includes(domain),'National ID runtime must not load document viewers from live CDN');
 }
-for(const marker of ['function safeDocumentHtml(','MAX_IMAGE_BATCH_BYTES=80*1024*1024','function printCanvas(','function buildScanPdf(','Math.sqrt(maxPixels/','window.Android?.','function merge()']){
+for(const marker of ['function safeDocumentHtml(','MAX_IMAGE_PIXELS=24_000_000','function zoomClose()','function close(id)','MAX_IMAGE_BATCH_BYTES=80*1024*1024','function printCanvas(','function buildScanPdf(','Math.sqrt(maxPixels/','window.Android?.','function merge()']){
  if(marker==='window.Android?.')continue;
  assert.ok(src.includes(marker),'Missing section protection: '+marker);
 }
@@ -26,7 +26,7 @@ const Android={printPages(...args){nativeEvents.push(['images',args])},printBase
 const window={addEventListener(){},Android,jspdf:{jsPDF:MockPdf}};
 const fields={natMergeCanvas:canvas(),natMergeModal:{classList:{add(){}}},natB:{value:100},natC:{value:100},natS:{value:100}};
 const document={createElement:()=>canvas(),getElementById:id=>fields[id]||null};
-const source=src.replace('window.Nat={','window.__nationalTest={S,drawItem,printCanvas,merge};window.Nat={');
+const source=src.replace('window.Nat={','window.__nationalTest={S,drawItem,printCanvas,drawMerge,merge};window.Nat={');
 assert.notEqual(source,src,'National test exports missing');
 new Function('window','document','localStorage','Android','jspdf','alert',source)(window,document,{getItem(){return null},setItem(){}},Android,window.jspdf,()=>{});
 const test=window.__nationalTest;
@@ -36,10 +36,15 @@ assert.ok(original.width*original.height<=24000000,'Full-resolution image exceed
 assert.ok(printed.width*printed.height<=3000000,'Print page exceeds 3MP');
 test.S.items=[make('front'),make('back')];test.S.sel=0;test.merge();
 assert.notEqual(test.S.front,test.S.back,'Merge used same front and back source');
+const previewPixels=fields.natMergeCanvas.width*fields.natMergeCanvas.height;
+const exportCanvas=test.drawMerge(canvas(),true);
+assert.ok(exportCanvas.width*exportCanvas.height>previewPixels,'Merged image export must exceed screen preview resolution');
+assert.ok(exportCanvas.width*exportCanvas.height<=8000000,'Merged image export must stay inside safe pixel budget');
+
 window.Nat.print();assert.equal(nativeEvents[0][0],'images');
 assert.equal(JSON.parse(nativeEvents[0][1][0]).length,2);
 test.S.items=Array.from({length:21},(_,i)=>make(String(i),1200,900));
 window.Nat.print();assert.equal(nativeEvents[1][0],'pdf');
 assert.equal(nativeEvents[1][1][1],'application/pdf');
 assert.equal(pdfs.at(-1).pageCount,21);
-console.log('National ID checks passed: safe export resolution, distinct front/back merge, 2-page native printing and 21-page PDF fallback.');
+console.log('National ID checks passed: bounded source images, full-resolution face merge, 2-page native printing and 21-page PDF fallback.');
