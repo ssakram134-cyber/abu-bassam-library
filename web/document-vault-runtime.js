@@ -159,7 +159,7 @@ async function copyItem(id){
  if((await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('الأرشيف ممتلئ (1000 ملف)، لا يمكن نسخ الملف.');
  const now=new Date().toISOString(),name=niceName(String(source.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة)$1'));
  const duplicate={...source,id:uuid(),name,folder,createdAt:now,updatedAt:now,lastOpenedAt:'',remoteUpdatedAt:'',syncState:'pending',deleted:false,deletedAt:'',favorite:false};
- try{await dbPut(duplicate);await refresh();logOperation('copy','نسخ ملف مع الحفاظ على الأصل',name+' ← '+(folder||'الرئيسية'));if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
+ try{await dbPut(duplicate);if(folder){const folders=readFolders();if(!folders.includes(folder)){folders.push(folder);try{localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}catch(e){}}}await refresh();logOperation('copy','نسخ ملف مع الحفاظ على الأصل',name+' ← '+(folder||'الرئيسية'));if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
  catch(e){alert('تعذر نسخ الملف: '+String(e?.message||e))}
 }
 async function toggleFavorite(id){if(!requireVault('vaultFavorite'))return;let item=findItem(id);if(!item)return;item.favorite=!item.favorite;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh()}
