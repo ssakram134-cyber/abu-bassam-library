@@ -6,6 +6,7 @@ for(const marker of [
   'const cameraRequestIdRef = useRef(null)',
   'const cameraSessionRef = useRef(0)',
   'openCamera(message.mode, message.frameKind, message.requestId)',
+  "if (message.type === 'cancelCamera') return closeCamera();",
   "inject('AbuBassamNativeCameraResult', { mode, requestId, dataUrl:",
   'if (cameraSession !== cameraSessionRef.current) return;'
 ])assert.ok(native.includes(marker),'Native camera must preserve request/session identity: '+marker);
@@ -30,7 +31,7 @@ const pending=t.handleImages([{name:'old.jpg',type:'image/jpeg',size:100}],false
 (async()=>{
  await Promise.resolve();await Promise.resolve();await Promise.resolve();
  assert.ok(reader,'Enqueued image read must start before auth switch');
- activeUser='second';assert.equal(typeof events['abu-bassam-auth-changed'],'function');events['abu-bassam-auth-changed']();
+ activeUser='second';assert.equal(typeof events['abu-bassam-auth-changed'],'function');events['abu-bassam-auth-changed']();assert.equal(requests.at(-1)?.type,'cancelCamera','Logout must close native camera overlay');
 assert.equal(t.S.items.length,0);assert.equal(t.S.doc,null);assert.equal(t.S.front,null);assert.equal(t.S.back,null);assert.equal(node('natResultCanvas').width,1);assert.equal(node('natMergeCanvas').width,1);assert.ok(!keys.has('abuNationalRecentV2'),'Shared legacy history must be purged');
 assert.ok(!t.S.recent.some(r=>r.name==='sensitive-name.pdf'));assert.notEqual(firstKey,t.recentKey());
 reader.result='data:image/jpeg;base64,QQ==';reader.onload();
