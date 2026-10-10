@@ -922,15 +922,16 @@ function ocrCamera(){if(!requireVault('vaultOcr'))return;if(!requestNative('ocr'
 function ocrGallery(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
 function ocrFilePicker(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
 async function ocrFile(file){if(!file)return;try{await recognizeText(await blobDataUrl(file))}finally{$('vOcrInput').value=''}}
-function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();let script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=()=>reject(new Error('تعذر تنزيل محرك قراءة النص'));document.head.appendChild(script)})}
-async function ensureOcr(){await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',()=>!!window.Tesseract);if(!window.Tesseract)throw new Error('محرك قراءة النص غير متاح')}
 async function recognizeText(dataUrl){
-  state.ocrImage=dataUrl;$('vOcrImage').src=dataUrl;$('vOcrImage').style.display='block';$('vOcrProgress').textContent='جاري تجهيز محرك OCR...';showModal('vOcrModal');
-  try{if(!window.Tesseract&&!sessionStorage.getItem('abuBassamOcrConsent')){if(!confirm('محرك OCR غير مضمّن بعد داخل هذه النسخة وسيحتاج تنزيله من الإنترنت لهذه الجلسة. لن تُرسل الصورة لخادم التطبيق. هل توافق على تنزيل المحرك؟'))throw new Error('أُلغي تنزيل محرك OCR');sessionStorage.setItem('abuBassamOcrConsent','1')}await ensureOcr();let result=await Tesseract.recognize(dataUrl,'ara+eng',{logger:event=>{if(event.status==='recognizing text')$('vOcrProgress').textContent='جاري قراءة النص محليًا... '+Math.round((event.progress||0)*100)+'%';else if(event.status)$('vOcrProgress').textContent='OCR: '+event.status}}),text=String(result&&result.data&&result.data.text||'').replace(/\n{3,}/g,'\n\n').trim();$('vOcrText').value=text;$('vOcrProgress').textContent=text?'تم استخراج النص ويمكنك تعديله أو نسخه ✓':'لم يظهر نص واضح؛ جرّب صورة أقرب وإضاءة أفضل.'}
-  catch(e){$('vOcrProgress').textContent='تعذر OCR: يحتاج اتصالاً بالإنترنت في أول تشغيل. '+(e.message||e)}
+  if(!dataUrl||!requireVault('vaultOcr'))return false;
+  const engine=window.AbuDocumentVaultOfflineOcr;
+  if(!engine?.recognize){$('vOcrProgress').textContent='محرك OCR المحلي غير جاهز؛ تحقق من ملفات التطبيق.';return false}
+  state.ocrImage=dataUrl;
+  showModal('vOcrModal');
+  return engine.recognize(dataUrl)
 }
 function onOcrPhoto(dataUrl){if(dataUrl)recognizeText(dataUrl)}
-function clearOcr(){$('vOcrText').value='';$('vOcrImage').removeAttribute('src');$('vOcrImage').style.display='none';$('vOcrProgress').textContent='اختر صورة واضحة لبدء قراءة النص.'}
+function clearOcr(){window.AbuDocumentVaultOfflineOcr?.cancel?.();state.ocrImage='';$('vOcrText').value='';$('vOcrImage').removeAttribute('src');$('vOcrImage').style.display='none';$('vOcrProgress').textContent='اختر صورة واضحة لبدء قراءة النص.'}
 function copyOcr(){let text=$('vOcrText').value;if(!text)return alert('لا يوجد نص للنسخ');if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>alert('تم نسخ النص ✓')).catch(()=>fallbackCopy());else fallbackCopy()}
 function selectOcr(){let area=$('vOcrText');area.focus();area.select()}
 function fallbackCopy(){let area=$('vOcrText');area.focus();area.select();document.execCommand('copy');alert('تم نسخ النص ✓')}
