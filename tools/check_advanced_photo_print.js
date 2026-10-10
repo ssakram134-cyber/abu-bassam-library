@@ -32,7 +32,7 @@ for(const marker of [
   "if(pageCanvases.length>20){let pdf=makePdfData()"
 ])need(home,marker,'main photo/print regression');
 const presetRuntime=read('print-presets-runtime.js');
-for(const marker of ['Array.isArray(stored)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
+for(const marker of ['Array.isArray(stored)','presets=presets.slice(0,30)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
 const posterRuntime=read('photo-print-advanced-runtime.js');
 need(posterRuntime,"if(typeof printDirectly==='function')return printDirectly()",'poster must use the single shared print path');
 need(home,"Android.printBase64('Abu_Bassam_Print.pdf'",'large poster PDF print fallback');
