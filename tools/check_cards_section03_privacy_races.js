@@ -3,6 +3,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs');
 const src=fs.readFileSync('web/cards-studio-runtime.js','utf8'),native=fs.readFileSync('index.js','utf8');
 new Function(src);assert.ok(native.includes('requestId: arguments[1]'));
 const events={},store=new Map(),readers=[],nativeRequests=[],cameraRequests=[];let active='first';
+store.set('abuBassamCardsStudioV4',JSON.stringify({login:{account:'legacy-account',password:'legacy-pass'},wifi:{password:'legacy-wifi'},reader:{result:'legacy-scan'}}));
+store.set('abuBassamPrintHistoryV4',JSON.stringify([{models:[{type:'login',data:{account:'legacy-account',password:'legacy-print'}},null]}]));
 const document={getElementById:id=>id==='csPrintFrame'?{set srcdoc(v){this.value=v},get srcdoc(){return this.value}}:null,addEventListener:(name,fn)=>events[name]=fn};
 const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 class FileReaderFake{readAsDataURL(){readers.push(this)}}
@@ -11,6 +13,12 @@ const exposed=src.replace('window.CardsStudio={','renderAll=()=>{};renderForm=()
 assert.notEqual(src,exposed);
 new Function('window','document','localStorage','FileReader','alert',exposed)(window,document,localStorage,FileReaderFake,()=>{});
 const state=window.__cardsTest.state;
+assert.equal(JSON.parse(store.get('abuBassamCardsStudioV4')).login.password,'');
+assert.equal(JSON.parse(store.get('abuBassamCardsStudioV4')).wifi.password,'');
+assert.equal(JSON.parse(store.get('abuBassamCardsStudioV4')).reader.result,'');
+assert.equal(JSON.parse(store.get('abuBassamPrintHistoryV4'))[0].models[0].data.password,'');
+assert.equal(JSON.parse(store.get('abuBassamCardsStudioV4')).login.account,'legacy-account');
+assert.equal(state.forms.login.account,'','Legacy drafts must not enter another private session');
 const img={name:'barcode.png',type:'image/png',size:1000};
 const complete=r=>{r.result='data:image/png;base64,QQ==';r.onload()};
 (async()=>{
