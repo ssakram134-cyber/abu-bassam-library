@@ -13,7 +13,7 @@ assert.match(functions,/await rm\(temporary,\{force:true\}\)/);
 assert.doesNotMatch(functions,/await writeFile\(path,data\)/);
 function factory(deps){
  const names=['stat','fetch','AbortController','setTimeout','clearTimeout','Buffer','DOWNLOAD_TIMEOUT_MS',
-   'mkdir','dirname','writeFile','rename','rm','process','projectRoot'];
+   'mkdir','dirname','writeFile','rename','rm','process','projectRoot','URL'];
  return new Function(...names,functions+';return{fetchWithTimeout,download}')(...names.map(n=>deps[n]))
 }
 (async()=>{
@@ -27,7 +27,7 @@ function factory(deps){
   AbortController:Controller,setTimeout:cb=>{timer=cb;return 17},clearTimeout:()=>{cleared++},
   Buffer,DOWNLOAD_TIMEOUT_MS:45000,mkdir:async()=>{},dirname:()=>'/',
   writeFile:async()=>{},rename:async()=>{},rm:async()=>{},process:{pid:200,stdout:{write:()=>{}}},
-  projectRoot:'/'
+  projectRoot:'/',URL:class{constructor(url){this.hostname=url.split('/')[2]}}
  });
  const pending=first.fetchWithTimeout('https://cdn.test/ocr');
  await Promise.resolve();await Promise.resolve();
@@ -49,7 +49,7 @@ function factory(deps){
   rename:async(src,dst)=>{assert.ok(store.has(src));assert.equal(store.has(dst),false);
     store.set(dst,store.get(src));store.delete(src);events.push('rename:'+dst)},
   rm:async p=>{store.delete(p);events.push('cleanup:'+p)},
-  process:{pid:200,stdout:{write:()=>{}}},projectRoot:'/'
+  process:{pid:200,stdout:{write:()=>{}}},projectRoot:'/',URL:class{constructor(url){this.hostname=url.split('/')[2]}}
  });
  await second.download(['https://cdn.test/asset'],'/assets/ara.traineddata.gz',30000);
  assert.equal(writeAttempts,2,'Write failure must retry and only publish the finished asset');
