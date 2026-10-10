@@ -12,7 +12,7 @@ assert.match(functions,/await writeFile\(temporary,data\);\s*await rename\(tempo
 assert.match(functions,/await rm\(temporary,\{force:true\}\)/);
 assert.doesNotMatch(functions,/await writeFile\(path,data\)/);
 function factory(deps){
- const names=['stat','fetch','AbortController','setTimeout','clearTimeout','Buffer','DOWNLOAD_TIMEOUT_MS',
+ const names=['stat','readFile','gunzipSync','fetch','AbortController','setTimeout','clearTimeout','Buffer','DOWNLOAD_TIMEOUT_MS',
    'mkdir','dirname','writeFile','rename','rm','process','projectRoot','URL'];
  return new Function(...names,functions+';return{fetchWithTimeout,download}')(...names.map(n=>deps[n]))
 }
@@ -23,7 +23,7 @@ function factory(deps){
   abort(){aborted=true;if(bodyReject)bodyReject(Error('AbortError'))}
  }
  const first=factory({
-  stat:async()=>({size:0}),fetch:async()=>({ok:true,arrayBuffer:()=>new Promise((resolve,reject)=>{bodyReject=reject})}),
+  stat:async()=>({size:0}),readFile:async()=>new Uint8Array(),gunzipSync:()=>new Uint8Array(12000),fetch:async()=>({ok:true,arrayBuffer:()=>new Promise((resolve,reject)=>{bodyReject=reject})}),
   AbortController:Controller,setTimeout:cb=>{timer=cb;return 17},clearTimeout:()=>{cleared++},
   Buffer,DOWNLOAD_TIMEOUT_MS:45000,mkdir:async()=>{},dirname:()=>'/',
   writeFile:async()=>{},rename:async()=>{},rm:async()=>{},process:{pid:200,stdout:{write:()=>{}}},
@@ -40,7 +40,12 @@ function factory(deps){
  let writeAttempts=0;
  const second=factory({
   stat:async p=>{if(!store.has(p))throw Error('ENOENT');return{size:store.get(p).length}},
-  fetch:async()=>({ok:true,arrayBuffer:async()=>new Uint8Array(32000).buffer}),
+  readFile:async p=>store.get(p),gunzipSync:()=>new Uint8Array(12000),
+  fetch:async()=>({ok:true,arrayBuffer:async()=>{
+    const bytes=new Uint8Array(32000).fill(32),s='var TesseractWorker = function () {};';
+    for(let i=0;i<s.length;i++)bytes[i]=s.charCodeAt(i);
+    return bytes.buffer
+  }}),
   AbortController:class{constructor(){this.signal={}}abort(){}},
   setTimeout:cb=>{cb();return 1},clearTimeout:()=>{},
   Buffer,DOWNLOAD_TIMEOUT_MS:45000,mkdir:async()=>{},dirname:()=>'/assets',
@@ -51,10 +56,10 @@ function factory(deps){
   rm:async p=>{store.delete(p);events.push('cleanup:'+p)},
   process:{pid:200,stdout:{write:()=>{}}},projectRoot:'/',URL:class{constructor(url){this.hostname=url.split('/')[2]}}
  });
- await second.download(['https://cdn.test/asset'],'/assets/ara.traineddata.gz',30000);
+ await second.download(['https://cdn.test/asset'],'/assets/tesseract.min.js',30000);
  assert.equal(writeAttempts,2,'Write failure must retry and only publish the finished asset');
- assert.equal(store.get('/assets/ara.traineddata.gz').length,32000);
- assert.equal(store.has('/assets/ara.traineddata.gz.partial-200'),false);
+ assert.equal(store.get('/assets/tesseract.min.js').length,32000);
+ assert.equal(store.has('/assets/tesseract.min.js.partial-200'),false);
  assert.equal(events.filter(e=>e.startsWith('rename:')).length,1);
  const scripts=JSON.parse(fs.readFileSync(path.join(__dirname,'..','package.json'),'utf8')).scripts['check:web'].split(' && ');
  assert.ok(scripts.length>=110);assert.equal(new Set(scripts).size,scripts.length);
