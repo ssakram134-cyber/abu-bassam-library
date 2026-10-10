@@ -21,7 +21,7 @@ const window={records:[
 ],JSZip:ZipMock,AbuBassamSecurity:{role:()=>'owner',device:()=>({device_id:'trusted-device'})},AbuBassamBranchVault:{localScopeOk:()=>true}};
 const mockSource=vault.replace('window.AbuDocumentVaultHardening=Object.freeze({','all=async()=>window.records;applyAtomic=async(items,opts)=>{window.restored={items,opts}};window.testVault={backupBytes,safeRestore};window.AbuDocumentVaultHardening=Object.freeze({');
 assert.notEqual(mockSource,vault,'Vault backup exports could not be tested');
-new Function('window','document','JSZip','crypto','localStorage','alert','confirm','prompt',mockSource)(window,{getElementById:()=>null},ZipMock,{randomUUID:()=> 'new-id'},{length:0,key:()=>null},()=>{},()=>true,()=>null);
+new Function('window','document','TextEncoder','JSZip','crypto','localStorage','alert','confirm','prompt',mockSource)(window,{getElementById:()=>null},require('node:util').TextEncoder,ZipMock,{randomUUID:()=> 'new-id'},{length:0,key:()=>null},()=>{},()=>true,()=>null);
 (async()=>{
  const zip=await window.testVault.backupBytes();
  const manifest=JSON.parse(await ZipMock.current.file('manifest.json').async('string'));
