@@ -38,6 +38,7 @@ for(const pattern of [
  /else await applyAtomic\(prepared/,
  /trxNEVER_MATCH/
 ].slice(0,-1))assert.match(hard,pattern);
+assert.match(hard,/const settingsEntry=zip\.file\('app-settings\.json'\);if\(settingsEntry&&!recovery\)/,'Replacement recovery must not overwrite phone settings');
 assert.match(cloud,/data-owner-recovery/);
 assert.match(cloud,/prompt\('نسخة الفرع:/);
 assert.match(cloud,/transferring!==ownerDeviceRecovery/);

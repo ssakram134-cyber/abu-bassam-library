@@ -21,6 +21,7 @@ for(const name of [
 const cloud=read('web/backup-center-runtime.js'),hard=read('web/document-vault-hardening-runtime.js');
 for(const [name,text] of [['cloud-backup',cloud],['hardening',hard],
 ['vault',read('web/document-vault-runtime.js')]])new vm.Script(text,{filename:name});
+assert.match(hard,/const settingsEntry=zip\.file\('app-settings\.json'\);if\(settingsEntry&&!recovery\)/,'Replacement recovery must not overwrite phone settings');
 assert.match(cloud,/data-owner-recovery/,'Owner device recovery button');
 assert.match(cloud,/role\(\)==='owner'/,'Only owner may transfer from old branch');
 assert.match(cloud,/const identity=stateScope\(\)/,'Snapshot initial account/device');
