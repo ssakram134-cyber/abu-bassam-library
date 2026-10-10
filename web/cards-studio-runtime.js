@@ -372,8 +372,8 @@ function printDocument(){
       const pageMarkup=(models,side)=>models.map(model=>model?
         `<div class="pair-card cut">${cardHtml(model,side)}</div>`:
         '<div class="duplex-empty" aria-hidden="true"></div>').join('');
-      if(wantFront)pages+=`<section class="duplex-page" style="${vars}">${pageMarkup(slots.front,'front')}</section>`;
-      if(wantBack)pages+=`<section class="duplex-page" style="${vars}">${pageMarkup(slots.back,'back')}</section>`;
+      if(wantFront)pages+=`<section class="duplex-page" data-duplex-side="front" data-duplex-flip="${state.flip}" style="${vars}">${pageMarkup(slots.front,'front')}</section>`;
+      if(wantBack)pages+=`<section class="duplex-page" data-duplex-side="back" data-duplex-flip="${state.flip}" style="${vars}">${pageMarkup(slots.back,'back')}</section>`;
     }
     css+='@page{size:A4 portrait;margin:0}';
   }else{throw new Error('طريقة الطباعة غير معروفة')}
