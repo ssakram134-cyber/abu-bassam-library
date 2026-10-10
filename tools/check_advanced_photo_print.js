@@ -19,5 +19,21 @@ if(!errors.length){
   const prod=read('productivity-tools-runtime.js');for(const m of ['photo-print-advanced-runtime.js','photo-geometry-runtime.js','print-presets-runtime.js','card-free-layout-runtime.js','poster-project-runtime.js'])need(prod,m,'productivity-tools-runtime.js');
   const env=read('envelopes.html'),cert=read('certificates.html');for(const m of ['design-studio-advanced-runtime.js','advanced-completion-runtime.js']){need(env,m,'envelopes.html');need(cert,m,'certificates.html')}
 }
+// Guard fixes in the source files, rather than installing additional runtime patches.
+const home=read('index.html');
+for(const marker of [
+  "r.onerror=()=>{failed++;done()}",
+  "loaded=new Array(files.length)",
+  "if(!uploadedImages.length){pageCanvases=[]",
+  "Math.max(0,Math.round(Math.max(0,Number(mm)||0)",
+  "if(iw+2*margin>pw||ih+2*margin>ph)",
+  "if(uploadedImages.length*count>maxJobs)",
+  "else if(selectedIndex===i)selectedIndex=Math.min(i,uploadedImages.length-1)",
+  "if(pageCanvases.length>20){let pdf=makePdfData()"
+])need(home,marker,'main photo/print regression');
+const presetRuntime=read('print-presets-runtime.js');
+for(const marker of ['Array.isArray(stored)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
+const posterRuntime=read('photo-print-advanced-runtime.js');
+need(posterRuntime,"Android.printBase64('Abu_Bassam_Poster.pdf'",'large poster PDF print fallback');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Advanced photo/print checks passed: local enhancement, undo/redo/flip, poster tiling with portrait/landscape and strict size caps, assembled preview/project reopen, direct crop/perspective, ruler preview, 8-handle transforms, card free layout, snap/grid, layers/hide, print-bound warning, and named print presets.\n');
