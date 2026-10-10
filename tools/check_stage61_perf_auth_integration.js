@@ -30,7 +30,9 @@ assert.doesNotMatch(deepLink,/DeviceEventEmitter\.emit\('abu-bassam-auth-callbac
 assert.match(app,/function onAuthAccountChanged\(/);
 assert.match(app,/if\(navigator\.onLine\)return setError/);
 assert.match(app,/OFFLINE_SIGNED_OUT_KEY/);
-assert.match(account,/abu-bassam-auth-changed/);
+assert.match(account,/cloud\(\)\?\.onSession\?\.\(/,'Account screen must refresh with session changes');
+assert.match(account,/c\.auth\.signOut\(\{scope:'local'\}\)/,'Account logout must terminate the active local session');
+assert.match(secure,/abu-bassam-auth-changed/,'Supabase session broadcaster must notify application security');
 assert.match(recovery,/exchangeCodeForSession\(code\)/);
 assert.match(recovery,/updateUser\(\{password/);
 assert.match(notify,/visibilityState==='hidden'/);
