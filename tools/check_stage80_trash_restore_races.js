@@ -6,15 +6,15 @@ new vm.Script(source);new vm.Script(hard);
 const section=(s,a,b)=>{const i=s.indexOf(a),j=s.indexOf(b,i+a.length);assert.ok(i>=0&&j>i);return s.slice(i,j)};
 const code=section(source,'const pendingTrashOperations=new Set();','\nfunction syncSnapshot(');
 function harness(config={}){
- const events=[],alerts=[],pendingTrashOperations=new Set(),state={filter:'trash'};let call=0;
- const env={pendingTrashOperations,requireVault:()=>true,
+ const events=[],alerts=[],state={filter:'trash'};let call=0;
+ const env={requireVault:()=>true,
  restoreTrashRecord:async id=>{events.push('restore:'+id);call++;if(config.restore)return config.restore()},
  permanentlyDeleteTrash:async id=>{events.push('delete:'+id);if(config.remove)return config.remove()},
  state,refresh:async()=>{events.push('refresh');if(config.refresh)throw Error('UI_CRASH')},
  autoSync:()=>false,navigator:{onLine:false},scheduleAutoSync:()=>{},
  logOperation:type=>events.push('log:'+type),alert:msg=>alerts.push(msg),confirm:()=>true};
- return {...new Function(...Object.keys(env),code+';return{restoreTrash,eraseTrash}')(...Object.values(env)),
- events,alerts,pendingTrashOperations,get calls(){return call}};
+ return {...new Function(...Object.keys(env),code+';return{restoreTrash,eraseTrash,pendingTrashOperations}')(...Object.values(env)),
+ events,alerts,get calls(){return call}};
 }
 (async()=>{
  let unblock;let x=harness({restore:()=>new Promise(resolve=>{unblock=resolve})});
