@@ -23,10 +23,12 @@ const DEFAULT_FORMS={
 };
 
 function clone(value){return JSON.parse(JSON.stringify(value))}
-function loadJson(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');if(Array.isArray(fallback))return Array.isArray(value)?value:clone(fallback);if(fallback&&typeof fallback==='object')return value&&typeof value==='object'&&!Array.isArray(value)?value:clone(fallback);return value??clone(fallback)}catch(e){return clone(fallback)}}
+function loadJson(key,fallback){if(!key)return clone(fallback);try{const value=JSON.parse(localStorage.getItem(key)||'null');if(Array.isArray(fallback))return Array.isArray(value)?value:clone(fallback);if(fallback&&typeof fallback==='object')return value&&typeof value==='object'&&!Array.isArray(value)?value:clone(fallback);return value??clone(fallback)}catch(e){return clone(fallback)}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
+function accountStorageKey(key){const cloud=window.AbuBassamCloud;if(!cloud||typeof cloud.session!=='function')return key;try{const id=cloud.session()?.user?.id;return id?key+':'+encodeURIComponent(String(id)):null}catch(e){return null}}
+let cardsSessionEpoch=0,galleryBarcodeSequence=0,pendingGalleryBarcodeId=null,pendingCameraBarcode=false,pendingCardPhoto=false;
 function cap(value,min,max){return Math.max(min,Math.min(max,Number(value)||0))}
-function fileData(file){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)})}
+function fileData(file){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||new Error('تعذر قراءة الملف'));reader.onabort=()=>reject(new Error('أُلغي استيراد الملف'));try{reader.readAsDataURL(file)}catch(e){reject(e)}})}
 
 function canCard(key){return window.AbuBassamSecurity?.role?.()==='owner'||window.AbuBassamPermissions?.can?.(key)===true}
 function requireCard(key){if(canCard(key))return true;const label=window.AbuBassamPermissions?.items?.find?.(x=>x.key===key)?.label||key;alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+label);return false}
@@ -36,7 +38,7 @@ function requireOutputPermission(){return state.output==='cr80'?requireCard('pri
 const state={
   type:'personal',
   brand:loadJson(BRAND_KEY,DEFAULT_BRAND),
-  forms:loadJson(STORAGE_KEY,DEFAULT_FORMS),
+  forms:loadJson(accountStorageKey(STORAGE_KEY),DEFAULT_FORMS),
   photo:'',
   photoTransform:{zoom:1,x:0,y:0,rotate:0},
   orientation:'landscape',
@@ -55,7 +57,7 @@ const state={
   watermarkOpacity:12,
   queue:[],
   textStyles:loadJson(CARD_STYLE_KEY,{}),
-  history:loadJson(HISTORY_KEY,[]),
+  history:loadJson(accountStorageKey(HISTORY_KEY),[]),
   lastBarcode:'',
   qrFromScan:false,
   previewHtml:'',
@@ -83,11 +85,11 @@ function savePrintSettings(){
  try{localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(Object.fromEntries(PRINT_FIELDS.map(key=>[key,state[key]]))))}catch(e){}
 }
 restorePrintSettings();
-try{let persisted=clone(state.forms);if(persisted.login)persisted.login.password='';if(persisted.wifi)persisted.wifi.password='';if(persisted.reader){persisted.reader.result='';persisted.reader.format=''}localStorage.setItem(STORAGE_KEY,JSON.stringify(persisted))}catch(e){}
-try{state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password='';if(model.type==='qr'&&model.fromScannedQr&&model.data)model.data.content=''}));localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){}
+try{let persisted=clone(state.forms);if(persisted.login)persisted.login.password='';if(persisted.wifi)persisted.wifi.password='';if(persisted.reader){persisted.reader.result='';persisted.reader.format=''}accountStorageKey(STORAGE_KEY)&&localStorage.setItem(accountStorageKey(STORAGE_KEY),JSON.stringify(persisted))}catch(e){}
+try{state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password='';if(model.type==='qr'&&model.fromScannedQr&&model.data)model.data.content=''}));accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(e){}
 
 function saveDraft(){
-  try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';if(safeForms.reader){safeForms.reader.result='';safeForms.reader.format=''}if(state.qrFromScan&&safeForms.qr)safeForms.qr.content='';localStorage.setItem(STORAGE_KEY,JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
+  try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';if(safeForms.reader){safeForms.reader.result='';safeForms.reader.format=''}if(state.qrFromScan&&safeForms.qr)safeForms.qr.content='';accountStorageKey(STORAGE_KEY)&&localStorage.setItem(accountStorageKey(STORAGE_KEY),JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
 }
 
 function referenceCardCss(printMode=false){
@@ -307,7 +309,7 @@ function printDocument(){let jobs=expandedJobs();if(!jobs.length)throw new Error
   }
   return `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body>${pages}</body></html>`
 }
-function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';if(copy.type==='qr'&&copy.fromScannedQr&&copy.data)copy.data.content='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(_){}}}
+function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';if(copy.type==='qr'&&copy.fromScannedQr&&copy.data)copy.data.content='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(_){}}}
 function renderHistory(){let el=$('csHistory');if(!el)return;el.innerHTML=state.history.length?state.history.map((item,index)=>`<div class="cs-hitem"><div><b>${esc(item.action)} — ${item.models.length} كارت</b><small>${new Date(item.time).toLocaleString('ar-IQ')} • ${esc(item.mode)}</small></div><div class="cs-hitem-actions"><button onclick="CardsStudio.loadHistory(${index})">إعادة</button><button onclick="CardsStudio.deleteHistory(${index})">حذف</button></div></div>`).join(''):'<div class="cs-empty">لا توجد عمليات طباعة محفوظة بعد.</div>'}
 
 async function domCardPng(side){let model=modelNow();validateSymbols([model]);let ratio=Math.max(.1,Number(model.height)||53.98)/Math.max(.1,Number(model.width)||85.6),w=Math.max(1,Math.floor(Math.min(2022,8192/ratio,Math.sqrt(12_000_000/ratio)))),h=Math.max(1,Math.floor(w*ratio)),css=fullPrintCss()+freeLayoutCss(),markup=`<div xmlns="http://www.w3.org/1999/xhtml" class="root"><style>${css}.root{margin:0;width:${w}px;height:${h}px;background:transparent}.box{width:${w}px;height:${h}px}</style><div class="box">${cardHtml(model,side)}</div></div>`,svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`,url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),image=new Image();try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر رسم الباج بصيغة SVG'));image.src=url});let canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;let context=canvas.getContext('2d');if(!context)throw new Error('تعذر إنشاء لوحة الباج');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0);return canvas.toDataURL('image/png')}finally{URL.revokeObjectURL(url)}}
@@ -331,7 +333,7 @@ function saveBrand(){if(!requireCard('cardsEdit'))return;state.brand.name=$('csB
 function resetBrand(){if(!requireCard('cardsEdit'))return;state.brand=clone(DEFAULT_BRAND);saveDraft();loadDefaultLogo();openBrand();renderPreview()}
 function pickBrandLogo(){if(!requireCard('cardsImportImage'))return;$('csBrandLogoInput').click()}
 function openHistory(){if(!requireCard('cardsView'))return;renderHistory();openModal('csHistoryModal')}
-function deleteHistory(index){if(!requireCard('cardsDelete'))return;state.history.splice(index,1);localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history));renderHistory()}
+function deleteHistory(index){if(!requireCard('cardsDelete'))return;state.history.splice(index,1);accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history));renderHistory()}
 function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;state.queue=item.models.map(model=>({model:clone(model),copies:1}));state.output=item.mode||'a4-pairs';savePrintSettings();renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
 function pickPhoto(){if(!requireCard('cardsImportImage'))return;$('csPhotoInput').click()}
 function cameraPhoto(){if(!requireCard('cardsImportImage'))return;if(!requestNative('cardPhoto'))$('csPhotoCameraInput').click()}
@@ -366,10 +368,10 @@ function resetData(){
   return
  }
  if(!confirm('تأكيد نهائي: هل تحققت من وجود النسخة الاحتياطية وصحتها؟ ستُحذف المسودات وسجل الكروت المحلي نهائيًا.'))return;
- resetArmed=false;state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(HISTORY_KEY);renderAll();closeModal('csBrandModal')
+ resetArmed=false;state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';if(accountStorageKey(STORAGE_KEY))localStorage.removeItem(accountStorageKey(STORAGE_KEY));if(accountStorageKey(HISTORY_KEY))localStorage.removeItem(accountStorageKey(HISTORY_KEY));renderAll();closeModal('csBrandModal')
 }
 function onShow(){renderPreview();renderStatus()}
-function clearScannedPrivateData(){state.lastBarcode='';state.forms.reader.result='';state.forms.reader.format='';if(state.qrFromScan){state.forms.qr.content='';state.qrFromScan=false}state.queue=state.queue.filter(x=>!x?.model?.fromScannedQr);state.history=state.history.filter(x=>!x.models?.some(m=>m?.fromScannedQr));state.activePrintHtml='';state.previewHtml=''}
+function clearScannedPrivateData(){cardsSessionEpoch++;pendingGalleryBarcodeId=null;pendingCameraBarcode=false;pendingCardPhoto=false;state.lastBarcode='';state.qrFromScan=false;state.forms=loadJson(accountStorageKey(STORAGE_KEY),DEFAULT_FORMS);Object.keys(DEFAULT_FORMS).forEach(key=>state.forms[key]=Object.assign({},DEFAULT_FORMS[key],state.forms[key]||{}));state.forms.login.password='';state.forms.wifi.password='';state.forms.reader.result='';state.forms.reader.format='';state.queue=[];state.history=loadJson(accountStorageKey(HISTORY_KEY),[]).filter(entry=>entry&&Array.isArray(entry.models)).slice(0,12);state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model?.type==='login'||model?.type==='wifi')&&model.data)model.data.password='';if(model?.fromScannedQr&&model.data)model.data.content=''}));state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.type='personal';state.activePrintHtml='';state.previewHtml='';resetArmed=false;const frame=$('csPrintFrame');if(frame)frame.srcdoc='';for(const id of ['csPhotoInput','csPhotoCameraInput','csBarcodeImageInput']){const input=$(id);if(input)input.value=''}if($('cardsCenter'))renderAll()}
 document.addEventListener('abu-bassam-auth-changed',clearScannedPrivateData);
 function getTextStyle(role){return clone(state.textStyles[state.type]&&state.textStyles[state.type][role]||{})}
 function setTextStyle(role,value){if(!requireCard('cardsEditText'))return;state.textStyles[state.type]=state.textStyles[state.type]||{};state.textStyles[state.type][role]=clone(value||{});saveDraft();renderPreview()}
