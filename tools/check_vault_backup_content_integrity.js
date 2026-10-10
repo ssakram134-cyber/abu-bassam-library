@@ -43,9 +43,9 @@ class JSZip{
  file(name,data){this.entries[name]=data;added.push(name)}
  async generateAsync(){return new Uint8Array([1,2,3])}
 }
-const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL','MAX_ZIP','APP','safeSettings','crypto','Date','CHUNK',packageSrc+';return packageBytes')(
+const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL','MAX_ZIP','APP','safeSettings','crypto','Date','CHUNK','stateScope',packageSrc+';return packageBytes')(
  {JSZip},()=>({device_id:'branch1',device_name:'فرع 1'}),JSZip,()=>Promise.resolve(files),
- 500*1024*1024,120*1024*1024,'4.3.2',()=>options,{randomUUID:()=> 'generated'},Date,5*1024*1024);
+ 500*1024*1024,120*1024*1024,'4.3.2',()=>options,{randomUUID:()=> 'generated'},Date,5*1024*1024,()=> 'user-1:branch1');
 (async()=>{
  const checks=section('async function backupItems(){','\nfunction safeSettings(){');
  const backupValidate=new Function('all','MAX_ITEMS',checks+';return backupItems')(
@@ -68,9 +68,9 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
  // Verify the actual zip manifest instead of a constructed source fixture.
  let captured;
  class Archive extends JSZip{file(name,data){super.file(name,data);if(name==='manifest.json')captured=JSON.parse(data)}}
- const packageAgain=new Function('window','dev','JSZip','backupItems','MAX_TOTAL','MAX_ZIP','APP','safeSettings','crypto','Date','CHUNK',packageSrc+';return packageBytes')(
+ const packageAgain=new Function('window','dev','JSZip','backupItems','MAX_TOTAL','MAX_ZIP','APP','safeSettings','crypto','Date','CHUNK','stateScope',packageSrc+';return packageBytes')(
  {JSZip:Archive},()=>({device_id:'branch1',device_name:'فرع 1'}),Archive,()=>Promise.resolve(files),
- 500*1024*1024,120*1024*1024,'4.3.2',()=>options,{randomUUID:()=> 'generated'},Date,5*1024*1024);
+ 500*1024*1024,120*1024*1024,'4.3.2',()=>options,{randomUUID:()=> 'generated'},Date,5*1024*1024,()=> 'user-1:branch1');
  await packageAgain();
  assert.equal(captured.items[0].manualOrder,1,'The cloud ZIP manifest must preserve ordering');
  assert.equal(captured.branchDeviceId,'branch1','Do not merge different branch namespaces');
@@ -94,10 +94,10 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
  const localEnd=restoreSource.indexOf('\nfunction strong(',localStart);
  assert.ok(localStart>=0&&localEnd>localStart);
  const localBackupSource=restoreSource.slice(localStart,localEnd);
- const localZip=new Function('window','all','JSZip','device','MAX_ITEMS','MAX_FILE','MAX_TOTAL','nice','settings','crypto',
+ const localZip=new Function('window','all','JSZip','device','MAX_ITEMS','MAX_FILE','MAX_TOTAL','nice','settings','crypto','trashScope','backupTrash','blobHash',
    localBackupSource+';return backupBytes')(
     {JSZip:Archive},()=>Promise.resolve(files),Archive,()=>({id:'branch1',name:'فرع 1'}),
-    1000,100*1024*1024,500*1024*1024,String,()=>options,{randomUUID:()=> 'new'});
+    1000,100*1024*1024,500*1024*1024,String,()=>options,{randomUUID:()=> 'new'},()=> 'user-1:branch1',async()=>[],async()=> 'a'.repeat(64));
  const localStartAt=added.length;
  await localZip();
  const localPaths=added.slice(localStartAt).filter(x=>x.startsWith('files/'));
