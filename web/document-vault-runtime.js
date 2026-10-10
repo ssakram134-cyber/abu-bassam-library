@@ -304,15 +304,16 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbDelete(item.id);continue}
+          if(remote?.deleted){await dbPut({...item,remoteUpdatedAt:remoteVersion,syncState:'synced'});continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
+          if(item.blob)await dbPut({...item,id:uuid(),remoteUpdatedAt:'',syncState:'synced',deletedAt:item.deletedAt||item.updatedAt});
           await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbPut(copy);await dbDelete(item.id);continue
+          await dbPut(copy);await dbPut({...item,deleted:true,deletedAt:remote?.deletedAt||remote?.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion});continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
@@ -323,11 +324,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       }
 
       if(item.deleted){
-        if(!row){await dbDelete(item.id);continue}
+        if(!row){await dbPut({...item,syncState:'synced'});continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
-        await service.upsert('vault',item.id,data);
-        await dbDelete(item.id);
+        const saved=await service.upsert('vault',item.id,data);
+        await dbPut({...item,syncState:'synced',remoteUpdatedAt:String(saved?.updated_at||'')});
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -348,7 +349,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbDelete(id);continue}
+      if(data.deleted){if(here){if(here.blob)await dbPut({...here,deleted:true,deletedAt:here.deletedAt||data.deletedAt||data.updatedAt||new Date().toISOString(),updatedAt:data.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion});else await dbDelete(id)}continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
