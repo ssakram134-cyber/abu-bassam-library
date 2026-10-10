@@ -74,9 +74,9 @@ function stableRebind(){
 }
 function installStableDrag(){window.setupDragAndResize=stableSetup;window.rebindAllDraggables=stableRebind;stableRebind()}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(IDB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(IDB_STORE))r.result.createObjectStore(IDB_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function idbPut(html,updatedAt=Date.now()){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put({id:IDB_KEY,html,updatedAt});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function idbGet(){try{const db=await dbOpen();const row=await new Promise((resolve,reject)=>{const r=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(IDB_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});db.close?.();return row}catch(e){return null}}
-async function idbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(IDB_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
+async function idbPut(html,updatedAt=Date.now()){let db;try{db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put({id:IDB_KEY,html,updatedAt});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});return true}catch(e){return false}finally{db?.close?.()}}
+async function idbGet(){let db;try{db=await dbOpen();const row=await new Promise((resolve,reject)=>{const r=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(IDB_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});return row}catch(e){return null}finally{db?.close?.()}}
+async function idbDelete(){let db;try{db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(IDB_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});return true}catch(e){return false}finally{db?.close?.()}}
 async function saveDurableDraft(show=false){
   if(draftResetting)return false;
   const container=$('pages-container');if(!container)return false;
@@ -106,7 +106,7 @@ async function resetDurableDraft(){
     await draftQueue.catch(()=>{});
     const deleted=await idbDelete();
     if(!deleted){alert('تعذر حذف المسودة من التخزين. بقيت محفوظة ولم تبدأ صفحة جديدة.');return false}
-    try{localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.removeItem(META_KEY);localStorage.removeItem(LOCAL_TS_KEY)}catch(e){}
+    try{localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.removeItem(META_KEY);localStorage.removeItem(LOCAL_TS_KEY)}catch(e){alert('تعذر تنظيف بيانات المسودة القديمة، ولن تُغلق الصفحة قبل معالجة المشكلة.');return false}
     location.reload();return true
   }finally{draftResetting=false}
 }
