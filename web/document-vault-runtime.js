@@ -321,8 +321,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
           if(remote?.deleted){await dbPut({...item,remoteUpdatedAt:remoteVersion,syncState:'synced'});continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
-          if(item.blob)await dbPut({...item,id:uuid(),remoteUpdatedAt:'',syncState:'synced',deletedAt:item.deletedAt||item.updatedAt});
-          await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+          const conflict=remoteItem(remote,remoteBlob,'');
+           conflict.id=uuid();conflict.name=niceName(String(remote.name||item.name).replace(/(\.[^.]+)?$/,' (تعديل من جهاز آخر)$1'));
+           conflict.syncState='pending';conflict.remoteUpdatedAt='';conflict.updatedAt=new Date().toISOString();
+           await dbPut(conflict);
+           await dbPut({...item,remoteUpdatedAt:remoteVersion,syncState:'pending'});
           continue
         }
         if(remote?.deleted){
