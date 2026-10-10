@@ -197,7 +197,7 @@ function installPicker(){
   const form=document.getElementById('csForm');
   if(!form||!window.CardsStudio||CardsStudio.currentType?.()!=='child')return;
   let old=document.getElementById('abuChildTemplatePicker');
-  if(old)old.remove();
+  if(old){const selector=old.querySelector('#abuChildTemplateSelect');if(selector)selector.value=active;old.querySelectorAll('.abu-child-template-chip').forEach(chip=>chip.classList.toggle('active',chip.dataset.templateId===active));return}
   form.insertAdjacentHTML('afterbegin',pickerHtml());
   const select=document.getElementById('abuChildTemplateSelect');
   if(select)select.onchange=()=>selectTemplate(select.value,false);
