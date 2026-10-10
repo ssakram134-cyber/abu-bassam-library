@@ -25,6 +25,7 @@ assert.match(payload,/العمر: 4/);
 assert.match(payload,/معلومات الطبيب/);
 assert.match(payload,/https:\/\/wa.me\/9647829667521/);
 assert.equal(funcs.guardianWhatsApp('wrong'),'');
+assert.equal(funcs.guardianWhatsApp('+9647829667521'),'https://wa.me/9647829667521');
 assert.equal(funcs.emergencyDial('0782 966 7521'),'07829667521');
 assert.equal(funcs.emergencyDial('+9647829667521'),'+9647829667521');
 assert.equal(funcs.emergencyDial('123'),'');
