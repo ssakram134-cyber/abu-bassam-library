@@ -3,8 +3,11 @@
 const $=id=>document.getElementById(id), q=s=>document.querySelector(s);
 const S={items:[],sel:-1,front:null,back:null,doc:null,mergeMode:'h',recent:[],docReady:false};
 const MAX_IMAGES=100,MAX_IMAGE_FILE_BYTES=24*1024*1024,MAX_IMAGE_BATCH_BYTES=80*1024*1024,MAX_IMAGE_PIXELS=24_000_000;
-try{const rows=JSON.parse(localStorage.getItem('abuNationalRecentV2')||'[]');S.recent=Array.isArray(rows)?rows.slice(0,30).map(r=>({id:r.id,type:String(r.type||''),name:String(r.name||''),time:r.time||new Date().toISOString()})):[];localStorage.setItem('abuNationalRecentV2',JSON.stringify(S.recent))}catch(e){S.recent=[]}
-function saveRecent(){try{localStorage.setItem('abuNationalRecentV2',JSON.stringify(S.recent.slice(0,30)))}catch(e){}}
+let nationalSessionEpoch=0;
+function recentKey(){const user=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),device=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{};return 'abuNationalRecentV2:'+user+':'+String(device.device_id||device.id||'device')}
+function loadRecent(){try{const rows=JSON.parse(localStorage.getItem(recentKey())||'[]');S.recent=Array.isArray(rows)?rows.slice(0,30).filter(r=>r&&typeof r==='object').map(r=>({id:r.id,type:String(r.type||'').slice(0,80),name:String(r.name||'').slice(0,180),time:String(r.time||'')})):[]}catch(e){S.recent=[]}renderRecent()}
+
+function saveRecent(){try{localStorage.setItem(recentKey(),JSON.stringify(S.recent.slice(0,30)))}catch(e){}}
 function recent(type,name){S.recent.unshift({id:Date.now()+Math.random(),type,name,time:new Date().toISOString()});S.recent=S.recent.slice(0,30);saveRecent();renderRecent()}
 function addCss(){let s=document.createElement('style');s.textContent=`
 .abu-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px 9px;background:var(--bg);position:relative;z-index:8}.abu-tab{min-height:50px;border:1px solid #b8957655;border-radius:13px;background:var(--surface2);color:var(--text);font-weight:900;font-size:8.5px;line-height:1.35;padding:5px 2px}.abu-tab.active{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-color:transparent}.abu-tab-off{display:none!important}
@@ -107,6 +110,15 @@ function pdfTools(){alert('أدوات PDF: افتح ملف PDF من زر «فت�
 function renderRecent(){let g=$('natRGrid');if(!g)return;g.innerHTML=S.recent.length?S.recent.map(r=>`<div class="nat-rcard"><div style="width:52px;height:58px;display:grid;place-items:center;background:#eee;border-radius:7px">📄</div><div><b>${escapeHtml(r.type)} — ${escapeHtml(r.name)}</b><small>${escapeHtml(String(r.time||''))}</small></div></div>`).join(''):'<div style="font-size:10px;color:var(--muted);padding:8px">لا توجد ملفات حديثة بعد.</div>'}
 function open(id){$(id).classList.add('show')}function close(id){$(id).classList.remove('show');if(id==='natDocModal'){S.doc=null;S.docReady=false;let container=$('natDocView');if(container)container.textContent=''}}
 function scrollRecent(){$('natRecent').scrollIntoView({behavior:'smooth'})}
+function clearNationalPrivateState(){
+ nationalSessionEpoch++;S.items=[];S.sel=-1;S.front=null;S.back=null;S.doc=null;S.docReady=false;S.mergeMode='h';
+ const img=$('natCanvas');if(img){img.width=1;img.height=1;img.style.display='none'}
+ for(const id of ['natDocView','natThumbs','natRGrid']){const node=$(id);if(node)node.textContent=''}
+ for(const id of ['natDocModal','natMergeModal','natResultModal','natZoom','natCropModal'])$(id)?.classList.remove('show');
+ zoomSource='';const zoomImg=$('natZoomImg');if(zoomImg)zoomImg.removeAttribute('src');
+ loadRecent();renderRecent()
+}
+document.addEventListener('abu-bassam-auth-changed',clearNationalPrivateState);
 function scan(){if(requestNativeCamera('scan'))return;$('natScanInput').value='';$('natScanInput').click()}
 function importImages(){$('natImgInput').value='';$('natImgInput').click()}
 function residence(){importImages()}
@@ -121,5 +133,5 @@ function zoomPrint(){if(!zoomSource)return;if(!window.Android?.printPages)return
 window.Nat={scan,importImages,maker,merge,residence,docs,pdfTools,scrollRecent,preset,crop,applyCrop,autoCrop,rotate,compare,del,move,acceptResult,retake,manualFromResult,rotateResult,restoreOriginal,viewOriginal,saveJpg,savePdf,print,mergeMode,saveMerge,mergePdf,printMerge,saveOpenDoc,galleryOpenDoc,pdfOpenDoc,printOpenDoc,close,zoomClose,zoomPaper,zoomGallery,zoomPdf,zoomPrint};
 window.AbuBassamNativeCameraResult=function(result){if(!result)return;if(result.mode==='barcode'){if(window.CardsStudio&&CardsStudio.onBarcode)return CardsStudio.onBarcode(result);return}if(result.mode==='scan'||result.mode==='maker')addNativeImage(result.dataUrl,result.mode)};
 window.AbuBassamNativeCameraError=function(message){alert(message||'تعذر تشغيل الكاميرا. تحقق من منح إذن الكاميرا للتطبيق.')};
-window.addEventListener('DOMContentLoaded',()=>{build();setupZoomTouch()});
+window.addEventListener('DOMContentLoaded',()=>{build();setupZoomTouch();loadRecent()});
 })();
