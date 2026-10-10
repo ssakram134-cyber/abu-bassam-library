@@ -23,7 +23,7 @@ need(advanced,'avaSaturation','saturation control');
 need(advanced,'function homography','true projective homography');
 need(advanced,'MAX_SOURCE_PIXELS','source memory guard');
 need(advanced,'MAX_OUTPUT_PIXELS','output memory guard');
-need(advanced,"syncState='pending'",'edited image must re-enter sync queue');
+need(advanced,"syncState:'pending'",'new or replaced images must re-enter sync queue');
 need(offline,"createWorker('ara+eng'",'Arabic and English OCR');
 need(offline,"workerPath:'vendor/tesseract/worker.min.js'",'local OCR worker');
 need(offline,"langPath:'vendor/tesseract/lang'",'local OCR languages');
