@@ -18,6 +18,9 @@ assert.doesNotMatch(offline,/https?:\/\/|MutationObserver|setInterval\(/);
 assert.doesNotMatch(core,/https:\/\/cdn\.jsdelivr\.net\/npm\/tesseract/i);
 assert.match(core,/return engine\.recognize\(dataUrl\)/);
 assert.match(core,/if\(!requireVault\('vaultAdd'\)\)return false/);
+assert.match(core,/clearOcr\(\);closeModal\('vOcrModal'\)/);
+assert.doesNotMatch(offline,/input\.onchange=|MutationObserver|AbuBassamNativeCameraResult=/);
+assert.match(offline,/s\.onerror=\(\)=>\{s\.remove\(\);reject/);
 assert.match(access,/vaultOcr:'قراءة النص من الصور'/);
 for(const file of ['tesseract.min.js','worker.min.js','lang/ara.traineddata.gz','lang/eng.traineddata.gz'])
  assert.ok(assets.includes("'"+file+"'"),file+' must be embedded by Android assets pipeline');
