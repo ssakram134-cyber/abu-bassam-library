@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const dir=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(dir,p),'utf8');
 const pkg=JSON.parse(read('package.json')),checks=(pkg.scripts['check:web']||'').split(' && ');
-assert.equal(checks.length,44,'PR27 integration must preserve all 33 baseline + 6 PR27 + 4 main hotfix + 1 gate');
+assert.ok(checks.length>=44,'Stage60 root must retain all baseline, PR27 and main hotfix tests');
 assert.equal(new Set(checks).size,checks.length,'Duplicate registered checks');
 for(const item of checks){
  assert.match(item,/^node tools\/check_[\w]+\.js$/);
@@ -47,4 +47,4 @@ assert.match(read('index.js'),/CameraView/,'Keep Expo native entrypoint unchange
 assert.match(read('web/index.html'),/<!doctype html/i);
 const action=read('.github/workflows/android.yml');
 assert.match(action,/if:\s*\$\{\{\s*false\s*\}\}/,'Android Actions build must stay disabled');
-console.log('PR27-main integration safety passed: 44 unique checks, six feature checks, four merged hotfix gates, backupDelete, permission isolation, metadata-first reset and inert Android Actions.');
+console.log('PR27-main integration safety passed: '+checks.length+' unique checks, six feature checks, four merged hotfix gates, backupDelete, permission isolation, metadata-first reset and inert Android Actions.');

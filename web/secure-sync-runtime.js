@@ -12,7 +12,7 @@
   let readyPromise = null;
   let authBusy = false;
   let vaultAdapter = null;
-  let authMemory = '';
+  const authMemory = new Map();
   const nativePending = new Map();
   let nativeSeq = 0;
 
@@ -37,20 +37,32 @@
   };
   window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable };
 
-  async function authNative(action, value = '') {
+  // Supabase uses multiple storage keys: the session token and the PKCE code verifier.
+  // Keep the existing session key unchanged to retain previous sign-ins on upgrade.
+  function authSecureKey(requestedKey) {
+    const requested = String(requestedKey || '');
+    if (requested === AUTH_KEY) return AUTH_KEY;
+    if (!requested.startsWith(AUTH_KEY + '-')) throw new Error('AUTH_STORAGE_KEY_NOT_ALLOWED');
+    const suffix = requested.slice(AUTH_KEY.length + 1);
+    if (!/^[a-z0-9-]{1,40}$/i.test(suffix)) throw new Error('AUTH_STORAGE_KEY_NOT_ALLOWED');
+    // Android's native SECURE_KEY accepts only letters, digits and underscores.
+    return AUTH_KEY + '_storage_' + suffix.replace(/-/g, '_');
+  }
+
+  async function authNative(action, key, value = '') {
     if (!nativeAvailable()) {
-      if (action === 'secureGet') return authMemory;
-      if (action === 'secureSet') { authMemory = String(value || ''); return true; }
-      if (action === 'secureDelete') { authMemory = ''; return true; }
+      if (action === 'secureGet') return authMemory.get(key) || '';
+      if (action === 'secureSet') { authMemory.set(key, String(value || '')); return true; }
+      if (action === 'secureDelete') { authMemory.delete(key); return true; }
       throw new Error('NATIVE_SECURITY_REQUIRED');
     }
-    return nativeRequest(action, { key: AUTH_KEY, value: String(value || '') });
+    return nativeRequest(action, { key, value: String(value || '') });
   }
 
   const authStorage = {
-    getItem: async () => String(await authNative('secureGet') || ''),
-    setItem: async (_key, value) => { await authNative('secureSet', value); },
-    removeItem: async () => { await authNative('secureDelete'); },
+    getItem: async (key) => String(await authNative('secureGet', authSecureKey(key)) || ''),
+    setItem: async (key, value) => { await authNative('secureSet', authSecureKey(key), value); },
+    removeItem: async (key) => { await authNative('secureDelete', authSecureKey(key)); },
   };
 
   const client = window.supabase?.createClient
@@ -398,8 +410,11 @@
     localStorage.removeItem('abuBassamLocalModeV1');
     ready().catch(() => updateStatus('تعذر التحقق من جلسة المزامنة'));
     setInterval(() => {
-      wrapActions();
+      if(document.visibilityState!=='hidden')wrapActions();
     }, 120000);
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible')wrapActions();
+    });
   }
 
   function registerVaultAdapter(adapter) {
