@@ -88,6 +88,30 @@ restorePrintSettings();
 try{let persisted=clone(state.forms);if(persisted.login)persisted.login.password='';if(persisted.wifi)persisted.wifi.password='';if(persisted.reader){persisted.reader.result='';persisted.reader.format=''}accountStorageKey(STORAGE_KEY)&&localStorage.setItem(accountStorageKey(STORAGE_KEY),JSON.stringify(persisted))}catch(e){}
 try{state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password='';if(model.type==='qr'&&model.fromScannedQr&&model.data)model.data.content=''}));accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(e){}
 
+// Keep historical shared files for manual recovery, but scrub secrets from their legacy copies.
+// Never import shared legacy drafts into a different authenticated user's private namespace.
+try{
+ for(const key of [STORAGE_KEY,HISTORY_KEY]){
+  if(!localStorage.getItem(key)||key===accountStorageKey(key))continue;
+  if(key===STORAGE_KEY){
+   const old=loadJson(key,{});
+   if(old.login&&typeof old.login==='object')old.login.password='';
+   if(old.wifi&&typeof old.wifi==='object')old.wifi.password='';
+   if(old.reader&&typeof old.reader==='object'){old.reader.result='';old.reader.format=''}
+   localStorage.setItem(key,JSON.stringify(old));
+  }else{
+   const old=loadJson(key,[]);
+   old.forEach(entry=>(entry?.models||[]).forEach(model=>{
+    if(!model||!model.data)return;
+    if(model.type==='login'||model.type==='wifi')model.data.password='';
+    if(model.type==='qr'&&model.fromScannedQr)model.data.content='';
+   }));
+   localStorage.setItem(key,JSON.stringify(old));
+  }
+ }
+}catch(e){}
+
+
 function saveDraft(){
   try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';if(safeForms.reader){safeForms.reader.result='';safeForms.reader.format=''}if(state.qrFromScan&&safeForms.qr)safeForms.qr.content='';accountStorageKey(STORAGE_KEY)&&localStorage.setItem(accountStorageKey(STORAGE_KEY),JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
 }
