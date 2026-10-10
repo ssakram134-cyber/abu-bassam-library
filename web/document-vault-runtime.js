@@ -921,7 +921,7 @@ function openOcr(target='clipboard'){if(!requireVault('vaultOcr'))return;state.o
 function ocrCamera(){if(!requireVault('vaultOcr'))return;if(!requestNative('ocr')){$('vOcrInput').value='';$('vOcrInput').setAttribute('capture','environment');$('vOcrInput').click()}}
 function ocrGallery(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
 function ocrFilePicker(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
-async function ocrFile(file){if(!file)return;try{await recognizeText(await blobDataUrl(file))}finally{$('vOcrInput').value=''}}
+async function ocrFile(file){if(!file)return false;try{return await recognizeText(await blobDataUrl(file))}catch(e){$('vOcrProgress').textContent='تعذر قراءة الصورة محليًا: '+String(e?.message||e);return false}finally{$('vOcrInput').value=''}}
 async function recognizeText(dataUrl){
   if(!dataUrl||!requireVault('vaultOcr'))return false;
   const engine=window.AbuDocumentVaultOfflineOcr;
