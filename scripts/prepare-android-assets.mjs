@@ -105,4 +105,5 @@ for(const [relative,,minBytes] of DOCUMENT_ASSETS){
 }
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
-process.stdout.write('Offline OCR and PDF/DOCX/XLSX viewer assets are embedded in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('Offline PDF/DOCX/XLSX viewer assets are embedded in generated Android assets.\n');
