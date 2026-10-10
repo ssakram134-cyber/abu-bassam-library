@@ -50,7 +50,7 @@ new Function(canonicalVault);
 for(const marker of ["TRASH_RETENTION_MS=30*24*60*60*1000","data-filter=\"trash\"","function restoreTrash(","function purgeTrash(","function purgeExpiredTrash(","deletedAt:now","remoteUpdatedAt:remoteVersion,syncState:'synced'","function render("] )need(canonicalVault,marker,'30-day trash and sync preservation');
 if(canonicalVault.includes("blob:null,syncState:'pending',deleted:true"))throw new Error('Legacy destructive vault deletion returned');
 (async()=>{
- const store=new Map(),window={addEventListener(){}},document={getElementById(){return null}},warnings=[];
+ const store=new Map(),window={addEventListener(){},AbuBassamSecurity:{role:()=> 'owner',device:()=>({device_id:'test-device'})},AbuBassamBranchVault:{localScopeOk:()=>true},AbuBassamCloud:{session:()=>({user:{id:'test-user'}})}},document={getElementById(){return null}},warnings=[];
  const record={id:'test-record',name:'test-document.pdf',category:'file',mime:'application/pdf',size:32,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),blob:{size:32},syncState:'synced',deleted:false};
  store.set(record.id,record);
  const text=canonicalVault.replace('window.DocumentVault={',"dbAll=async()=>[...__store.values()];dbPut=async item=>{__store.set(item.id,item)};dbDelete=async id=>{__store.delete(id)};requireVault=()=>true;window.__vaultTest={refresh,deleteItem,restoreTrash,purgeExpiredTrash,visibleItems,setFilter,copyItem};window.DocumentVault={");
