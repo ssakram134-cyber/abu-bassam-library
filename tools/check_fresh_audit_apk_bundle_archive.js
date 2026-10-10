@@ -35,7 +35,7 @@ input=new Binary(3000);const marker='assets/index.android.bundle';for(let i=0;i<
 assert.throws(()=>verify('fake.apk'),/central directory is missing/,'A random signed blob with the name substring is rejected');
 input=zipWithBundle(10);
 assert.throws(()=>verify('small.apk'),/empty, encrypted, or uses an unsupported encoding/,'Truncated/minimal JS bundle is rejected');
-input=zipWithBundle(1200);input[50]=66;
+input=zipWithBundle(1200);input[30+'assets/index.android.bundle'.length+100]=66;
 assert.throws(()=>verify('corrupt.apk'),/CRC-32 does not match/,'Tampering with same-size JS bytes must invalidate ZIP integrity');
 input=zipWithBundle(1200);input[0]=0;
 assert.throws(()=>verify('broken.apk'),/no local ZIP file entry/,'A forged central directory without a local ZIP entry is rejected');
