@@ -967,7 +967,8 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
     const service=cloud(),pending=(await dbAll()).filter(item=>item.syncState==='pending');
     for(const item of pending){
       const row=await service.get('vault',item.id),remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
-      const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
+      // A file without a known server baseline must not overwrite an existing remote row.
+      const remoteChanged=!!row&&(!knownVersion||remoteVersion!==knownVersion);
       if(remoteChanged){
         if(item.deleted){
           if(remote?.deleted){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
@@ -994,10 +995,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       }
 
       if(item.deleted){
-        if(!row){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
+        // Persist a new tombstone too: a simultaneous remote create must be rejected, not resurrected.
+        // A never-synced local file still gets a server deletion marker for this ID.
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:true,storagePath:''};
-        await service.upsert('vault',item.id,data);
+        await service.upsert('vault',item.id,data,remoteVersion||null);
         if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
@@ -1007,11 +1009,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);
       const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:false,storagePath:newPath};
       let saved;
-      try{saved=await service.upsert('vault',item.id,data)}
-      catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
+      try{saved=await service.upsert('vault',item.id,data,remoteVersion||null)}
+      catch(error){await service.removeVault(newPath,true).catch(()=>{});throw error}
       const confirmed=await dbMarkSyncedIfUnchanged(item,saved?.updated_at);
       if(!confirmed)autoSyncRerunRequested=true;
-      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
+      if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath,true).catch(()=>{})
     }
 
     setSyncStatus('جاري استقبال تغييرات الأجهزة...');
@@ -1035,7 +1037,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
     await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
-  }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
+  }catch(error){if(String(error?.message||error).includes('VAULT_VERSION_CONFLICT'))autoSyncRerunRequested=true;setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
   finally{state.syncing=false;if(autoSyncRerunRequested){autoSyncRerunRequested=false;scheduleAutoSync(100)}}
 }
 function onShow(){if(!updateVaultAccessUi())return false;refresh();let last=Number(syncGet(LAST_SYNC_KEY)||0);if(last)setSyncStatus('آخر مرة '+formatTime(last));return true}

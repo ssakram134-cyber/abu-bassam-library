@@ -65,18 +65,22 @@ Deno.serve(async(req:Request)=>{
       const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,900,{download:false});if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
       return json({ok:true,path,url:data.signedUrl,expiresIn:900});
     }
-    if(action==='delete'&&req.method==='DELETE'){
+    const discardUpload=action==='discard-upload'&&req.method==='DELETE';
+    if((action==='delete'&&req.method==='DELETE')||discardUpload){
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),requested=String(body?.path||'');
       if(!validItemId(itemId))return json({error:'VAULT_ID_REQUIRED'},400);
-      const base=await context(req,'vaultDelete');
+      const base=discardUpload?await context(req,'vaultSync'):await context(req,'vaultDelete');
+      if(discardUpload&&!permissionEnabled(base.device,'vaultAdd')&&!permissionEnabled(base.device,'vaultEdit'))return json({error:'VAULT_EDIT_NOT_ALLOWED'},403);
       if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
       const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
       if(rowError)return json({error:'VAULT_METADATA_UNAVAILABLE'},500);
       const currentPath=String(row?.data?.storagePath||'');
       const path=requested||currentPath;
+      if(discardUpload&&!requested)return json({error:'VAULT_PATH_REQUIRED'},400);
       if(path&&!isItemRevision(path,base.user.id,base.deviceId,itemId))return json({error:'VAULT_PATH_INVALID'},403);
       // Do not remove a revision referenced by active server metadata.
       if(path&&path===currentPath&&row?.data?.deleted!==true)return json({error:'VAULT_ACTIVE_REVISION'},409);
+      if(discardUpload&&path===currentPath)return json({error:'VAULT_ACTIVE_REVISION'},409);
       if(path){const {error}=await base.admin.storage.from(BUCKET).remove([path]);if(error)return json({error:error.message},500)}
       return json({ok:true});
     }
