@@ -45,17 +45,19 @@ function validateSigningConfiguration() {
 
 function findApk(dir) {
   if (!fs.existsSync(dir)) return null;
-  const stack = [dir];
+  const stack = [dir], found = [];
   while (stack.length) {
     const cur = stack.pop();
     for (const name of fs.readdirSync(cur)) {
-      const p = path.join(cur, name);
-      const st = fs.statSync(p);
+      const p = path.join(cur, name), st = fs.statSync(p);
       if (st.isDirectory()) stack.push(p);
-      else if (/\.apk$/i.test(name)) return p;
+      else if (st.isFile() && /\.apk$/i.test(name)) found.push(p);
     }
   }
-  return null;
+  if (found.length > 1) {
+    throw new Error('Multiple release APKs found; cannot safely choose an arbitrary build: ' + found.sort().join(', '));
+  }
+  return found[0] || null;
 }
 
 function ensureReleaseSigningHook(configured) {
@@ -71,6 +73,15 @@ function ensureReleaseSigningHook(configured) {
 
 function verifyBundle(apk) {
   const zip = fs.readFileSync(apk);
+  const MAX_BUNDLE_BYTES = 64 * 1024 * 1024;
+  function crc32(bytes) {
+    let crc = -1;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let n = 0; n < 8; n++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    return (crc ^ -1) >>> 0;
+  }
   const bad = (reason) => { throw new Error('Embedded JS bundle validation failed: ' + reason); };
   if (zip.length < 22) bad('APK is not a complete ZIP archive');
   // ZIP end-of-central-directory can be up to 65,535 bytes behind EOF.
@@ -94,6 +105,7 @@ function verifyBundle(apk) {
     if (cursor + 46 > eocd || zip.readUInt32LE(cursor) !== 0x02014b50) bad('Invalid ZIP directory entry');
     const flags = zip.readUInt16LE(cursor + 8);
     const method = zip.readUInt16LE(cursor + 10);
+    const expectedCrc = zip.readUInt32LE(cursor + 16);
     const compressed = zip.readUInt32LE(cursor + 20);
     const expanded = zip.readUInt32LE(cursor + 24);
     const nameLength = zip.readUInt16LE(cursor + 28);
@@ -104,7 +116,8 @@ function verifyBundle(apk) {
     if (next > eocd) bad('ZIP filename or metadata exceeds directory bounds');
     const name = zip.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8');
     if (name === target) {
-      if (expanded < 1000 || compressed === 0 || (flags & 1) || (method !== 0 && method !== 8)) {
+      if (expanded < 1000 || compressed === 0 || compressed > MAX_BUNDLE_BYTES ||
+          expanded > MAX_BUNDLE_BYTES || (flags & 1) || (method !== 0 && method !== 8)) {
         bad('Embedded JS bundle is empty, encrypted, or uses an unsupported encoding');
       }
       if (localOffset + 30 > directoryStart || zip.readUInt32LE(localOffset) !== 0x04034b50) bad('JS bundle has no local ZIP file entry');
@@ -114,8 +127,9 @@ function verifyBundle(apk) {
       if (zip.subarray(localOffset + 30, localOffset + 30 + localNameLength).toString('utf8') !== target ||
           dataStart + compressed > directoryStart) bad('JS bundle local file is missing or incomplete');
       const bytes = zip.subarray(dataStart, dataStart + compressed);
-      const contents = method === 8 ? inflateRawSync(bytes) : bytes;
+      const contents = method === 8 ? inflateRawSync(bytes, { maxOutputLength: MAX_BUNDLE_BYTES }) : bytes;
       if (contents.length !== expanded || contents.length < 1000) bad('Embedded JS bundle content is incomplete');
+      if (crc32(contents) !== expectedCrc) bad('Embedded JS bundle CRC-32 does not match ZIP directory');
       return contents.length;
     }
     cursor = next;
