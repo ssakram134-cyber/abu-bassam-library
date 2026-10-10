@@ -84,6 +84,7 @@ const posterRuntime=read('photo-print-advanced-runtime.js');
 need(posterRuntime,"if(typeof printDirectly==='function')return printDirectly()",'poster must use the single shared print path');
 need(home,"Android.printBase64('Abu_Bassam_Print.pdf'",'large poster PDF print fallback');
 for(const m of ['pagePrintMeta?.paper||getPaperSize()','pagePrintMeta?.paperKey||getPaperPrintKey()','pagePrintMeta?.dpi??printDpi()'])need(home,m,'print output dimensions must be locked');
+need(home,"if(pageCanvases.length>20)return alert('العمل يحتوي على أكثر من 20 صفحة",'gallery must refuse unsupported oversized native batch');
 need(posterRuntime,"pagePrintMeta?.kind!=='poster'",'poster buttons must refuse outdated ordinary photo pages');
 for(const m of ["INPUT_IDS.includes(id)","window.AbuPhotoAdvanced?.buildPoster?.()","36000000","f.size>65000000"])need(posterProject,m,'safe poster project import and reopen');
 // Exercise the real embedded photo-print functions after the user changes the paper dropdown.
