@@ -7,10 +7,10 @@ const forbid=(file,markers)=>{const s=read(file);for(const m of markers)if(s.inc
 need('index.js',['expo-local-authentication','expo-secure-store','expo-screen-capture','SecureStore.setItemAsync','ScreenCapture.preventScreenCaptureAsync',"action === 'privacyMode'",'AbuBassamNativeSecurityResult',"message.type === 'webBootReady'",'STARTUP_WATCHDOG_MS = 12000',"originWhitelist={['file://*','about:*']}",'mixedContentMode="never"']);
 forbid('index.js',["originWhitelist={['*']}",'mixedContentMode="always"','onLoad={() => setWebReady(true)}','onLoadEnd={() => setWebReady(true)}']);
 
-need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY']);
-forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);
+need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable }','storage: authStorage','registerVaultAdapter','VAULT_GATEWAY_NOT_READY',"document.addEventListener('abu-runtime-loaded', wrapActions)"]);
+forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'","setInterval(() => {\n      wrapActions();"]);
 
-need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity']);
+need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity',"if(document.visibilityState==='hidden')return",'if(unlocked){touchDevice();']);
 forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
 
 need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLegacySecretStorage','installLegacySecretStorageBlock','localStorage.removeItem(LEGACY_TRUST_KEY)','stopImmediatePropagation']);
@@ -18,7 +18,8 @@ need('web/security-hardening-runtime.js',["SECURE_TRUST_KEY='abu_bassam_offline_
 forbid('web/security-hardening-runtime.js',['window.AbuBassamNativeSecurityResult']);
 need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
 forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
-need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
+need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})","if(!install())throw new Error('SECURITY_EXTRAS_REQUIRED')"]);
+forbid('web/password-policy-runtime.js',['setInterval(()=>{tries++','setTimeout(install,20)']);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
 need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()']);
 forbid('web/device-name-runtime.js',['login-throttle-fix-runtime.js','fail-closed-runtime.js',"cloud.list('device')"]);

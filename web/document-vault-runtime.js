@@ -13,7 +13,8 @@ const VIEW_KEY='abuBassamVaultViewV5';
 const SYSTEM_FOLDERS=['المستمسكات','المعاملات','الباجات'];
 function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function syncKey(key){return key+':'+syncScope()}
-function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+const LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY]);
+function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null&&LEGACY_SYNC_PREFS.has(key)){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
 const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
 
@@ -24,6 +25,8 @@ function ext(name){let m=String(name||'').toLowerCase().match(/\.([a-z0-9\u0600-
 function isImage(item){return item.category==='image'||String(item.mime||'').startsWith('image/')}
 function formatBytes(size){let n=Number(size)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function formatTime(value){try{return new Date(value).toLocaleString('ar-IQ')}catch(e){return value||''}}
+async function blobSha256(blob){const bytes=await blob.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function verifyRemoteBlob(data,blob){const integrity=Number(data?.integrityVersion)||0,size=Number(data?.size),expected=String(data?.sha256||'').toLowerCase();if(integrity>=1){if(!Number.isFinite(size)||size<0||blob.size!==size)throw new Error('حجم الملف السحابي لا يطابق بيانات السلامة');if(!/^[0-9a-f]{64}$/.test(expected))throw new Error('بيانات SHA-256 السحابية مفقودة أو غير صالحة')}if(expected&&((await blobSha256(blob))!==expected))throw new Error('فشل فحص SHA-256 للملف السحابي');return blob}
 function sessionOk(){return !!(window.AbuBassamCloud&&AbuBassamCloud.isConnected())}
 function autoSync(){return syncGet(AUTO_SYNC_KEY)!=='0'}
 function syncPolicy(){try{const current=localStorage.getItem(SYNC_POLICY_KEY);return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(current??syncGet(SYNC_POLICY_KEY)??'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
@@ -110,7 +113,7 @@ async function build(){
   window.addEventListener('online',()=>{setSyncStatus('عاد الإنترنت • فحص جدول المزامنة');if(automaticDue())syncNow(false)});
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   setTimeout(()=>{if(automaticDue())syncNow(false)},5000);
-  setInterval(()=>{if(automaticDue())syncNow(false)},900000);document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())syncNow(false)},900000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&automaticDue())syncNow(false)});document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
@@ -277,7 +280,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         if(item.deleted){
           if(remote?.deleted){await dbDelete(item.id);continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
-          const remoteBlob=await service.downloadVault(remote.storagePath);
+          const remoteBlob=await verifyRemoteBlob(remote,await service.downloadVault(remote.storagePath));
           await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
           continue
         }
@@ -286,7 +289,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
           await dbPut(copy);await dbDelete(item.id);continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
-        const remoteBlob=await service.downloadVault(remote.storagePath);
+        const remoteBlob=await verifyRemoteBlob(remote,await service.downloadVault(remote.storagePath));
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
         await dbPut(localCopy);
         await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
@@ -296,7 +299,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(item.deleted){
         if(!row){await dbDelete(item.id);continue}
         const oldPath=String(remote?.storagePath||'');
-        const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
+        const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,sha256:'',integrityVersion:1,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         await service.upsert('vault',item.id,data);
         await dbDelete(item.id);
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
@@ -304,8 +307,8 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       }
 
       if(!item.blob)throw new Error('ملف محلي بلا محتوى فعلي: '+String(item.name||item.id));
-      const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);
-      const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
+      const oldPath=String(remote?.storagePath||''),sha256=await blobSha256(item.blob),newPath=await service.uploadVault(item.id,item.blob,item.mime);
+      const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.blob.size,sha256,integrityVersion:1,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
       let saved;
       try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
@@ -322,7 +325,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(data.deleted){if(here)await dbDelete(id);continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
-      const blob=await service.downloadVault(data.storagePath);
+      const blob=await verifyRemoteBlob(data,await service.downloadVault(data.storagePath));
       await dbPut(remoteItem(data,blob,remoteVersion))
     }
     syncSet(LAST_SYNC_KEY,String(Date.now()));

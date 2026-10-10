@@ -18,6 +18,6 @@ function migrate(){
     return true;
   }catch(_){return false}
 }
-let attempts=0;const timer=setInterval(()=>{attempts++;if(migrate()||attempts>120)clearInterval(timer)},100);
+migrate();
 window.addEventListener('storage',e=>{if(e.key===OPS_KEY)migrate()});
 })();

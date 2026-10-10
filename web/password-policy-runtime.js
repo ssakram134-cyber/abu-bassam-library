@@ -70,6 +70,6 @@ function install(){
   return true;
 }
 document.addEventListener('click',enforceSignup,true);
-let tries=0,timer=setInterval(()=>{tries++;decorateSignup();if(install()||tries>120)clearInterval(timer)},50);
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,20));else setTimeout(install,20);
+if(!install())throw new Error('SECURITY_EXTRAS_REQUIRED');
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',decorateSignup,{once:true});else decorateSignup();
 })();

@@ -16,7 +16,7 @@ function rename(i){let a=read();if(!a[i])return;let n=prompt('الاسم الج�
 function duplicate(i){let a=read();if(!a[i])return;let c=JSON.parse(JSON.stringify(a[i]));c.id='custom-'+Date.now();c.name=(c.name||'نموذج')+' — نسخة';a.push(c);if(write(a.slice(-30)))reload()}
 function remove(i){let a=read();if(!a[i])return;if(!confirm('حذف هذا النموذج المخصص؟'))return;a.splice(i,1);if(write(a))reload()}
 function install(){let modal=$('abuQTemplateModal');if(!modal)return false;let sheet=modal.querySelector('.abu-qsheet');if(!sheet||$('abuQSearch'))return true;let subjects=$('abuSubjects');if(subjects){let wrap=document.createElement('div');wrap.className='abu-q-filter';wrap.innerHTML='<input id="abuQSearch" placeholder="بحث في القوالب..."><select id="abuQSort"><option value="default">الترتيب الافتراضي</option><option value="az">أبجدي أ ← ي</option><option value="za">أبجدي ي ← أ</option></select>';subjects.insertAdjacentElement('afterend',wrap);$('abuQSearch').addEventListener('input',filter);$('abuQSort').addEventListener('change',filter)}let row=sheet.querySelector('.abu-actions-row');if(row){let b=document.createElement('button');b.className='alt';b.textContent='🗂 إدارة نماذجي';b.onclick=openManage;row.appendChild(b)}new MutationObserver(filter).observe(sheet,{childList:true,subtree:true});return true}
-function init(){css();let tries=0,t=setInterval(()=>{tries++;if(install()||tries>30)clearInterval(t)},100)}
+function init(){css();if(!install())throw new Error('QUESTION_TEMPLATES_REQUIRED')}
 window.AbuQTemplateTools={openManage,close,rename,duplicate,remove,reload};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

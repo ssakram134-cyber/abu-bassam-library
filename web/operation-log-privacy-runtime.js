@@ -55,7 +55,7 @@ function wrapBuilder(target,state={kind:''}){
   })
 }
 function installClientBoundary(){const cloud=window.AbuBassamCloud,c=cloud?.client;if(!c||typeof c.from!=='function')return false;if(c.from.__abuOperationPrivacy)return true;const original=c.from.bind(c);const wrapped=function(table){const b=original(table);return String(table)===TABLE?wrapBuilder(b,{kind:''}):b};wrapped.__abuOperationPrivacy=true;wrapped.__abuOriginal=original;c.from=wrapped;return true}
-function boot(){let attempts=0;const timer=setInterval(()=>{attempts++;const a=installClientBoundary();forceClean();if(a){try{window.AbuBassamOps?.sync?.()}catch(_){}if(role()==='owner'||attempts>80)clearInterval(timer)}else if(attempts>120)clearInterval(timer)},120);delayedClean();window.addEventListener('online',()=>{installClientBoundary();forceClean();delayedClean()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')forceClean()})}
+function boot(){if(!installClientBoundary())throw new Error('SYNC_CLIENT_REQUIRED');forceClean();delayedClean();window.addEventListener('online',()=>{installClientBoundary();forceClean();delayedClean()});document.addEventListener('abu-bassam-auth-changed',()=>{cleaned=false;forceClean();delayedClean()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')forceClean()})}
 window.AbuBassamOperationPrivacy={install:installClientBoundary,clean:forceClean,deviceId};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

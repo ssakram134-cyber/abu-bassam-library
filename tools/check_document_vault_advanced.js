@@ -1,16 +1,36 @@
 const fs=require('fs');
 function read(p){if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.readFileSync(p,'utf8')}
 function need(src,token,label){if(!src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+function forbid(src,token,label){if(src.includes(token))throw new Error(`document vault advanced check failed: ${label}`)}
+const vault=read('web/document-vault-runtime.js');
+const hardening=read('web/document-vault-hardening-runtime.js');
 const advanced=read('web/document-vault-advanced-runtime.js');
 const offline=read('web/document-vault-offline-ocr-runtime.js');
 const encrypted=read('web/document-vault-encrypted-runtime.js');
 const loader=read('web/productivity-tools-runtime.js');
 const startup=read('web/device-name-runtime.js');
 const assets=read('scripts/prepare-android-assets.mjs');
-new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
+new Function(vault);new Function(hardening);new Function(advanced);new Function(offline);new Function(encrypted);new Function(startup);
 need(loader,'document-vault-advanced-runtime.js','advanced vault runtime loader');
 need(loader,'document-vault-offline-ocr-runtime.js','offline OCR runtime loader');
 need(loader,'document-vault-encrypted-runtime.js','encrypted vault runtime loader');
+need(vault,"document.visibilityState!=='hidden'&&automaticDue()",'periodic sync must pause while hidden');
+need(vault,"document.visibilityState==='visible'&&automaticDue()",'sync must resume when visible');
+need(vault,'LEGACY_SYNC_PREFS=new Set([AUTO_SYNC_KEY,SYNC_POLICY_KEY])','only legacy sync preferences may migrate across scopes');
+need(vault,'LEGACY_SYNC_PREFS.has(key)','last-sync state must remain scoped');
+need(vault,"crypto.subtle.digest('SHA-256'",'cloud vault blob hashing');
+need(vault,'integrityVersion:1','cloud vault integrity metadata');
+need(vault,'sha256=await blobSha256(item.blob)','cloud uploads must hash file content');
+need(vault,'verifyRemoteBlob(remote,await service.downloadVault','cloud conflict downloads must verify integrity');
+need(vault,'verifyRemoteBlob(data,await service.downloadVault','cloud pull downloads must verify integrity');
+need(vault,"blob.size!==size",'cloud downloads must verify declared size');
+need(vault,"(await blobSha256(blob))!==expected",'cloud downloads must reject SHA-256 mismatch');
+need(hardening,"!key.includes(':')",'settings backup must exclude scoped branch/account keys');
+need(hardening,"manifest={format:'AbuBassamVault',version:7",'local backup manifest v7');
+need(hardening,'sha256=await blobHash(item.blob)','local backup must hash every file');
+need(hardening,"manifestVersion>=7&&!/^[0-9a-f]{64}$/i.test",'modern backups require valid file hashes');
+need(hardening,"blob.size!==declaredSize",'modern restore must verify declared size');
+need(hardening,"(await blobHash(blob))!==expected",'restore must reject SHA-256 mismatch');
 need(advanced,'تحرير متقدم','advanced editor entry');
 need(advanced,'قص حر','direct free crop');
 need(advanced,'منظور 4 زوايا','four-corner perspective');
@@ -31,6 +51,9 @@ need(offline,"corePath:'vendor/tesseract/core'",'local OCR core');
 need(offline,'async function terminate()','OCR worker termination');
 need(offline,'scheduleIdle(15000)','OCR release after app background');
 need(offline,'scheduleIdle()','OCR release after recognition');
+need(offline,'new MutationObserver(scheduleBind)','offline OCR coalesced DOM rebinding');
+need(offline,'requestAnimationFrame(()=>{bindQueued=false;bind()})','offline OCR mutation batching');
+forbid(offline,'setInterval(()=>{n++;bind()','redundant OCR startup polling');
 need(assets,'tesseract.js@5.1.1/dist/tesseract.min.js','pinned Tesseract browser bundle');
 need(assets,'tesseract.js-core@5.1.1','pinned Tesseract core');
 need(assets,'ara.traineddata.gz','Arabic trained data');
