@@ -76,7 +76,7 @@ for(const bad of ['"broken"','42','[]']){
 const barcodeFactory=new Function(read('web/qrcode.js')+'\n'+read('web/qrcode_UTF8.js')+'\nreturn qrcode;')();
 const stored=new Map([['abuBassamCardsStudioV4',JSON.stringify({login:{password:'legacy-secret'},wifi:{password:'legacy-wifi'}})],['abuBassamCardsPrintSettingsV1',JSON.stringify({output:'a4-duplex',copies:4,flip:'vertical',width:90,height:55,watermarkText:'اختبار'})]]);
 const testWindow={addEventListener(){}},testStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value)};
-const testSource=studio.replace('window.CardsStudio={',"window.__auditCards={state,payloadFor,qrSvg,code128Svg,printDocument,savePrintSettings,injectPrintStub(){cardHtml=(m,side)=>'<b data-name=\"'+m.data.name+'\" data-side=\"'+side+'\"></b>';symbolSvg=()=>'<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>'}};window.CardsStudio={");
+const testSource=studio.replace('window.CardsStudio={',"window.__auditCards={state,payloadFor,qrSvg,code128Svg,printDocument,savePrintSettings,saveDraft,recordHistory,injectPrintStub(){cardHtml=(m,side)=>'<b data-name=\"'+m.data.name+'\" data-side=\"'+side+'\"></b>';symbolSvg=()=>'<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>'}};window.CardsStudio={");
 if(testSource===studio)throw new Error('cards check failed: canonical test inspection unavailable');
 new Function('window','document','localStorage','qrcode',testSource)(testWindow,{getElementById(){return null}},testStorage,barcodeFactory);
 const tested=testWindow.__auditCards,st=tested.state;
@@ -84,6 +84,13 @@ if(st.forms.login.password||st.forms.wifi.password)throw new Error('cards check 
 if(st.output!=='a4-duplex'||st.flip!=='vertical'||st.width!==90||st.copies!==4)throw new Error('cards check failed: saved printing defaults not restored');
 tested.savePrintSettings();const savedPrint=JSON.parse(stored.get('abuBassamCardsPrintSettingsV1'));
 if(savedPrint.login||savedPrint.wifi||savedPrint.password)throw new Error('cards check failed: print preferences leak secrets');
+const sensitive='PRIVATE-BARCODE-DATA-PASSWORD-1234';
+st.forms.reader.result=sensitive;st.forms.reader.format='qr';st.forms.qr.content=sensitive;st.qrFromScan=true;
+tested.saveDraft();
+if(stored.get('abuBassamCardsStudioV4').includes(sensitive))throw new Error('cards check failed: scan contents were persisted in a draft');
+st.type='qr';st.queue=[];st.copies=1;tested.recordHistory('test secret scrub');
+if(stored.get('abuBassamPrintHistoryV4').includes(sensitive))throw new Error('cards check failed: scanned QR password leaked into print history');
+st.history=[];st.forms.reader.result='';st.forms.qr.content='';st.qrFromScan=false;
 const childModel={type:'child',data:{name:'ملاك أكرم',guardianPhone:'07829781753',driverPhone:'07820000000',institutionType:'kindergarten',notes:'طفل, جديد; رائع'},brand:{name:'مكتبة أبو بسام',phone:'07829667521'}};
 const payload=tested.payloadFor(childModel);
 if(payload.includes('undefined')||payload.includes('خط النقل')||!payload.includes('https://wa.me/9647829781753')||!payload.includes('طفل\\, جديد\\; رائع'))throw new Error('cards check failed: child QR has obsolete field or invalid WhatsApp/vCard data');
