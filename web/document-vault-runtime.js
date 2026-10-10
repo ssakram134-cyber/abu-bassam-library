@@ -8,6 +8,7 @@ const TRASH_RETENTION_MS=30*24*60*60*1000;
 const LAST_SYNC_KEY='abuBassamVaultLastSyncV4';
 const AUTO_SYNC_KEY='abuBassamVaultAutoSyncV4';
 const SORT_KEY='abuBassamVaultSortV4';
+const FOLDER_KEY='abuBassamVaultFoldersV5';
 const SYNC_POLICY_KEY='abuBassamSyncPolicyV5';
 const $=id=>document.getElementById(id);
 const VIEW_KEY='abuBassamVaultViewV5';
@@ -145,9 +146,11 @@ function render(){
 function setFilter(filter){state.filter=filter;render()}
 function setSort(sort){state.sort=sort;localStorage.setItem(SORT_KEY,sort);render()}
 function setView(view){state.view=view==='list'?'list':'grid';localStorage.setItem(VIEW_KEY,state.view);render()}
-function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders));alert('تم إنشاء المجلد «'+name+'» ✓')}
-function readFolders(){try{return [...new Set([...SYSTEM_FOLDERS,...JSON.parse(localStorage.getItem('abuBassamVaultFoldersV5')||'[]')])]}catch(e){return SYSTEM_FOLDERS.slice()}}
-async function moveItem(id){if(!requireVault('vaultMove'))return;let item=findItem(id);if(!item)return;let folders=readFolders(),answer=prompt('اكتب اسم المجلد الذي تريد نقل الملف إليه:\n'+(folders.length?'المجلدات: '+folders.join('، '):'يمكنك كتابة اسم مجلد جديد.'),item.folder||'');if(answer===null)return;answer=niceName(answer);if(answer&&!folders.includes(answer)){folders.push(answer);localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}item.folder=answer;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh();logOperation('move','نقل ملف إلى مجلد',answer,item.name)}
+function createFolder(){if(!requireVault('vaultFolders'))return;let name=prompt('اسم المجلد الجديد:');if(!name||!name.trim())return;let folders=readFolders();name=niceName(name);if(!folders.includes(name))folders.push(name);saveFolders(folders);alert('تم إنشاء المجلد «'+name+'» ✓')}
+function folderKey(){return FOLDER_KEY+':'+syncScope()}
+function saveFolders(folders){localStorage.setItem(folderKey(),JSON.stringify([...new Set((folders||[]).map(x=>niceName(x)).filter(Boolean))]))}
+function readFolders(){if(!vaultScopeOk(false)||!vaultAllowed('vaultView'))return SYSTEM_FOLDERS.slice();let saved=[];try{const value=JSON.parse(localStorage.getItem(folderKey())||'[]');if(Array.isArray(value))saved=value.filter(x=>typeof x==='string'&&x.length<=180)}catch(e){}return [...new Set([...SYSTEM_FOLDERS,...saved,...state.items.filter(x=>!x.deleted&&x.folder).map(x=>niceName(x.folder))])]}
+async function moveItem(id){if(!requireVault('vaultMove'))return;let item=findItem(id);if(!item)return;let folders=readFolders(),answer=prompt('اكتب اسم المجلد الذي تريد نقل الملف إليه:\n'+(folders.length?'المجلدات: '+folders.join('، '):'يمكنك كتابة اسم مجلد جديد.'),item.folder||'');if(answer===null)return;answer=niceName(answer);if(answer&&!folders.includes(answer)){folders.push(answer);saveFolders(folders)}item.folder=answer;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh();logOperation('move','نقل ملف إلى مجلد',answer,item.name)}
 async function copyItem(id){
  if(!requireVault('vaultAdd'))return;
  const source=findItem(id);
@@ -159,7 +162,7 @@ async function copyItem(id){
  if((await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('الأرشيف ممتلئ (1000 ملف)، لا يمكن نسخ الملف.');
  const now=new Date().toISOString(),name=niceName(String(source.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة)$1'));
  const duplicate={...source,id:uuid(),name,folder,createdAt:now,updatedAt:now,lastOpenedAt:'',remoteUpdatedAt:'',syncState:'pending',deleted:false,deletedAt:'',favorite:false};
- try{await dbPut(duplicate);if(folder){const folders=readFolders();if(!folders.includes(folder)){folders.push(folder);try{localStorage.setItem('abuBassamVaultFoldersV5',JSON.stringify(folders))}catch(e){}}}await refresh();logOperation('copy','نسخ ملف مع الحفاظ على الأصل',name+' ← '+(folder||'الرئيسية'));if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
+ try{await dbPut(duplicate);if(folder){const folders=readFolders();if(!folders.includes(folder)){folders.push(folder);try{saveFolders(folders)}catch(e){}}}await refresh();logOperation('copy','نسخ ملف مع الحفاظ على الأصل',name+' ← '+(folder||'الرئيسية'));if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
  catch(e){alert('تعذر نسخ الملف: '+String(e?.message||e))}
 }
 async function toggleFavorite(id){if(!requireVault('vaultFavorite'))return;let item=findItem(id);if(!item)return;item.favorite=!item.favorite;item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);await refresh()}
