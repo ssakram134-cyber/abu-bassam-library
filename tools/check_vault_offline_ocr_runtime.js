@@ -17,6 +17,8 @@ assert.match(offline,/Tesseract\.createWorker\('ara\+eng'/);
 assert.doesNotMatch(offline,/https?:\/\/|MutationObserver|setInterval\(/);
 assert.doesNotMatch(core,/https:\/\/cdn\.jsdelivr\.net\/npm\/tesseract/i);
 assert.match(core,/return engine\.recognize\(dataUrl\)/);
+assert.match(core,/if\(id==='vOcrModal'\)window\.AbuDocumentVaultOfflineOcr\?\.cancel\?\.\(\)/);
+assert.match(core,/state\.selectedIds\.clear\(\);clearOcr\(\);closeModal\('vOcrModal'\)/);
 assert.match(core,/if\(!requireVault\('vaultAdd'\)\)return false/);
 assert.match(core,/clearOcr\(\);closeModal\('vOcrModal'\)/);
 assert.doesNotMatch(offline,/input\.onchange=|MutationObserver|AbuBassamNativeCameraResult=/);
