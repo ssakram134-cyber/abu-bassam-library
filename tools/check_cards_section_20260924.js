@@ -22,4 +22,38 @@ need(a4,"DIRS=['nw','n','ne','e','se','s','sw','w']",'eight resize handles');
 need(a4,'function rotate','rotation handle');
 need(standalone,'safeTextTarget','standalone text safety');
 need(standalone,'abuBassamStandaloneCardLayoutV2','standalone editor persistence');
+// Execute the canonical QR renderer and the exact A4 duplex grid, including incomplete sheets.
+const barcodeFactory=new Function(read('web/qrcode.js')+'\n'+read('web/qrcode_UTF8.js')+'\nreturn qrcode;')();
+const stored=new Map([['abuBassamCardsStudioV4',JSON.stringify({login:{password:'legacy-secret'},wifi:{password:'legacy-wifi'}})],['abuBassamCardsPrintSettingsV1',JSON.stringify({output:'a4-duplex',copies:4,flip:'vertical',width:90,height:55,watermarkText:'اختبار'})]]);
+const testWindow={addEventListener(){}},testStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value)};
+const testSource=studio.replace('window.CardsStudio={',"window.__auditCards={state,payloadFor,qrSvg,code128Svg,printDocument,savePrintSettings,injectPrintStub(){cardHtml=(m,side)=>'<b data-name=\"'+m.data.name+'\" data-side=\"'+side+'\"></b>';symbolSvg=()=>'<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>'}};window.CardsStudio={");
+if(testSource===studio)throw new Error('cards check failed: canonical test inspection unavailable');
+new Function('window','document','localStorage','qrcode',testSource)(testWindow,{getElementById(){return null}},testStorage,barcodeFactory);
+const tested=testWindow.__auditCards,st=tested.state;
+if(st.forms.login.password||st.forms.wifi.password)throw new Error('cards check failed: legacy credentials kept in memory');
+if(st.output!=='a4-duplex'||st.flip!=='vertical'||st.width!==90||st.copies!==4)throw new Error('cards check failed: saved printing defaults not restored');
+tested.savePrintSettings();const savedPrint=JSON.parse(stored.get('abuBassamCardsPrintSettingsV1'));
+if(savedPrint.login||savedPrint.wifi||savedPrint.password)throw new Error('cards check failed: print preferences leak secrets');
+const childModel={type:'child',data:{name:'ملاك أكرم',guardianPhone:'07829781753',driverPhone:'07820000000',institutionType:'kindergarten',notes:'طفل, جديد; رائع'},brand:{name:'مكتبة أبو بسام',phone:'07829667521'}};
+const payload=tested.payloadFor(childModel);
+if(payload.includes('undefined')||payload.includes('خط النقل')||!payload.includes('https://wa.me/9647829781753')||!payload.includes('طفل\\, جديد\\; رائع'))throw new Error('cards check failed: child QR has obsolete field or invalid WhatsApp/vCard data');
+if(!tested.qrSvg(payload).startsWith('<svg'))throw new Error('cards check failed: Arabic UTF8 QR failed to render');
+if(!tested.code128Svg('07829781753').startsWith('<svg')||tested.code128Svg('ملاك').startsWith('<svg'))throw new Error('cards check failed: Code128 accepted invalid alphabet or refused digits');
+st.type='qr';st.forms.qr={kind:'text',symbology:'qr',content:'أ'.repeat(2200),title:'',caption:''};st.output='cr80';st.queue=[];st.copies=1;
+let rejected=false;try{tested.printDocument()}catch(err){rejected=String(err.message||err).includes('باركود غير قابل للقراءة')}if(!rejected)throw new Error('cards check failed: unreadable QR must block printing');
+tested.injectPrintStub();
+const parsedSlots=section=>[...section.matchAll(/<div class="(?:cut|cs-empty-slot)"[^>]*>(?:<b data-name="([^"]+)" data-side="[^"]+"><\/b>)?<\/div>/g)].map(m=>m[1]||'_');
+for(const count of [1,2,3,5,9,10,11])for(const flip of ['horizontal','vertical']){
+ st.queue=Array.from({length:count},(_,index)=>({model:{type:'personal',data:{name:String(index+1)},brand:{},width:85.6,height:53.98},copies:1}));
+ Object.assign(st,{type:'personal',output:'a4-duplex',sides:'both',width:85.6,height:53.98,marginX:7,marginY:5,gap:2,flip});
+ const sections=[...tested.printDocument().matchAll(/<section class="duplex-page"[^>]*>([\s\S]*?)<\/section>/g)].map(m=>parsedSlots(m[1]));
+ if(sections.length!==2*Math.ceil(count/10))throw new Error('cards check failed: unexpected duplex page count');
+ for(let page=0;page<sections.length;page+=2){let front=sections[page],back=sections[page+1];if(front.length!==10||back.length!==10)throw new Error('cards check failed: grid slots missing');
+  const expected=front.map((_,i)=>flip==='horizontal'?front[i^1]:front[(4-Math.floor(i/2))*2+(i%2)]);
+  if(JSON.stringify(back)!==JSON.stringify(expected))throw new Error('cards check failed: duplex back alignment '+count+' '+flip);
+ }
+}
+st.queue=[];st.copies=1;st.output='a4-pairs';st.width=85.6;st.height=280;st.marginY=20;
+let rejectsTall=false;try{tested.printDocument()}catch(err){rejectsTall=String(err.message).includes('ارتفاع')}if(!rejectsTall)throw new Error('cards check failed: oversized A4 card was cropped silently');
+console.log('cards functional regressions passed: UTF8 QR, guardian WhatsApp link, secure draft recovery, persistent paper settings, 14 duplex mirror combinations, oversized A4 rejection.');
 console.log('cards section checks passed: canonical permissions, exact model counts, CR80/A4 output controls, free layout, A4 editor V2, and no patch runtimes.');
