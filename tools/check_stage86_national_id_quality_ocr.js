@@ -24,6 +24,7 @@ assert.match(runtime,/function recognize/);
 assert.match(runtime,/createWorker\('ara\+eng'/);
 assert.match(runtime,/vendor\/tesseract\/tesseract\.min\.js/);
 assert.match(runtime,/await worker\?\.terminate/);
+assert.match(runtime,/source\(\)\?\.src!==item\.src/,'Stale OCR result must not be saved for a different document');
 assert.match(runtime,/if\(!approved\|\|!lastText/);
 assert.match(runtime,/if\(window\.Android\?\.saveBase64\)/);
 assert.doesNotMatch(runtime,/fetch\(['"]https?:/);
