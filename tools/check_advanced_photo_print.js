@@ -88,14 +88,14 @@ need(posterRuntime,"pagePrintMeta?.kind!=='poster'",'poster buttons must refuse 
 for(const m of ["INPUT_IDS.includes(id)","window.AbuPhotoAdvanced?.buildPoster?.()","36000000","f.size>65000000"])need(posterProject,m,'safe poster project import and reopen');
 // Exercise the real embedded photo-print functions after the user changes the paper dropdown.
 try{
- const match=home.match(/<script>([\\s\\S]*?)<\\/script>/i);if(!match)throw new Error('main photo script missing');
+ const start=home.indexOf('<script>'),end=home.indexOf('</script>',start);if(start<0||end<0)throw new Error('main photo script missing');
  let pdfConfig=null,nativePrint=null;
  const mockPdf={addPage(){},addImage(){},output(){return 'data:application/pdf;base64,VEVTVA=='}};
  const fields={paperSize:{value:'A4'},paperCustomW:{value:'21'},paperCustomH:{value:'29.7'},dpiInput:{value:'300'},dpiEnabled:{checked:false},tgEnabled:{checked:false}};
  const android={printPages(...args){nativePrint=args}};
  const sandbox={window:{Android:android,addEventListener(){}},Android:android,document:{getElementById(id){return fields[id]||null}},jspdf:{jsPDF:function(opts){pdfConfig=opts;return mockPdf}},localStorage:{getItem(){return null},setItem(){}},alert(){}};
  vm.createContext(sandbox);
- vm.runInContext(match[1],sandbox,{filename:'index.html photo print'});
+ vm.runInContext(home.slice(start+'<script>'.length,end),sandbox,{filename:'index.html photo print'});
  vm.runInContext("pageCanvases=[{toDataURL(){return 'data:image/png;base64,VEVTVA=='}},{toDataURL(){return 'data:image/png;base64,VEVTVA=='}}];pagePrintMeta={kind:'poster',paper:{w:297,h:210},paperKey:'CUSTOM:297:210',dpi:96};makePdfData();printDirectly()",sandbox,{timeout:3000});
  if(!pdfConfig||pdfConfig.format[0]!==297||pdfConfig.format[1]!==210||pdfConfig.orientation!=='landscape')throw new Error('PDF dimensions changed with mutable UI');
  if(nativePrint?.[1]!=='CUSTOM:297:210'||nativePrint?.[2]!==96)throw new Error('native print did not use generated poster metadata');
