@@ -24,7 +24,7 @@ function sync(doc,id){const n=group(doc,id).length;group(doc,id).forEach(el=>{co
 function newPage(page){const p=page.cloneNode(false);p.innerHTML='';page.parentNode.appendChild(p);return p}
 function copies(el,d){const doc=el.ownerDocument,id=el.dataset.a4group,all=group(doc,id);if(d<0){if(all.length<=1)return;all[all.length-1].remove();sync(doc,id);return}if(all.length>=25)return;const last=all[all.length-1],g=getG(last);let page=last.closest('.pair-page,.duplex-page,.abu-a4-card-page,.a4-page'),x=g.x,y=g.y+g.h+5;if(y+g.h>H-5){x=g.x+g.w+5;y=5}if(x+g.w>W-5){page=newPage(page);x=5;y=5}const clone=last.cloneNode(true);clearControls(clone);clone.dataset.a4group=id;page.appendChild(clone);setG(clone,{...g,x,y});bind(clone,Date.now());sync(doc,id)}
 function prepare(frame){const doc=frame.contentDocument;if(!doc)return;const snapshots=allPages(doc).map(page=>({page,items:items(page).map(el=>({el,g:rectMM(el,page)}))}));styleEditor(doc);let i=0;snapshots.forEach(({page,items:shots})=>{Object.assign(page.style,{position:'relative',display:'block',padding:'0'});shots.forEach(({el,g})=>{setG(el,g);bind(el,i++)})})}
-function clean(doc){doc.querySelectorAll('[data-editor="1"],.a4v2-h,.a4v2-rot,.a4v2-count').forEach(n=>n.remove());doc.querySelectorAll('.a4v2-item').forEach(el=>{el.classList.remove('a4v2-item');delete el.dataset.a4bound;delete el.dataset.a4group});allPages(doc).forEach(p=>{p.style.overflow='hidden';p.style.boxShadow='none'});return '<!doctype html>'+doc.documentElement.outerHTML}
+function clean(doc){const root=doc.documentElement.cloneNode(true);root.querySelectorAll('[data-editor="1"],.a4v2-h,.a4v2-rot,.a4v2-count').forEach(n=>n.remove());root.querySelectorAll('.a4v2-item').forEach(el=>{el.classList.remove('a4v2-item');delete el.dataset.a4bound;delete el.dataset.a4group});allPages(root).forEach(p=>{p.style.overflow='hidden';p.style.boxShadow='none'});return '<!doctype html>'+root.outerHTML}
 function duplexCells(page){
   return [...page.children].filter(el=>el.classList?.contains('pair-card')||el.classList?.contains('duplex-empty'))
 }
@@ -82,12 +82,12 @@ function run(){
   const html=clean(doc),j=job;
   if(j.kind==='pdf'){
     if(direct('savePdfHtml',{name:j.name,html}))return markDispatched(j);
-    if(window.Android?.savePdfHtml){Android.savePdfHtml(j.name,html);return markDispatched(j)}
+    if(window.Android?.savePdfHtml){try{Android.savePdfHtml(j.name,html);return markDispatched(j)}catch(error){alert('تعذر إرسال PDF: '+String(error?.message||error));return false}}
     alert('حفظ PDF غير متاح على هذا الجهاز. بقي محرر A4 مفتوحاً دون تسجيل نجاح زائف.');
     return false
   }
   if(direct('printHtml',{html}))return markDispatched(j);
-  if(window.Android?.printHtml){Android.printHtml(html);return markDispatched(j)}
+  if(window.Android?.printHtml){try{Android.printHtml(html);return markDispatched(j)}catch(error){alert('تعذر إرسال الطباعة: '+String(error?.message||error));return false}}
   // The browser fallback requests a print dialog; it does not prove the job printed.
   document.open();document.write(html);document.close();window.print();
   return markDispatched(j)
