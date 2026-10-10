@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const workflow=fs.readFileSync(path.join(root,'.github/workflows/import-source-zip.yml'),'utf8');
+const marker='git status --porcelain --untracked-files=all';
+assert.ok(workflow.includes(marker),'Imported NEW files must be detected before PR creation');
+assert.doesNotMatch(workflow,/if git diff --quiet && git diff --cached --quiet;/);
+assert.match(workflow,/git add -A/,'New files must be committed');
+assert.match(workflow,/gh pr create/,'Changes must open a review PR');
+assert.match(workflow,/--base main/,'Expected review base remains main');
+assert.doesNotMatch(workflow,/git push origin main/);
+const script=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).scripts['check:web'].split(' && ');
+assert.ok(script.includes('node tools/check_fresh_audit_zip_untracked_files.js'));
+assert.equal(script.length,new Set(script).size);
+console.log('Fresh audit closure: source ZIP import recognizes newly added (untracked) files, not only modified existing files.');
