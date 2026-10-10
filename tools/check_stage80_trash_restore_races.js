@@ -61,9 +61,9 @@ function harness(config={}){
    assert.equal(mode,'readwrite');
    let tx;
    const makeRequest=(value)=>{const req={result:null,onsuccess:null,onerror:null};
-     queueMicrotask(()=>{req.result=value;req.onsuccess?.()});return req};
+     Promise.resolve().then(()=>{req.result=value;req.onsuccess?.()});return req};
    tx={oncomplete:null,onerror:null,onabort:null,
-     abort(){aborts++;queueMicrotask(()=>tx.onabort?.())},
+     abort(){aborts++;Promise.resolve().then(()=>tx.onabort?.())},
      objectStore(name){
        return name==='trash'?{
          get:id=>makeRequest(trash.get(id)),
