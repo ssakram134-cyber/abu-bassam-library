@@ -38,8 +38,13 @@ async function reset(){
   draftResetting=true;clearTimeout(saveTimer);
   try{
     await draftQueue.catch(()=>{});
+    const previousHtml=$('pages-container')?.innerHTML||'';
     if(!await dbDelete()){alert('Unable to delete the stored draft. It has been kept and the page will not reload.');return false}
-    try{localStorage.removeItem(DRAFT_KEY)}catch(e){alert('Draft storage cleanup failed; do not reset this page yet.');return false}
+    try{localStorage.removeItem(DRAFT_KEY)}catch(e){
+      const restored=previousHtml?await dbPut(previousHtml):false;
+      alert(restored?'Local storage cleanup failed, so the draft was saved back to IndexedDB. The page remains open.':'Local storage cleanup and draft recovery failed. Export your questions before closing this page.');
+      return false
+    }
     location.reload();return true
   }finally{draftResetting=false}
 }
