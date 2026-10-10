@@ -9,8 +9,8 @@ let entries={};
 const fakeFs={
  existsSync:p=>Object.prototype.hasOwnProperty.call(entries,p),
  readdirSync:p=>entries[p]||[],
- statSync:p=>({isDirectory:()=>Object.prototype.hasOwnProperty.call(entries,p+'/'),
-  isFile:()=>!Object.prototype.hasOwnProperty.call(entries,p+'/')})
+ statSync:p=>({isDirectory:()=>Object.prototype.hasOwnProperty.call(entries,p),
+  isFile:()=>!Object.prototype.hasOwnProperty.call(entries,p)})
 };
 const fakePath={join:(...parts)=>parts.join('/').replace(/\/+/g,'/')};
 const find=new Function('fs','path',fnSource+';return findApk')(fakeFs,fakePath);
