@@ -41,6 +41,13 @@ for(const forbidden of ['function buildPosterOriented()','function posterPlanStr
 const posterProject=read('poster-project-runtime.js');
 need(posterProject,'return window.AbuPhotoAdvanced.posterPlan()','poster preview must share canonical layout');
 if(posterProject.includes('Math.ceil((w-overlap)'))errors.push('poster-project duplicated layout calculations');
+for(const [name,code] of [['poster project',posterProject],['advanced completion',read('advanced-completion-runtime.js')]]){
+ if(code.includes('setInterval('))errors.push(name+' must not poll repeatedly for initialization');
+}
+need(posterProject,"document.addEventListener('abu-runtime-loaded',ensureUi,{once:true})",'poster project event-driven startup');
+need(read('advanced-completion-runtime.js'),"document.addEventListener('abu-design-advanced-ready',ensureDesignCompletion)",'design tools event-driven startup');
+need(read('design-studio-advanced-runtime.js'),"new CustomEvent('abu-design-advanced-ready')",'design studio readiness signal');
+
 if(read('photo-print-advanced-runtime.js').includes('new MutationObserver(apply).observe(document.body'))errors.push('page-wide observer must not watch photos');
 need(read('photo-print-advanced-runtime.js'),"document.addEventListener('abu-cards-rendered',apply)",'card render event integration');
 try{
