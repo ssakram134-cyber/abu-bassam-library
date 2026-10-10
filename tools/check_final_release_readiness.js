@@ -18,6 +18,8 @@ const requiredChecks=[
  'check_badge_qr_output_integrity.js','check_card_gallery_native_scan.js',
  'check_print_duplex_geometry_guards.js','check_questions_draft_race_and_image_safety.js',
  'check_compressor_bridge_payload_safety.js',
+ 'check_archive_reset_cleanup.js','check_archive_edge_permissions.js',
+ 'check_archive_server_release_gate.js','check_backup_delete_permission.js',
 ];
 for(const file of requiredChecks)assert.ok(registered.includes('tools/'+file),'Critical staged test not registered: '+file);
 
@@ -51,6 +53,9 @@ has('web/backup-center-runtime.js',/await item\.blob\.arrayBuffer\(\)/);
 has('web/backup-center-runtime.js',/BACKUP_CHANGED_DURING_CAPTURE/);
 has('web/backup-center-runtime.js',/const ordinal=String\(index\+1\)/);
 has('web/document-vault-hardening-runtime.js',/const entryId=String\(index\+1\)/);
+// PR #42 was merged into main independently of the stacked audit branch.
+// Preserve its metadata-first archive deletion and explicit branch permissions.
+has('web/branch-vault-runtime.js',/const removed=await rpc\('abu_bassam_vault_remove_all'/,'Archive metadata must be removed before any Storage cleanup');
 
 has('web/cards-studio-runtime.js',/editor\.openPrint\(html,dispatched\)/,'Do not audit a canceled A4 print as dispatched');
 has('web/cards-studio-runtime.js',/editor\.openPdf\(name,html,dispatched\)/,'Do not audit a canceled A4 PDF as dispatched');
@@ -84,6 +89,14 @@ for(const migration of [
 ])assert.ok(fs.existsSync(path.join(root,migration)),'Expected pending SQL migration '+migration);
 for(const fn of ['supabase/functions/branch-vault/index.ts','supabase/functions/backup-center/index.ts'])
  assert.ok(fs.existsSync(path.join(root,fn)),'Missing server implementation '+fn);
+const backupEdge=read('supabase/functions/backup-center/index.ts');
+const archiveEdge=read('supabase/functions/branch-vault/index.ts');
+const customerEdge=read('supabase/functions/customer-documents/index.ts');
+assert.match(backupEdge,/function mayCleanup\(/,'Main hotfix backupDelete control must be present');
+assert.match(backupEdge,/permissionEnabled\(base.device,'backupDelete'\)/,'Retention cannot be used to bypass backupDelete');
+assert.match(customerEdge,/return p\[key\]===true;/,'Branch document grants must default to deny');
+assert.match(archiveEdge,/VAULT_ACTIVE_REVISION/,'Never delete a live archive revision');
+assert.match(archiveEdge,/!validItemId\(itemId\)\|\|!expectedPath\|\|!expectedVersion/,'Signed downloads must validate path and revision');
 const androidWorkflow=read('.github/workflows/android.yml');
 const importWorkflow=read('.github/workflows/import-source-zip.yml');
 assert.match(androidWorkflow,/if:\s*\$\{\{\s*false\s*\}\}/,'Android build job must remain explicitly disabled');
