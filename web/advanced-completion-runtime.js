@@ -39,7 +39,7 @@ function layerDown(i){let el=layerEl(i);if(!el)return;el.style.zIndex=String(Mat
 function layerDelete(i){let el=layerEl(i);if(!el)return;if(confirm('حذف هذا العنصر؟')){el.remove();renderLayers()}}
 function markOutside(){document.querySelectorAll('#dsCanvas .ds-el').forEach(el=>{let x=parseFloat(el.style.left)||0,y=parseFloat(el.style.top)||0,w=parseFloat(el.style.width)||0,h=parseFloat(el.style.height)||0;el.classList.toggle('ds-outside-print',x<0||y<0||x+w>100||y+h>100)})}
 
-function boot(){let tries=0,t=setInterval(()=>{installPhotoHistory();ensureDesignCompletion();if(++tries>120)clearInterval(t)},100)}
+function boot(){installPhotoHistory();ensureDesignCompletion();document.addEventListener('abu-design-advanced-ready',ensureDesignCompletion);document.addEventListener('abu-runtime-loaded',installPhotoHistory)}
 window.AbuAdvancedCompletion={undoPhoto,redoPhoto,flipPhoto,closeLayers,layerToggle,layerUp,layerDown,layerDelete};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
