@@ -9,6 +9,46 @@ const CARD_STYLE_KEY='abuBassamCardTextStylesV5';
 const LAYOUT_KEY='abuBassamCardFreeLayoutV1';
 const ROLE_SELECTORS={photo:'.cs-photo-frame',qr:'.cs-qr-box',info:'.cs-info',title:'.cs-card-title,.cs-personal-title,.cs-back-title',brand:'.cs-brandline,.cs-personal-brand,.cs-child-brand,.cs-login-brand',name:'.cs-card-name,.cs-personal-front-name,.cs-child-school',footer:'.cs-card-footer',panel:'.cs-login-panel',callqr:'.cs-call-qr',calllabel:'.cs-call-label'};
 const MAX_CARDS=25;
+const PRINT_PREFS_KEY='abuBassamCardsPrintPreferencesV1';
+const DEFAULT_PRINT_PREFS={
+  orientation:'landscape',output:'a4-pairs',sides:'both',width:85.6,height:53.98,
+  copies:1,marginX:7,marginY:5,gap:2,bleed:1,flip:'horizontal',
+  watermark:'none',watermarkText:'نسخة طبق الأصل',watermarkOpacity:12,
+  paperType:'plain',printDpi:300
+};
+function normalizePrintPrefs(raw){
+  const source=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  const prefs={...DEFAULT_PRINT_PREFS};
+  for(const [key,options] of Object.entries({
+    orientation:['landscape','portrait'],output:['a4-pairs','a4-duplex','cr80'],
+    sides:['both','front','back'],flip:['horizontal','vertical'],
+    watermark:['none','text','logo'],paperType:['plain','matte','glossy','photo']
+  }))if(options.includes(source[key]))prefs[key]=source[key];
+  for(const [key,min,max] of [
+    ['width',20,190],['height',20,280],['copies',1,25],
+    ['marginX',0,30],['marginY',0,30],['gap',0,20],['bleed',0,3],
+    ['watermarkOpacity',3,45],['printDpi',72,600]
+  ]){
+    if(source[key]===undefined||source[key]===null||source[key]==='')continue;
+    const n=Number(source[key]);
+    if(Number.isFinite(n)&&n>=min&&n<=max)prefs[key]=key==='copies'?Math.round(n):n;
+  }
+  if(typeof source.watermarkText==='string')prefs.watermarkText=source.watermarkText.slice(0,120);
+  return prefs
+}
+function loadPrintPrefs(){
+  try{return normalizePrintPrefs(JSON.parse(localStorage.getItem(PRINT_PREFS_KEY)||'null'))}
+  catch(e){return {...DEFAULT_PRINT_PREFS}}
+}
+function persistPrintPrefs(){
+  try{
+    const data={};
+    for(const key of Object.keys(DEFAULT_PRINT_PREFS))data[key]=state[key];
+    localStorage.setItem(PRINT_PREFS_KEY,JSON.stringify(normalizePrintPrefs(data)));
+    return true
+  }catch(e){return false}
+}
+
 const TYPE_LABELS={personal:'الباج التعريفي',child:'باج الروضة والمدرسة',login:'بطاقة تسجيل الدخول',wifi:'كارت Wi‑Fi',qr:'تكوين QR',reader:'قارئ الباركود'};
 const SERVICE_LABELS={facebook:'Facebook',google:'Google Play',apple:'Apple / App Store',email:'البريد الإلكتروني',other:'خدمة أخرى'};
 const DEFAULT_BRAND={name:'مكتبة أبو بسام للتصوير والقرطاسية',phone:'07829667521',address:'',email:'AKRAMA1992@GMAIL.COM',website:'www.maktabah-abubassam.com',logo:'abu_bassam_icon.webp'};
@@ -38,20 +78,7 @@ const state={
   forms:loadJson(STORAGE_KEY,DEFAULT_FORMS),
   photo:'',
   photoTransform:{zoom:1,x:0,y:0,rotate:0},
-  orientation:'landscape',
-  output:'a4-pairs',
-  sides:'both',
-  width:85.6,
-  height:53.98,
-  copies:1,
-  marginX:7,
-  marginY:5,
-  gap:2,
-  bleed:1,
-  flip:'horizontal',
-  watermark:'none',
-  watermarkText:'نسخة طبق الأصل',
-  watermarkOpacity:12,
+  ...loadPrintPrefs(),
   queue:[],
   textStyles:loadJson(CARD_STYLE_KEY,{}),
   history:loadJson(HISTORY_KEY,[]),
@@ -282,10 +309,10 @@ function cardHtml(model,side){let d=model.data,portrait=model.orientation==='por
 function renderPreview(){
   if(!$('csCardPair'))return;let model=modelNow(),payload=payloadFor(model),symbol=model.type==='qr'&&model.data.symbology==='code128'?'Code 128':'QR';$('csCardPair').innerHTML=`<div class="cs-card-host">${cardHtml(model,'front')}</div><div class="cs-card-host">${cardHtml(model,'back')}</div>`;$('csCardPair').querySelectorAll('.cs-print-card').forEach(card=>{card.style.aspectRatio=`${model.width} / ${model.height}`});try{assertModelBarcodes(model);$('csQrStatus').textContent=`${symbol} صالح • ${payload.length} حرف`}catch(error){$('csQrStatus').textContent='⚠ '+error.message;}$('csCopyBadge').textContent=state.copies;bindPhotoGestures();if(window.AbuBassamTypography)setTimeout(()=>AbuBassamTypography.applyAutoFit($('csCardPair')),0);
 ;document.dispatchEvent(new CustomEvent('abu-cards-rendered',{detail:{type:state.type}}))}
-function renderPrintSettings(){let el=$('csPrintSettings');if(!el)return;el.innerHTML=`<label class="cs-field">طريقة الطباعة<select id="csOutput"><option value="a4-pairs">A4 — الوجه بجانب الظهر</option><option value="a4-duplex">A4 — وجه/ظهر متطابق</option><option value="cr80">كارت CR80 مباشر</option></select></label><label class="cs-field">الأوجه<select id="csSides"><option value="both">الأمامي والخلفي</option><option value="front">الوجه الأمامي فقط</option><option value="back">الوجه الخلفي فقط</option></select></label><label class="cs-field">الاتجاه<select id="csOrientation"><option value="landscape">أفقي</option><option value="portrait">عمودي</option></select></label><label class="cs-field">عدد النسخ<input id="csCopies" type="number" min="1" max="25" value="${state.copies}"></label><label class="cs-field">العرض ملم<input id="csWidth" type="number" min="20" max="190" step=".01" value="${state.width}"></label><label class="cs-field">الارتفاع ملم<input id="csHeight" type="number" min="20" max="280" step=".01" value="${state.height}"></label><label class="cs-field">الفاصل ملم<input id="csGap" type="number" min="0" max="20" step=".1" value="${state.gap}"></label><label class="cs-field">هامش أفقي ملم<input id="csMarginX" type="number" min="0" max="30" step=".1" value="${state.marginX}"></label><label class="cs-field">هامش عمودي ملم<input id="csMarginY" type="number" min="0" max="30" step=".1" value="${state.marginY}"></label><label class="cs-field">نزف القص ملم<input id="csBleed" type="number" min="0" max="3" step=".1" value="${state.bleed}"></label><label class="cs-field">تقليب الظهر<select id="csFlip"><option value="horizontal">أفقي</option><option value="vertical">عمودي</option></select></label><label class="cs-field">العلامة المائية<select id="csWatermark"><option value="none">بدون</option><option value="text">نسخة طبق الأصل</option><option value="logo">شعار المكتبة</option></select></label><label class="cs-field">شفافية العلامة %<input id="csWatermarkOpacity" type="number" min="3" max="45" value="${state.watermarkOpacity}"></label><label class="cs-field full">نص العلامة المائية<input id="csWatermarkText" value="${esc(state.watermarkText)}"></label>`;
-  $('csOutput').value=state.output;$('csSides').value=state.sides;$('csOrientation').value=state.orientation;$('csFlip').value=state.flip;$('csWatermark').value=state.watermark;
+function renderPrintSettings(){let el=$('csPrintSettings');if(!el)return;el.innerHTML=`<label class="cs-field">طريقة الطباعة<select id="csOutput"><option value="a4-pairs">A4 — الوجه بجانب الظهر</option><option value="a4-duplex">A4 — وجه/ظهر متطابق</option><option value="cr80">كارت CR80 مباشر</option></select></label><label class="cs-field">نوع الورق المفضل<select id="csPaperType"><option value="plain">ورق عادي</option><option value="matte">مطفي Matte</option><option value="glossy">لامع Glossy</option><option value="photo">ورق صور</option></select></label><label class="cs-field">دقة الطابعة المفضلة DPI<input id="csPrintDpi" type="number" min="72" max="600" step="1" value="${state.printDpi}"></label><div class="cs-field full" style="font-size:11px;color:#64748b">تُحفظ اختيارات الورق والدقة في التطبيق. يلزم تأكيدهما من نافذة طباعة Android؛ لا يستطيع التطبيق فرض إعدادات مشغل الطابعة.</div><label class="cs-field">الأوجه<select id="csSides"><option value="both">الأمامي والخلفي</option><option value="front">الوجه الأمامي فقط</option><option value="back">الوجه الخلفي فقط</option></select></label><label class="cs-field">الاتجاه<select id="csOrientation"><option value="landscape">أفقي</option><option value="portrait">عمودي</option></select></label><label class="cs-field">عدد النسخ<input id="csCopies" type="number" min="1" max="25" value="${state.copies}"></label><label class="cs-field">العرض ملم<input id="csWidth" type="number" min="20" max="190" step=".01" value="${state.width}"></label><label class="cs-field">الارتفاع ملم<input id="csHeight" type="number" min="20" max="280" step=".01" value="${state.height}"></label><label class="cs-field">الفاصل ملم<input id="csGap" type="number" min="0" max="20" step=".1" value="${state.gap}"></label><label class="cs-field">هامش أفقي ملم<input id="csMarginX" type="number" min="0" max="30" step=".1" value="${state.marginX}"></label><label class="cs-field">هامش عمودي ملم<input id="csMarginY" type="number" min="0" max="30" step=".1" value="${state.marginY}"></label><label class="cs-field">نزف القص ملم<input id="csBleed" type="number" min="0" max="3" step=".1" value="${state.bleed}"></label><label class="cs-field">تقليب الظهر<select id="csFlip"><option value="horizontal">أفقي</option><option value="vertical">عمودي</option></select></label><label class="cs-field">العلامة المائية<select id="csWatermark"><option value="none">بدون</option><option value="text">نسخة طبق الأصل</option><option value="logo">شعار المكتبة</option></select></label><label class="cs-field">شفافية العلامة %<input id="csWatermarkOpacity" type="number" min="3" max="45" value="${state.watermarkOpacity}"></label><label class="cs-field full">نص العلامة المائية<input id="csWatermarkText" value="${esc(state.watermarkText)}"></label>`;
+  $('csOutput').value=state.output;$('csPaperType').value=state.paperType;$('csSides').value=state.sides;$('csOrientation').value=state.orientation;$('csFlip').value=state.flip;$('csWatermark').value=state.watermark;
   [...$('csOutput').options].forEach(o=>{o.disabled=o.value==='cr80'?!canCard('printCardDirect'):!(canCard('cardsA4Layout')&&canCard('printA4'))});
-  ['Output','Sides','Orientation','Copies','Width','Height','Gap','MarginX','MarginY','Bleed','Flip','Watermark','WatermarkOpacity','WatermarkText'].forEach(name=>{let input=$('cs'+name);input.disabled=!canCard('cardsEdit');input.oninput=()=>{if(!canCard('cardsEdit'))return;let key=name[0].toLowerCase()+name.slice(1),value=input.value;if(['copies'].includes(key))value=cap(value,1,25);if(['width','height','gap','marginX','marginY','bleed','watermarkOpacity'].includes(key))value=Number(value);state[key]=value;if(key==='orientation'){if(value==='portrait'&&state.width>state.height)[state.width,state.height]=[state.height,state.width];if(value==='landscape'&&state.width<state.height)[state.width,state.height]=[state.height,state.width];renderPrintSettings()}renderPreview();renderStatus()}})
+  ['Output','PaperType','PrintDpi','Sides','Orientation','Copies','Width','Height','Gap','MarginX','MarginY','Bleed','Flip','Watermark','WatermarkOpacity','WatermarkText'].forEach(name=>{let input=$('cs'+name);input.disabled=!canCard('cardsEdit');input.oninput=()=>{if(!canCard('cardsEdit'))return;let key=name[0].toLowerCase()+name.slice(1),value=input.value;if(['copies'].includes(key))value=cap(value,1,25);if(['width','height','gap','marginX','marginY','bleed','watermarkOpacity'].includes(key))value=Number(value);if(key==='printDpi')value=cap(value,72,600);state[key]=value;if(key==='orientation'){if(value==='portrait'&&state.width>state.height)[state.width,state.height]=[state.height,state.width];if(value==='landscape'&&state.width<state.height)[state.width,state.height]=[state.height,state.width];renderPrintSettings()}persistPrintPrefs();renderPreview();renderStatus()}})
 }
 function printGeometry(jobs){
   const models=Array.isArray(jobs)?jobs:expandedJobs();
@@ -442,9 +469,9 @@ function removePhoto(){if(!requireCard('cardsEditImage'))return;state.photo='';r
 function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransform={zoom:1,x:0,y:0,rotate:0};renderForm();renderPreview()}
 function photoControl(){if(!canCard('cardsEditImage'))return;state.photoTransform={zoom:Number($('csPhotoZoom').value),x:Number($('csPhotoX').value),y:Number($('csPhotoY').value),rotate:Number($('csPhotoRotate').value)};renderPreview()}
 function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPhotoTools');if(!tools)return alert('هذا النوع من الكروت لا يحتاج صورة');tools.scrollIntoView({behavior:'smooth',block:'center'})}
-function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];renderPrintSettings();renderPreview();renderStatus()}
-function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();renderAll()}
-function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);if($('csCopies'))$('csCopies').value=state.copies;renderPreview();renderStatus()}
+function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];persistPrintPrefs();renderPrintSettings();renderPreview();renderStatus()}
+function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;persistPrintPrefs();saveDraft();renderAll()}
+function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);persistPrintPrefs();if($('csCopies'))$('csCopies').value=state.copies;renderPreview();renderStatus()}
 function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');try{assertModelBarcodes(modelNow())}catch(e){return alert(e.message)}let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
 function previewPrint(){if(!requireCard('cardsPrint')||!requireOutputPermission())return;try{state.activePrintHtml=printDocument();$('csPrintFrame').srcdoc=state.activePrintHtml;openModal('csPrintModal')}catch(e){alert(e.message)} }
