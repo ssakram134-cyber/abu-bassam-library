@@ -13,7 +13,7 @@ function segment(start, next) {
   assert.ok(a !== -1 && b > a, 'Missing canonical print code: ' + start);
   return source.slice(a, b);
 }
-const layout = segment('function a4SheetRows(', '\nfunction queueCount(');
+const layout = segment('function printGeometry(', '\nfunction queueCount(');
 const print = segment('function printDocument(){', '\nfunction recordHistory(');
 const build = new Function(
   'state','expandedJobs','cardHtml','fullPrintCss','freeLayoutCss','cap','$','queueCount','validatePrintBarcodes',
