@@ -7,7 +7,7 @@ function cut(from,to){const i=src.indexOf(from),j=src.indexOf(to,i+from.length);
 const backupSource=cut("async function backupNow(kind='manual',force=false){",'\nasync function downloadBytes(');
 const partSource=cut('async function uploadPart(', '\nfunction retention()');
 const retrySource=cut('async function retry(', '\nasync function uploadPart(');
-const retry=new Function(retrySource+';return retry')();
+const retry=new Function('setTimeout',retrySource+';return retry')(cb=>cb());
 const uploadPart=new Function('cloud','BUCKET','retry',partSource+';return uploadPart');
 function runner(options={}){
  let scope='user:device',busy=false,plans=0,commits=0,uploads=0,refreshes=0,fpChecks=0;
@@ -19,7 +19,7 @@ function runner(options={}){
   stateGet:key=>state.get(key)??null,stateSet:(k,v)=>{if(options.failStateWrite)throw Error('LOCAL_STORAGE_FULL');state.set(k,v)},
   stateRemove:key=>{state.delete(key)},
   packageBytes:async()=>({bytes:new Uint8Array([1,2,3]),count:1,trashCount:0}),
-  digest:async()=> 'a'.repeat(64),CHUNK:2,
+  digest:async()=> 'a'.repeat(64),CHUNK:2,APP:'4.3.2',
   api:async(action,method,body)=>{
    if(action==='plan'){plans++;if(options.switchAfterPlan)scope='other:device';return{backup_id:'fixed-id',uploads:[{path:'part1',token:'one'},{path:'part2',token:'two'}]}}
    if(action==='commit'){commits++;if(options.failFirstCommit&&commits===1)throw Error('NETWORK_ACK_LOST');if(options.switchAfterCommit)scope='other:device';return{ok:true,already_ready:commits>1}}
