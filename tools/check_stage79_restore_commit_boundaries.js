@@ -60,9 +60,6 @@ const run=async()=>{
  assert.match(restoreCloudSrc,/if\(identity!==stateScope\(\)\)\{\s*status\('حُفظ الأرشيف/);
 
  // Execute the actual cloud restore code with injected, deterministic network interruptions.
- const cloudRestore=new Function(...Object.keys({
-   dummy:true
- }), 'return null'); // Ensure a callable harness in Node and in the V8 source checks.
  const restoreCloudCode=segment(cloud,'async function restoreCloud(', '\nasync function deleteCloud(');
  function cloudScenario({offlineBeforeDownload=false,offlineAfterRestore=false,failedSafetySnapshot=false,sessionChangesAfterRestore=false}={}){
   let user='u1',restored=0;
