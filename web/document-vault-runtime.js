@@ -392,12 +392,12 @@ async function build(){
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   scheduleAutoSync(5000);
   setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())void syncNow(false)},900000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();closeOtherBranches();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();clearOcr();closeModal('vOcrModal');closeOtherBranches();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
 function showModal(id){$(id).classList.add('show')}
-function closeModal(id){$(id).classList.remove('show');if(id==='vViewModal'&&state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}state.previewUrl=''}}
+function closeModal(id){$(id).classList.remove('show');if(id==='vOcrModal')window.AbuDocumentVaultOfflineOcr?.cancel?.();if(id==='vViewModal'&&state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}state.previewUrl=''}}
 function setSyncStatus(text){if($('vSyncStatus'))$('vSyncStatus').textContent='المزامنة: '+text}
 function setAutoSync(value){syncSet(AUTO_SYNC_KEY,value?'1':'0');setSyncStatus(value?'تلقائية مفعّلة':'تلقائية متوقفة');scheduleAutoSync(100)}
 function hasPending(){return state.items.some(item=>item.syncState==='pending')}
@@ -921,22 +921,23 @@ function openOcr(target='clipboard'){if(!requireVault('vaultOcr'))return;state.o
 function ocrCamera(){if(!requireVault('vaultOcr'))return;if(!requestNative('ocr')){$('vOcrInput').value='';$('vOcrInput').setAttribute('capture','environment');$('vOcrInput').click()}}
 function ocrGallery(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
 function ocrFilePicker(){if(!requireVault('vaultOcr'))return;$('vOcrInput').removeAttribute('capture');$('vOcrInput').value='';$('vOcrInput').click()}
-async function ocrFile(file){if(!file)return;try{await recognizeText(await blobDataUrl(file))}finally{$('vOcrInput').value=''}}
-function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();let script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=()=>reject(new Error('تعذر تنزيل محرك قراءة النص'));document.head.appendChild(script)})}
-async function ensureOcr(){await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',()=>!!window.Tesseract);if(!window.Tesseract)throw new Error('محرك قراءة النص غير متاح')}
+async function ocrFile(file){if(!file)return false;try{return await recognizeText(await blobDataUrl(file))}catch(e){$('vOcrProgress').textContent='تعذر قراءة الصورة محليًا: '+String(e?.message||e);return false}finally{$('vOcrInput').value=''}}
 async function recognizeText(dataUrl){
-  state.ocrImage=dataUrl;$('vOcrImage').src=dataUrl;$('vOcrImage').style.display='block';$('vOcrProgress').textContent='جاري تجهيز محرك OCR...';showModal('vOcrModal');
-  try{if(!window.Tesseract&&!sessionStorage.getItem('abuBassamOcrConsent')){if(!confirm('محرك OCR غير مضمّن بعد داخل هذه النسخة وسيحتاج تنزيله من الإنترنت لهذه الجلسة. لن تُرسل الصورة لخادم التطبيق. هل توافق على تنزيل المحرك؟'))throw new Error('أُلغي تنزيل محرك OCR');sessionStorage.setItem('abuBassamOcrConsent','1')}await ensureOcr();let result=await Tesseract.recognize(dataUrl,'ara+eng',{logger:event=>{if(event.status==='recognizing text')$('vOcrProgress').textContent='جاري قراءة النص محليًا... '+Math.round((event.progress||0)*100)+'%';else if(event.status)$('vOcrProgress').textContent='OCR: '+event.status}}),text=String(result&&result.data&&result.data.text||'').replace(/\n{3,}/g,'\n\n').trim();$('vOcrText').value=text;$('vOcrProgress').textContent=text?'تم استخراج النص ويمكنك تعديله أو نسخه ✓':'لم يظهر نص واضح؛ جرّب صورة أقرب وإضاءة أفضل.'}
-  catch(e){$('vOcrProgress').textContent='تعذر OCR: يحتاج اتصالاً بالإنترنت في أول تشغيل. '+(e.message||e)}
+  if(!dataUrl||!requireVault('vaultOcr'))return false;
+  const engine=window.AbuDocumentVaultOfflineOcr;
+  if(!engine?.recognize){$('vOcrProgress').textContent='محرك OCR المحلي غير جاهز؛ تحقق من ملفات التطبيق.';return false}
+  state.ocrImage=dataUrl;
+  showModal('vOcrModal');
+  return engine.recognize(dataUrl)
 }
 function onOcrPhoto(dataUrl){if(dataUrl)recognizeText(dataUrl)}
-function clearOcr(){$('vOcrText').value='';$('vOcrImage').removeAttribute('src');$('vOcrImage').style.display='none';$('vOcrProgress').textContent='اختر صورة واضحة لبدء قراءة النص.'}
+function clearOcr(){window.AbuDocumentVaultOfflineOcr?.cancel?.();state.ocrImage='';$('vOcrText').value='';$('vOcrImage').removeAttribute('src');$('vOcrImage').style.display='none';$('vOcrProgress').textContent='اختر صورة واضحة لبدء قراءة النص.'}
 function copyOcr(){let text=$('vOcrText').value;if(!text)return alert('لا يوجد نص للنسخ');if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>alert('تم نسخ النص ✓')).catch(()=>fallbackCopy());else fallbackCopy()}
 function selectOcr(){let area=$('vOcrText');area.focus();area.select()}
 function fallbackCopy(){let area=$('vOcrText');area.focus();area.select();document.execCommand('copy');alert('تم نسخ النص ✓')}
 function textData(text){return'data:text/plain;charset=utf-8;base64,'+btoa(unescape(encodeURIComponent(text)))}
 function shareOcr(){if(!requireVault('vaultShare'))return;let text=$('vOcrText').value.trim();if(!text)return alert('لا يوجد نص للمشاركة');shareData('Abu_Bassam_OCR_'+Date.now()+'.txt','text/plain;charset=utf-8',textData(text));logOperation('share','مشاركة نص OCR')}
-async function saveOcrText(){if(!requireVault('vaultExport'))return;let text=$('vOcrText').value.trim();if(!text)return alert('لا يوجد نص للحفظ');await addBlob('نص مستخرج '+new Date().toLocaleDateString('ar-IQ')+'.txt',new Blob([text],{type:'text/plain;charset=utf-8'}),'file');await refresh();logOperation('save','حفظ نص OCR داخل الأرشيف');alert('تم حفظ النص داخل قسم الملفات')}
+async function saveOcrText(){if(!requireVault('vaultAdd'))return false;let text=$('vOcrText').value.trim();if(!text)return alert('لا يوجد نص للحفظ');try{await addBlob('نص مستخرج '+new Date().toLocaleDateString('ar-IQ')+'.txt',new Blob([text],{type:'text/plain;charset=utf-8'}),'file');await refresh();logOperation('save','حفظ نص OCR داخل الأرشيف');alert('تم حفظ النص داخل قسم الملفات');return true}catch(e){alert('تعذر حفظ نص OCR محليًا: '+String(e?.message||e));return false}}
 function useOcrLogin(){let text=$('vOcrText').value;if(window.CardsStudio&&CardsStudio.importOcrText){CardsStudio.importOcrText(text);closeModal('vOcrModal');$('tabCards')&&$('tabCards').click()}else alert('تعذر إرسال النص إلى الكارت')}
 function ocrPrintHtml(){let text=$('vOcrText').value.trim();if(!text){alert('لا يوجد نص للطباعة');return''}return `<!doctype html><html dir="auto"><head><meta charset="utf-8"><style>@page{size:A4;margin:15mm}body{font-family:Tahoma,Arial;white-space:pre-wrap;line-height:1.9;font-size:13pt}</style></head><body>${esc(text)}</body></html>`}
 function saveOcrPdf(){if(!requireVault('vaultSavePdf'))return;let html=ocrPrintHtml();if(!html)return;let name='Abu_Bassam_OCR_'+Date.now()+'.pdf';if(window.Android&&Android.savePdfHtml)Android.savePdfHtml(name,html);else alert('حفظ PDF متاح داخل تطبيق Android');logOperation('pdf','حفظ نص OCR بصيغة PDF')}
