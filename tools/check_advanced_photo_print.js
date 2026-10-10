@@ -44,9 +44,14 @@ if(posterProject.includes('Math.ceil((w-overlap)'))errors.push('poster-project d
 for(const [name,code] of [['poster project',posterProject],['advanced completion',read('advanced-completion-runtime.js')]]){
  if(code.includes('setInterval('))errors.push(name+' must not poll repeatedly for initialization');
 }
-need(posterProject,"document.addEventListener('abu-runtime-loaded',ensureUi,{once:true})",'poster project event-driven startup');
+need(posterProject,"document.addEventListener('abu-runtime-loaded',event=>",'poster project must retry when its actual runtime becomes ready');
 need(read('advanced-completion-runtime.js'),"document.addEventListener('abu-design-advanced-ready',ensureDesignCompletion)",'design tools event-driven startup');
 need(read('design-studio-advanced-runtime.js'),"new CustomEvent('abu-design-advanced-ready')",'design studio readiness signal');
+for(const marker of ['Math.sqrt(12_000_000/(ow*oh))','Math.sqrt(8_000_000/(sw*sh))'])need(read('photo-geometry-runtime.js'),marker,'bounded geometry memory');
+for(const marker of ['function htmlEsc(v)','function trimHistory(stack)','invalidatePosterPages?.()'])need(read('advanced-completion-runtime.js'),marker,'safe layer names, undo size and poster cache invalidation');
+need(read('design-studio-advanced-runtime.js'),"attributeFilter:['class']", 'prevent style mutation feedback loops during card dragging');
+if(read('design-studio-advanced-runtime.js').includes('return setTimeout(observe,80)'))errors.push('design studio must not poll 80ms while canvas is missing');
+for(const marker of ['photoImageRef:im','pagePrintMeta.photoImageRef!==selectedItem()?.img'])need(read('photo-print-advanced-runtime.js'),marker,'poster must reject stale source image');
 
 if(read('photo-print-advanced-runtime.js').includes('new MutationObserver(apply).observe(document.body'))errors.push('page-wide observer must not watch photos');
 need(read('photo-print-advanced-runtime.js'),"document.addEventListener('abu-cards-rendered',apply)",'card render event integration');
