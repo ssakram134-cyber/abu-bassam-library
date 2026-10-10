@@ -448,8 +448,37 @@ function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(st
 function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');try{assertModelBarcodes(modelNow())}catch(e){return alert(e.message)}let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
 function previewPrint(){if(!requireCard('cardsPrint')||!requireOutputPermission())return;try{state.activePrintHtml=printDocument();$('csPrintFrame').srcdoc=state.activePrintHtml;openModal('csPrintModal')}catch(e){alert(e.message)} }
-function printNow(){if(!requireCards(['cardsPrint','printCards','printGeneral'])||!requireOutputPermission())return;try{let html=printDocument();recordHistory('طباعة');logOperation('print','طباعة الكروت',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPrint)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPrint(html)}if(window.Android&&Android.printHtml)return Android.printHtml(html);let frame=$('csPrintFrame');frame.srcdoc=html;openModal('csPrintModal');setTimeout(()=>frame.contentWindow&&frame.contentWindow.print(),700)}catch(e){alert(e.message)}}
-function savePdf(){if(!requireCards(['cardsExportPdf','pdfCreate','pdfSave'])||!requireOutputPermission())return;try{let html=printDocument(),name='Abu_Bassam_Cards_'+Date.now()+'.pdf';recordHistory('حفظ PDF');logOperation('pdf','حفظ الكروت PDF',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPdf)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPdf(name,html)}if(window.Android&&Android.savePdfHtml)return Android.savePdfHtml(name,html);previewPrint();alert('حفظ PDF المباشر متاح داخل تطبيق Android')}catch(e){alert(e.message)}}
+function printNow(){
+  if(!requireCards(['cardsPrint','printCards','printGeneral'])||!requireOutputPermission())return false;
+  try{
+    const html=printDocument(),count=expandedJobs().length,mode=state.output;
+    const dispatched=()=>{try{recordHistory('إرسال طلب طباعة');logOperation('print','إرسال طلب طباعة الكروت',count+' كارت • '+mode)}catch(error){console.error('تعذر تسجيل طلب الطباعة',error)}};
+    if(mode!=='cr80'){
+      const editor=window.AbuA4CardSheetEditorV2;
+      if(!editor?.openPrint)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');
+      return editor.openPrint(html,dispatched)
+    }
+    if(window.Android?.printHtml){const result=Android.printHtml(html);dispatched();return result}
+    const frame=$('csPrintFrame');frame.srcdoc=html;openModal('csPrintModal');
+    setTimeout(()=>{try{if(frame.contentWindow?.print){frame.contentWindow.print();dispatched()}}catch(error){console.error('تعذر إرسال طلب الطباعة',error)}},700);
+    return true
+  }catch(error){alert(error?.message||String(error));return false}
+}
+function savePdf(){
+  if(!requireCards(['cardsExportPdf','pdfCreate','pdfSave'])||!requireOutputPermission())return false;
+  try{
+    const html=printDocument(),name='Abu_Bassam_Cards_'+Date.now()+'.pdf',count=expandedJobs().length,mode=state.output;
+    const dispatched=()=>{try{recordHistory('إرسال طلب PDF');logOperation('pdf','إرسال طلب حفظ PDF',count+' كارت • '+mode)}catch(error){console.error('تعذر تسجيل طلب PDF',error)}};
+    if(mode!=='cr80'){
+      const editor=window.AbuA4CardSheetEditorV2;
+      if(!editor?.openPdf)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');
+      return editor.openPdf(name,html,dispatched)
+    }
+    if(window.Android?.savePdfHtml){const result=Android.savePdfHtml(name,html);dispatched();return result}
+    previewPrint();alert('حفظ PDF المباشر متاح داخل تطبيق Android');
+    return false
+  }catch(error){alert(error?.message||String(error));return false}
+}
 async function exportPng(){if(!requireCards(['cardsExportImage','imageExport','exportOutsideApp']))return;try{assertModelBarcodes(modelNow());let pages=[],labels=[],stamp=Date.now();if(state.sides!=='back'){pages.push(await domCardPng('front'));labels.push('الأمامي')}if(state.sides!=='front'){pages.push(await domCardPng('back'));labels.push('الخلفي')}recordHistory('حفظ '+labels.join(' و')+' في المعرض');if(window.Android&&Android.savePagesToGallery)Android.savePagesToGallery('Abu_Bassam_Card_'+labels.join('_'),JSON.stringify(pages),'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage('Abu_Bassam_Card_'+labels[index]+'_'+stamp+'.png','image/png',data),index*250));logOperation('gallery','حفظ أوجه الكارت كصور مستقلة',TYPE_LABELS[state.type]+' • '+labels.join(' و'))}catch(e){alert('تعذر إنشاء صور الكارت: '+String(e?.message||e))}}
 function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative('barcode')){const input=$('csBarcodeImageInput');input.setAttribute('capture','environment');input.value='';input.click()}}
 function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.value='';input.click()}
