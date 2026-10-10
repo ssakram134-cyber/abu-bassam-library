@@ -12,7 +12,7 @@ const fakeCamera={scanFromURLAsync:async(...args)=>{scans.push(args);return[{typ
 const parse=data=>{const marker=';base64,',i=data.indexOf(marker);return{mime:data.slice(5,i),base64:data.slice(i+marker.length)}};
 const scan=new Function('useCallback','inject','Camera','FileSystem','BARCODE_TYPES','splitDataUrl',resultSource)(fn=>fn,(...args)=>answers.push(args),fakeCamera,fakeFileSystem,['qr','code128'],parse);
 const sent=[],warnings=[],webWindow={addEventListener(){},Android:{scanBarcodeImage:data=>sent.push(data)}},input={value:'chosen-file'};
-const webDocument={getElementById:id=>id==='csBarcodeImageInput'?input:null};
+const webDocument={getElementById:id=>id==='csBarcodeImageInput'?input:null,addEventListener(){}};
 class FakeReader{readAsDataURL(){this.result='data:image/png;base64,QUJD';this.onload()}}
 const gallerySource=cards.replace('window.CardsStudio={','window.__galleryRegression={decodeBarcodeImage};window.CardsStudio={');
 assert.notEqual(gallerySource,cards,'Web gallery scanner must be accessible to test');
