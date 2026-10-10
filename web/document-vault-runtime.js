@@ -397,7 +397,7 @@ async function build(){
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
 function showModal(id){$(id).classList.add('show')}
-function closeModal(id){$(id).classList.remove('show');if(id==='vViewModal'&&state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}state.previewUrl=''}}
+function closeModal(id){$(id).classList.remove('show');if(id==='vOcrModal')window.AbuDocumentVaultOfflineOcr?.cancel?.();if(id==='vViewModal'&&state.previewUrl){try{URL.revokeObjectURL(state.previewUrl)}catch(_){}state.previewUrl=''}}
 function setSyncStatus(text){if($('vSyncStatus'))$('vSyncStatus').textContent='المزامنة: '+text}
 function setAutoSync(value){syncSet(AUTO_SYNC_KEY,value?'1':'0');setSyncStatus(value?'تلقائية مفعّلة':'تلقائية متوقفة');scheduleAutoSync(100)}
 function hasPending(){return state.items.some(item=>item.syncState==='pending')}
