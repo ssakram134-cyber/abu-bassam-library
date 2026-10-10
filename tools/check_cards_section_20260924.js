@@ -38,6 +38,24 @@ need(studio,"row('هاتف سائق الخط',d.driverPhone)",'display the drive
 for(const fake of ['Example@Email.com','Password123'])if(studio.includes(fake))throw new Error('cards check failed: printable fake login credential remains: '+fake);
 
 need(studio,'36_000_000','memory safe image budget');
+// A4 editor must bind generated duplex .cut cards, never overwrite the host application during fallback.
+need(a4,"page.querySelectorAll(':scope > .cut')",'A4 duplex cards must be selectable in free-position editor');
+if(a4.includes('document.write(html)'))throw new Error('cards check failed: printing may not overwrite the application document');
+const a4Window={addEventListener(){}},a4Document={readyState:'loading',addEventListener(){}};
+const inspectA4=a4.replace('window.AbuA4CardSheetEditorV2={','window.__a4Inspection={items};window.AbuA4CardSheetEditorV2={');
+new Function('window','document',inspectA4)(a4Window,a4Document);
+const duplexPage={classList:{contains:name=>name==='duplex-page'},querySelectorAll:selector=>selector===':scope > .cut'?['front','back']:[]};
+if(a4Window.__a4Inspection.items(duplexPage).length!==2)throw new Error('cards check failed: duplex card elements are invisible to editor');
+// Android must support private, offline gallery decoding even when WebView BarcodeDetector is absent.
+const nativeIndex=read('index.js');
+for(const marker of ["scanBarcodeImage: function (data)","message.type === 'scanBarcodeImage'",'Camera.scanFromURLAsync(uri, BARCODE_TYPES)','AbuBassamNativeBarcodeImageResult','FileSystem.deleteAsync(uri'])need(nativeIndex,marker,'offline native gallery scan');
+need(studio,'window.Android?.scanBarcodeImage','WebView gallery scanner fallback');
+// Untrusted localStorage types may not crash card startup or revive old secrets.
+for(const bad of ['"broken"','42','[]']){
+ const malformedStore={getItem:key=>key==='abuBassamCardsStudioV4'?bad:null,setItem(){}};
+ try{new Function('window','document','localStorage',studio)({addEventListener(){}},{getElementById(){return null}},malformedStore)}
+ catch(error){throw new Error('cards check failed: corrupt stored draft crashes startup: '+bad+' '+error.message)}
+}
 // Execute the canonical QR renderer and the exact A4 duplex grid, including incomplete sheets.
 const barcodeFactory=new Function(read('web/qrcode.js')+'\n'+read('web/qrcode_UTF8.js')+'\nreturn qrcode;')();
 const stored=new Map([['abuBassamCardsStudioV4',JSON.stringify({login:{password:'legacy-secret'},wifi:{password:'legacy-wifi'}})],['abuBassamCardsPrintSettingsV1',JSON.stringify({output:'a4-duplex',copies:4,flip:'vertical',width:90,height:55,watermarkText:'اختبار'})]]);
