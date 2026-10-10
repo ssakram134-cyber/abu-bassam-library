@@ -1045,7 +1045,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         if(item.deleted){
           if(remote?.deleted){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
-          const remoteBlob=await service.downloadVault(remote.storagePath);
+          const remoteBlob=await service.downloadVault(remote.storagePath,remoteVersion);
           if(!await dbReconcileRemoteDeletionToTrashIfUnchanged(item,{remoteEdited:remote,remoteBlob,remoteVersion})){
             autoSyncRerunRequested=true
           }else{
@@ -1060,7 +1060,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
           if(!await dbApplySyncIfUnchanged(item.id,item,null,copy))autoSyncRerunRequested=true;continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
-        const remoteBlob=await service.downloadVault(remote.storagePath);
+        const remoteBlob=await service.downloadVault(remote.storagePath,remoteVersion);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
         if(!await dbApplySyncIfUnchanged(item.id,item,remoteItem(remote,remoteBlob,remoteVersion),localCopy))autoSyncRerunRequested=true;
         continue
@@ -1097,7 +1097,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       if(data.deleted){if(here&&!await dbReconcileRemoteDeletionToTrashIfUnchanged(here))autoSyncRerunRequested=true;continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
-      const blob=await service.downloadVault(data.storagePath);
+      const blob=await service.downloadVault(data.storagePath,remoteVersion);
       if(!await dbApplySyncIfUnchanged(id,here||null,remoteItem(data,blob,remoteVersion)))autoSyncRerunRequested=true
     }
     if(deletionConflictsSaved){
