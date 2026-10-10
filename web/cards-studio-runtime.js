@@ -101,7 +101,7 @@ try{
    localStorage.setItem(key,JSON.stringify(old));
   }else{
    const old=loadJson(key,[]);
-   old.forEach(entry=>(entry?.models||[]).forEach(model=>{
+   old.forEach(entry=>(Array.isArray(entry?.models)?entry.models:[]).forEach(model=>{
     if(!model||!model.data)return;
     if(model.type==='login'||model.type==='wifi')model.data.password='';
     if(model.type==='qr'&&model.fromScannedQr)model.data.content='';
