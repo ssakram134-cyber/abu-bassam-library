@@ -287,6 +287,20 @@ function renderPrintSettings(){let el=$('csPrintSettings');if(!el)return;el.inne
   [...$('csOutput').options].forEach(o=>{o.disabled=o.value==='cr80'?!canCard('printCardDirect'):!(canCard('cardsA4Layout')&&canCard('printA4'))});
   ['Output','Sides','Orientation','Copies','Width','Height','Gap','MarginX','MarginY','Bleed','Flip','Watermark','WatermarkOpacity','WatermarkText'].forEach(name=>{let input=$('cs'+name);input.disabled=!canCard('cardsEdit');input.oninput=()=>{if(!canCard('cardsEdit'))return;let key=name[0].toLowerCase()+name.slice(1),value=input.value;if(['copies'].includes(key))value=cap(value,1,25);if(['width','height','gap','marginX','marginY','bleed','watermarkOpacity'].includes(key))value=Number(value);state[key]=value;if(key==='orientation'){if(value==='portrait'&&state.width>state.height)[state.width,state.height]=[state.height,state.width];if(value==='landscape'&&state.width<state.height)[state.width,state.height]=[state.height,state.width];renderPrintSettings()}renderPreview();renderStatus()}})
 }
+function printGeometry(jobs){
+  const models=Array.isArray(jobs)?jobs:expandedJobs();
+  const first=models[0]||{},w=Number(first.width??state.width),h=Number(first.height??state.height);
+  if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0)
+    throw new Error('مقاس الكارت غير صالح للطباعة');
+  for(const model of models){
+    const width=Number(model.width??w),height=Number(model.height??h);
+    if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)
+      throw new Error('تحتوي قائمة الطباعة على كارت بمقاسات غير صالحة');
+    if(Math.abs(width-w)>0.01||Math.abs(height-h)>0.01)
+      throw new Error('تحتوي قائمة الطباعة على مقاسات مختلفة. اطبع كل مقاس في مجموعة مستقلة لحماية القياسات الأصلية وعدم تمديد الباج.');
+  }
+  return {w,h}
+}
 function a4SheetRows(mode,w,h,gap,mx,my,both){
   if(![w,h,gap,mx,my].every(Number.isFinite)||w<=0||h<=0||gap<0||mx<0||my<0)throw new Error('مقاسات الطباعة والهوامش غير صالحة');
   const columns=mode==='a4-pairs'?(both?2:1):2;
@@ -306,12 +320,13 @@ function duplexSheetSlots(chunk,rows,flip){
 }
 function renderStatus(){
   const target=$('csRenderStatus');if(!target)return;
-  const total=queueCount()||state.copies,both=state.sides==='both',w=Number(state.width),h=Number(state.height),gap=Number(state.gap),mx=Number(state.marginX),my=Number(state.marginY);
+  const total=queueCount()||state.copies,both=state.sides==='both',gap=Number(state.gap),mx=Number(state.marginX),my=Number(state.marginY);
   try{
+    const {w,h}=printGeometry();
     const pages=state.output==='cr80'?total*(both?2:1):state.output==='a4-pairs'
       ?Math.ceil(total/a4SheetRows('a4-pairs',w,h,gap,mx,my,both))
       :Math.ceil(total/(2*a4SheetRows('a4-duplex',w,h,gap,mx,my,both)))*(both?2:1);
-    target.textContent=`القياس: ${state.width} × ${state.height} ملم • ${total} كارت • ${pages} صفحة متوقعة`;
+    target.textContent=`القياس: ${w} × ${h} ملم • ${total} كارت • ${pages} صفحة متوقعة`;
   }catch(error){target.textContent=`تعذر تخطيط الطباعة: ${error.message}`}
 }
 function queueCount(){return state.queue.reduce((sum,item)=>sum+(item.copies||1),0)}
@@ -333,7 +348,8 @@ function fullPrintCss(){return printCss()+(window.AbuBassamTypography?AbuBassamT
 function freeLayoutCss(){let data={};try{data=JSON.parse(localStorage.getItem(LAYOUT_KEY)||'{}')||{}}catch(e){}let out='';for(const [key,o] of Object.entries(data)){const [type,side,role]=key.split(':'),sel=ROLE_SELECTORS[role];if(!sel||!o)continue;const targets=sel.split(',').map(s=>`.cs-print-card[data-type="${type}"]${side==='back'?'.cs-back':':not(.cs-back)'} ${s.trim()}`).join(',');out+=`${targets}{left:${Number(o.x)||0}%!important;top:${Number(o.y)||0}%!important;right:auto!important;bottom:auto!important;width:${Number(o.w)||10}%!important;height:${Number(o.h)||10}%!important;transform:rotate(${Number(o.r)||0}deg)!important;transform-origin:center!important}`}return out}
 function printDocument(){
   const jobs=expandedJobs();if(!jobs.length)throw new Error('لا توجد كروت للطباعة');validatePrintBarcodes(jobs);
-  let css=fullPrintCss()+freeLayoutCss(),pages='',mode=state.output,w=Number(state.width),h=Number(state.height),
+  const {w,h}=printGeometry(jobs);
+  let css=fullPrintCss()+freeLayoutCss(),pages='',mode=state.output,
     gap=Number(state.gap),mx=Number(state.marginX),my=Number(state.marginY),bleed=cap(state.bleed,0,3),
     wantFront=state.sides!=='back',wantBack=state.sides!=='front';
   if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0)throw new Error('مقاس الكارت غير صالح');
