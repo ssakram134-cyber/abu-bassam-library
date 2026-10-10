@@ -80,6 +80,13 @@ for(const migration of [
 ])assert.ok(fs.existsSync(path.join(root,migration)),'Expected pending SQL migration '+migration);
 for(const fn of ['supabase/functions/branch-vault/index.ts','supabase/functions/backup-center/index.ts'])
  assert.ok(fs.existsSync(path.join(root,fn)),'Missing server implementation '+fn);
+const androidWorkflow=read('.github/workflows/android.yml');
+const importWorkflow=read('.github/workflows/import-source-zip.yml');
+assert.match(androidWorkflow,/if:\s*\$\{\{\s*false\s*\}\}/,'Android build job must remain explicitly disabled');
+assert.match(androidWorkflow,/workflow_dispatch:/,'Existing Android workflow is opt-in');
+assert.doesNotMatch(androidWorkflow,/^\s+push:\s*$/m,'Source changes must not automatically trigger Android builds');
+assert.match(importWorkflow,/workflow_dispatch:/,'Source ZIP import must require manual dispatch');
+assert.doesNotMatch(importWorkflow,/^\s+push:\s*$/m,'ZIP importer must not auto-execute on source updates');
 assert.ok(fs.existsSync(path.join(root,'index.js')),'Missing native Android entrypoint');
 assert.match(read('index.js'),/Camera\.scanFromURLAsync\(/);
 assert.match(read('index.js'),/FileSystem\.deleteAsync\(temporaryUri/);
