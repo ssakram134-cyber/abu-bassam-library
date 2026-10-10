@@ -177,16 +177,34 @@ async function permanentlyDeleteTrash(trashId){
     tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(reason||tx.error);tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_TRASH_ABORTED'))
   })
 }
+const pendingTrashOperations=new Set();
 async function restoreTrash(id){
   if(!requireVault('vaultRestoreDeleted'))return false;
-  try{await restoreTrashRecord(id);state.filter='all';await refresh();if(autoSync()&&navigator.onLine)scheduleAutoSync(500);logOperation('restore','استعادة ملف من سلة المحذوفات');return true}
-  catch(e){alert('تعذرت الاستعادة: '+String(e.message||e));return false}
+  const key=String(id||'');if(!key||pendingTrashOperations.has(key))return false;
+  pendingTrashOperations.add(key);
+  try{
+    await restoreTrashRecord(id);
+    try{
+      state.filter='all';await refresh();
+      if(autoSync()&&navigator.onLine)scheduleAutoSync(500);
+      logOperation('restore','استعادة ملف من سلة المحذوفات')
+    }catch(_){alert('تمت استعادة الملف من السلة، لكن تعذر تحديث العرض. افتح الأرشيف مجددًا؛ لا تكرر الاستعادة.')}
+    return true
+  }catch(e){alert('تعذرت الاستعادة قبل حفظ الملف: '+String(e.message||e));return false}
+  finally{pendingTrashOperations.delete(key)}
 }
 async function eraseTrash(id){
   if(!requireVault('vaultPermanentDelete'))return false;
+  const key=String(id||'');if(!key||pendingTrashOperations.has(key))return false;
   if(!confirm('حذف نهائي؟ لن يمكن استعادة هذه النسخة بعد الآن.'))return false;
-  try{await permanentlyDeleteTrash(id);await refresh();logOperation('delete','حذف نهائي من سلة المحذوفات');return true}
-  catch(e){alert('تعذر الحذف النهائي: '+String(e.message||e));return false}
+  pendingTrashOperations.add(key);
+  try{
+    await permanentlyDeleteTrash(id);
+    try{await refresh();logOperation('delete','حذف نهائي من سلة المحذوفات')}
+    catch(_){alert('اكتمل الحذف النهائي، لكن تعذر تحديث عرض السلة. افتحها مجددًا.')}
+    return true
+  }catch(e){alert('تعذر الحذف النهائي قبل اكتماله: '+String(e.message||e));return false}
+  finally{pendingTrashOperations.delete(key)}
 }
 function renderTrash(){
   const grid=$('vGrid');if(!grid)return;

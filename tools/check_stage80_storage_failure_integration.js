@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const files=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
+assert.ok(files.length>=99);assert.equal(new Set(files).size,files.length);
+for(const name of files){assert.match(name,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(root,name.slice(5))),'Missing '+name)}
+for(const needed of ['check_vault_trash_drag.js','check_vault_trash_backup_restore.js','check_vault_atomic_capacity.js','check_vault_device_recovery.js','check_stage79_restore_commit_boundaries.js','check_stage80_trash_restore_races.js','check_stage80_storage_failure_integration.js'])assert.ok(files.includes('node tools/'+needed));
+const v=read('web/document-vault-runtime.js'),h=read('web/document-vault-hardening-runtime.js');
+new vm.Script(v);new vm.Script(h);
+assert.match(v,/const pendingTrashOperations=new Set\(\)/);
+assert.equal((v.match(/pendingTrashOperations\.delete\(key\)/g)||[]).length,2);
+assert.match(v,/items\.add\(restored\);trash\.delete\(trashId\)/,'Restored file and removed trash atomically');
+assert.match(v,/const tx=db\.transaction\(\[STORE,TRASH_STORE\],'readwrite'\)/);
+assert.match(v,/tx\.onabort=\(\)=>reject\(reason\|\|tx\.error\|\|new Error\('VAULT_RESTORE_ABORTED'\)\)/);
+assert.match(h,/let restoreFails=0,restoreLockedUntil=0,restoreInFlight=false/);
+assert.match(h,/restoreInFlight=true;let committed=false;try/);
+assert.match(h,/finally\{restoreInFlight=false;/);
+for(const x of [/VAULT_RESTORE_CONFLICT/,/VAULT_TRASH_RESTORE_CONFLICT/,/VAULT_RECOVERY_DESTINATION_NOT_EMPTY/,/return await finishRestoredArchive/])assert.match(h,x);
+assert.match(read('supabase/functions/backup-center/index.ts'),/permissionEnabled\(base\.device,'backupDelete'\)/);
+assert.match(read('web/cards-studio-runtime.js'),/abuBassamCardsPrintPreferencesV1/);
+assert.match(read('.github/workflows/android.yml'),/if:\s*\$\{\{\s*false\s*\}\}/);
+console.log('Stage80 storage and integration guards passed: 99 registered checks, atomic trash, security, print preferences.');
