@@ -1,6 +1,14 @@
 'use strict';
 const fs=require('fs'),assert=require('node:assert/strict');
 const src=fs.readFileSync('web/national-id-runtime.js','utf8');
+const native=fs.readFileSync('index.js','utf8');
+for(const marker of [
+  'const cameraRequestIdRef = useRef(null)',
+  'const cameraSessionRef = useRef(0)',
+  'openCamera(message.mode, message.frameKind, message.requestId)',
+  "inject('AbuBassamNativeCameraResult', { mode, requestId, dataUrl:",
+  'if (cameraSession !== cameraSessionRef.current) return;'
+])assert.ok(native.includes(marker),'Native camera must preserve request/session identity: '+marker);
 for(const k of ['nationalSessionEpoch','abu-bassam-auth-changed','function recentKey()','epoch!==nationalSessionEpoch','24_000_000/Math.max(1,pageCount)','await pdf.destroy?.()'])assert.ok(src.includes(k),'Missing national security guard: '+k);
 const keys=new Map(),events={},nodes=new Map(),warnings=[],logged=[];let activeUser='first',reader=null;
 const node=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',innerHTML:'',style:{},classList:{remove(){}},removeAttribute(){}});return nodes.get(id)};
