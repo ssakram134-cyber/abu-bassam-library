@@ -73,14 +73,18 @@ try{
  sandbox.document.createElement=tag=>{if(tag!=='canvas')throw new Error('unexpected DOM element '+tag);canvasCount++;return {width:0,height:0,getContext(){return mockContext}}};
  sandbox.document.querySelector=()=>({classList:{remove(){}}});
  sandbox.setBusy=()=>{};sandbox.showPage=()=>{};sandbox.toggleCustomPaper=()=>{};sandbox.saveAppSettings=()=>{};
- sandbox.pageCanvases=[];sandbox.currentPage=0;
+ sandbox.pageCanvases=[];sandbox.currentPage=0;sandbox.pagePrintMeta=null;
  const built=sandbox.window.AbuPhotoAdvanced.buildPoster();
  if(!built||sandbox.pageCanvases.length!==6||canvasCount!==6||drawCount!==6)throw new Error('2x3 poster failed to produce six image tiles');
  if(fields.paperSize.value!=='custom'||Number(fields.paperCustomW.value)!==29.7||Number(fields.paperCustomH.value)!==21)throw new Error('landscape paper dimensions were not propagated to print');
+  if(sandbox.pagePrintMeta?.kind!=='poster'||sandbox.pagePrintMeta.paper.w!==297||sandbox.pagePrintMeta.paper.h!==210||sandbox.pagePrintMeta.paperKey!=='CUSTOM:297:210')throw new Error('poster output lost its original print dimensions');
 
 }catch(error){errors.push('Poster functional regression: '+String(error.message||error))}
 const posterRuntime=read('photo-print-advanced-runtime.js');
 need(posterRuntime,"if(typeof printDirectly==='function')return printDirectly()",'poster must use the single shared print path');
 need(home,"Android.printBase64('Abu_Bassam_Print.pdf'",'large poster PDF print fallback');
+for(const m of ['pagePrintMeta?.paper||getPaperSize()','pagePrintMeta?.paperKey||getPaperPrintKey()','pagePrintMeta?.dpi??printDpi()'])need(home,m,'print output dimensions must be locked');
+need(posterRuntime,"pagePrintMeta?.kind!=='poster'",'poster buttons must refuse outdated ordinary photo pages');
+for(const m of ["INPUT_IDS.includes(id)","window.AbuPhotoAdvanced?.buildPoster?.()","36000000","f.size>65000000"])need(posterProject,m,'safe poster project import and reopen');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Advanced photo/print checks passed: local enhancement, undo/redo/flip, poster tiling with portrait/landscape and strict size caps, assembled preview/project reopen, direct crop/perspective, ruler preview, 8-handle transforms, card free layout, snap/grid, layers/hide, print-bound warning, and named print presets.\n');
