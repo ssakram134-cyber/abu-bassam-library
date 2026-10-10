@@ -67,8 +67,8 @@ const fingerprint=new Function('backupItems','trashItems','digest','TextEncoder'
  async()=>[active],async()=>[trow],
  async a=>{const s=[...new Uint8Array(a instanceof ArrayBuffer?a:a.buffer)].join(',');let h=0;for(const x of s)h=(h*31+x.charCodeAt(0))>>>0;return String(h)},
  class TextEncoder{encode(s){return encode.encode(s)}},safe);
-const sourceValidation=new Function('manifest','MAX_FILE','MAX_TOTAL','MAX_ITEMS','trashScope','allowed','Date',val+'\nreturn {declared,seenPaths}');
-function validation(m){return sourceValidation(m,100*1024*1024,500*1024*1024,1000,()=>scope,()=>true,Date)}
+const sourceValidation=new Function('manifest','MAX_FILE','MAX_TOTAL','MAX_ITEMS','trashScope','allowed','recovery','Date',val+'\nreturn {declared,seenPaths}');
+function validation(m){return sourceValidation(m,100*1024*1024,500*1024*1024,1000,()=>scope,()=>true,null,Date)}
 const restores=new Function('openDb','STORE','crypto','Date','trashScope','scopeOk',FP+AT+'\nreturn {restoreFingerprint,trashFingerprint,applyAtomicWithTrash}') ;
 function createDb(currentItems=[],currentTrash=[]){
  let data={items:new Map(currentItems.map(row=>[String(row.id),row])),trash:new Map(currentTrash.map(row=>[String(row.id),row]))},aborts=0,commits=0;
@@ -113,7 +113,7 @@ function createDb(currentItems=[],currentTrash=[]){
  assert.notEqual(x,await f2(),'Same-size change in trash content must update cloud backup fingerprint');
  const valid={items:[],trash:[localManifest.trash[0]],trashScope:scope};
  assert.equal(validation(valid).seenPaths.size,1);
- assert.throws(()=>sourceValidation(valid,100*1024*1024,500*1024*1024,1000,()=>scope,()=>false,Date),/VAULT_TRASH_RESTORE_PERMISSION/);
+ assert.throws(()=>sourceValidation(valid,100*1024*1024,500*1024*1024,1000,()=>scope,()=>false,null,Date),/VAULT_TRASH_RESTORE_PERMISSION/);
  assert.equal(validation({items:[]}).seenPaths.size,0,'Older manifests restore without trash');
  for(const bad of [
  {...valid,trashScope:'other:branch'},
