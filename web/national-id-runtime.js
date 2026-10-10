@@ -138,7 +138,7 @@ function renderRecent(){let g=$('natRGrid');if(!g)return;g.innerHTML=S.recent.le
 function open(id){$(id).classList.add('show')}function close(id){$(id).classList.remove('show');if(id==='natCropModal')cropTarget=null;if(id==='natDocModal'){S.doc=null;S.docReady=false;let container=$('natDocView');if(container)container.textContent=''}}
 function scrollRecent(){$('natRecent').scrollIntoView({behavior:'smooth'})}
 function clearNationalPrivateState(){
- nationalSessionEpoch++;pendingNativeCamera=null;compareSequence++;cropTarget=null;imageImportChain=Promise.resolve();S.items=[];S.sel=-1;S.front=null;S.back=null;S.doc=null;S.docReady=false;S.mergeMode='h';
+ nationalSessionEpoch++;pendingNativeCamera=null;compareSequence++;cropTarget=null;imageImportChain=Promise.resolve();try{window.ReactNativeWebView?.postMessage?.(JSON.stringify({type:'cancelCamera'}))}catch(e){}S.items=[];S.sel=-1;S.front=null;S.back=null;S.doc=null;S.docReady=false;S.mergeMode='h';
  for(const id of ['natCanvas','natResultCanvas','natMergeCanvas']){const canvas=$(id);if(canvas){canvas.width=1;canvas.height=1;if(id==='natCanvas')canvas.style.display='none'}}const title=$('natDocTitle');if(title)title.textContent='📄 المستند';
  for(const id of ['natDocView','natThumbs','natRGrid']){const node=$(id);if(node)node.textContent=''}
  for(const id of ['natDocModal','natMergeModal','natResultModal','natZoom','natCropModal'])$(id)?.classList.remove('show');
