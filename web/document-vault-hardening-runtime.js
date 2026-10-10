@@ -62,6 +62,78 @@ async function applyAtomic(items,{replaceAll=false,expectedRows}={}){
     tx.onabort=()=>reject(error||tx.error||new Error('تم إلغاء معاملة الاستعادة'))
   })
 }
+
+function trashFingerprint(row){
+  return JSON.stringify([String(row.id||''),String(row.scope||''),String(row.sourceId||''),
+    String(row.name||''),String(row.folder||''),Number(row.deletedAtMs)||0,
+    Number(row.expiresAt)||0,Number(row.blob?.size)||0,String(row.mime||''),
+    Number.isInteger(row.manualOrder)?row.manualOrder:null])
+}
+async function applyAtomicWithTrash(items,trashRows,{replaceAll=false,expectedRows,expectedTrash,scope}={}){
+  const db=await openDb(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction([STORE,'trash'],'readwrite'),store=tx.objectStore(STORE),
+      trash=tx.objectStore('trash'),itemReq=store.getAll(),trashReq=trash.getAll();
+    let oldItems=null,oldTrash=null,reason=null,applied=false;
+    const fail=e=>{reason=e;try{tx.abort()}catch(_){reject(e)}};
+    const ready=()=>{
+      if(applied||oldItems===null||oldTrash===null)return;
+      applied=true;
+      try{
+        if(!scope||scope!==trashScope()||!scopeOk())throw Error('TRASH_RESTORE_SCOPE_CHANGED');
+        if(expectedRows){
+          const before=new Map(expectedRows.map(row=>[String(row.id),restoreFingerprint(row)]));
+          if(before.size!==expectedRows.length||oldItems.length!==expectedRows.length||
+            oldItems.some(row=>before.get(String(row.id))!==restoreFingerprint(row)))
+            throw Error('VAULT_RESTORE_CONFLICT')
+        }
+        const previousTrash=(expectedTrash||[]).map(row=>trashFingerprint(row)).sort();
+        const currentTrash=oldTrash.filter(row=>row.scope===scope&&Number(row.expiresAt)>now).map(row=>trashFingerprint(row)).sort();
+        if(previousTrash.length!==currentTrash.length||
+          previousTrash.some((value,i)=>value!==currentTrash[i]))throw Error('VAULT_TRASH_RESTORE_CONFLICT');
+        const restoredIds=new Set(items.map(row=>String(row.id)));
+        if(restoredIds.size!==items.length)throw Error('VAULT_RESTORE_DUPLICATE');
+        const currentById=new Map(oldItems.map(row=>[String(row.id),row]));
+        if(replaceAll){
+          const stamp=new Date().toISOString();
+          for(const row of oldItems){
+            if(restoredIds.has(String(row.id)))continue;
+            if(row.deleted){store.put(row);continue}
+            store.put({...row,blob:null,size:0,deleted:true,syncState:'pending',
+              syncRevision:crypto.randomUUID?.()||('restore-del-'+Date.now()+'-'+Math.random().toString(36).slice(2)),
+              updatedAt:stamp})
+          }
+        }
+        for(const row of items){
+          const previous=currentById.get(String(row.id));
+          store.put({...row,remoteUpdatedAt:String(previous?.remoteUpdatedAt||''),
+            syncRevision:crypto.randomUUID?.()||('restore-'+Date.now()+'-'+Math.random().toString(36).slice(2)),
+            syncState:'pending'})
+        }
+        const seen=new Set();
+        for(const row of trashRows){
+          if(seen.has(String(row.id)))throw Error('VAULT_TRASH_DUPLICATE');
+          seen.add(String(row.id));
+          if(row.scope!==scope||Number(row.expiresAt)<=now)throw Error('VAULT_TRASH_RESTORE_EXPIRED');
+          const current=oldTrash.find(entry=>String(entry.id)===String(row.id));
+          if(current){
+            if(current.scope!==scope)throw Error('VAULT_TRASH_SCOPE_COLLISION');
+            // Keep more-recent locally deleted data instead of replacing it with an old snapshot.
+            continue
+          }
+          trash.add(row)
+        }
+      }catch(e){fail(e)}
+    };
+    itemReq.onsuccess=()=>{oldItems=itemReq.result||[];ready()};
+    trashReq.onsuccess=()=>{oldTrash=trashReq.result||[];ready()};
+    itemReq.onerror=()=>fail(itemReq.error||Error('VAULT_ITEMS_READ_FAILED'));
+    trashReq.onerror=()=>fail(trashReq.error||Error('VAULT_TRASH_READ_FAILED'));
+    tx.oncomplete=()=>resolve(true);
+    tx.onerror=()=>reject(reason||tx.error||Error('VAULT_RESTORE_FAILED'));
+    tx.onabort=()=>reject(reason||tx.error||Error('VAULT_RESTORE_ABORTED'))
+  })
+}
 async function blobHash(blob){const bytes=await blob.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function restoreSettings(snap,mode){if(!snap?.settings)return;if(mode==='snapshot'){const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k))remove.push(k)}remove.forEach(k=>localStorage.removeItem(k))}Object.entries(snap.settings).forEach(([k,v])=>{if(safeSettingKey(k))localStorage.setItem(k,String(v))})}
 
@@ -71,7 +143,41 @@ function bytesToB64(bytes){let out='';const step=0x8000;for(let i=0;i<bytes.leng
 function b64ToBytes(s){const raw=atob(s),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
 function blobDataUrl(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(blob)})}
 async function saveBlob(name,mime,blob){const data=await blobDataUrl(blob);if(window.Android?.saveBase64)return Android.saveBase64(name,mime,data);const a=document.createElement('a');a.href=data;a.download=name;document.body.appendChild(a);a.click();a.remove()}
-async function backupBytes(){if(!window.JSZip)throw new Error('أداة النسخ الاحتياطي غير جاهزة');const d=device(),items=(await all()).filter(x=>!x.deleted&&x.blob);if(items.length>MAX_ITEMS)throw new Error('عدد عناصر الأرشيف أكبر من الحد الآمن');let total=0,zip=new JSZip(),manifest={format:'AbuBassamVault',version:6,createdAt:new Date().toISOString(),branchDeviceId:d.id,branchName:d.name,count:items.length,items:[]};for(const [index,item] of items.entries()){const size=Number(item.blob.size);if(size>MAX_FILE)throw new Error('يوجد ملف أكبر من 100MB: '+nice(item.name));total+=size;if(total>MAX_TOTAL)throw new Error('إجمالي الأرشيف يتجاوز 500MB وهو أكبر من حد الاستعادة الآمن');const entryId=String(index+1).padStart(6,'0'),path=`files/${entryId}/${nice(item.name)}`;manifest.items.push({id:item.id,name:item.name,category:item.category,mime:item.mime,size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,path});zip.file(path,item.blob)}zip.file('manifest.json',JSON.stringify(manifest,null,2));zip.file('app-settings.json',JSON.stringify({format:'AbuBassamSettings',version:6,createdAt:new Date().toISOString(),settings:settings()},null,2));return zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}})}
+function trashScope(){
+  const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local');
+  const s=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{};
+  return uid+':'+String(s.device_id||s.id||'device')
+}
+async function backupTrash(){
+  const db=await openDb(),scope=trashScope(),now=Date.now();
+  return new Promise((resolve,reject)=>{
+    const q=db.transaction('trash','readonly').objectStore('trash').getAll();
+    q.onsuccess=()=>{
+      try{
+        const rows=(q.result||[]).filter(row=>row.scope===scope&&Number(row.expiresAt)>now&&Number(row.deletedAtMs)>0);
+        if(rows.length>MAX_ITEMS)throw Error('عدد محذوفات الفرع أكبر من الحد الآمن');
+        for(const row of rows)if(!row.blob||!Number.isFinite(Number(row.blob.size))||row.blob.size>MAX_FILE)throw Error('ملف محذوف بلا محتوى صالح');
+        resolve(rows)
+      }catch(e){reject(e)}
+    };
+    q.onerror=()=>reject(q.error||Error('TRASH_READ_FAILED'))
+  })
+}
+async function backupBytes(){if(!window.JSZip)throw new Error('أداة النسخ الاحتياطي غير جاهزة');const d=device(),items=(await all()).filter(x=>!x.deleted&&x.blob);if(items.length>MAX_ITEMS)throw new Error('عدد عناصر الأرشيف أكبر من الحد الآمن');let total=0,zip=new JSZip(),manifest={format:'AbuBassamVault',version:6,createdAt:new Date().toISOString(),branchDeviceId:d.id,branchName:d.name,count:items.length,items:[],trashScope:trashScope(),trash:[]};for(const [index,item] of items.entries()){const size=Number(item.blob.size);if(size>MAX_FILE)throw new Error('يوجد ملف أكبر من 100MB: '+nice(item.name));total+=size;if(total>MAX_TOTAL)throw new Error('إجمالي الأرشيف يتجاوز 500MB وهو أكبر من حد الاستعادة الآمن');const entryId=String(index+1).padStart(6,'0'),path=`files/${entryId}/${nice(item.name)}`;manifest.items.push({id:item.id,name:item.name,category:item.category,mime:item.mime,size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,path});zip.file(path,item.blob)}
+const deleted=await backupTrash();
+for(const [index,row] of deleted.entries()){
+  const size=Number(row.blob.size);total+=size;
+  if(total>MAX_TOTAL)throw Error('إجمالي الأرشيف وسلة المحذوفات يتجاوز 500MB');
+  const entryId=String(index+1).padStart(6,'0'),path=`trash/${entryId}/${nice(row.name)}`;
+  const sha256=await blobHash(row.blob);
+  manifest.trash.push({id:row.id,sourceId:row.sourceId||'',name:row.name,
+    category:row.category,mime:row.mime,size,createdAt:row.createdAt,updatedAt:row.updatedAt,
+    folder:row.folder||'',favorite:!!row.favorite,lastOpenedAt:row.lastOpenedAt||'',
+    manualOrder:Number.isInteger(row.manualOrder)?row.manualOrder:null,
+    deletedAtMs:Number(row.deletedAtMs),expiresAt:Number(row.expiresAt),sha256,path});
+  zip.file(path,row.blob)
+}
+zip.file('manifest.json',JSON.stringify(manifest,null,2));zip.file('app-settings.json',JSON.stringify({format:'AbuBassamSettings',version:6,createdAt:new Date().toISOString(),settings:settings()},null,2));return zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}})}
 function strong(pass){return String(pass).length>=12&&/[A-Za-z\u0600-\u06ff]/.test(pass)&&/\d/.test(pass)&&/[^A-Za-z\u0600-\u06ff\d\s]/.test(pass)&&!/(123456|password|qwerty|akram|ابوبسام|أبوبسام)/i.test(pass)}
 async function keyFor(pass,salt){const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function encryptBackup(bytes,pass){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await keyFor(pass,salt),cipher=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,bytes)),out=new Uint8Array(MAGIC.length+16+12+cipher.length);out.set(MAGIC,0);out.set(salt,MAGIC.length);out.set(iv,MAGIC.length+16);out.set(cipher,MAGIC.length+28);return out}
@@ -79,6 +185,52 @@ function isEncrypted(bytes){return bytes.length>MAGIC.length+28&&MAGIC.every((v,
 async function decryptBackup(bytes,pass){if(!isEncrypted(bytes))return bytes;const salt=bytes.slice(MAGIC.length,MAGIC.length+16),iv=bytes.slice(MAGIC.length+16,MAGIC.length+28),cipher=bytes.slice(MAGIC.length+28),key=await keyFor(pass,salt);return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,cipher))}
 async function plainBackup(mode='save'){if(!allowed('vaultBackup'))return alert('الأدمن عطّل النسخ الاحتياطي لهذا الفرع.');if(!confirm('النسخة ZIP العادية غير مشفرة. استخدم «نسخة مشفرة للفرع» للملفات الحساسة. هل تريد إنشاء ZIP عادي؟'))return;try{const bytes=await backupBytes(),name='Abu_Bassam_Branch_'+new Date().toISOString().slice(0,10)+'.zip',blob=new Blob([bytes],{type:'application/zip'});if(mode==='share'&&window.Android?.shareBase64){const data=await blobDataUrl(blob);Android.shareBase64(name,'application/zip',data)}else await saveBlob(name,'application/zip',blob);window.AbuBassamOps?.add?.({type:'backup',title:'نسخة احتياطية للفرع',details:'ZIP غير مشفر',section:'الحفظ والمستندات'})}catch(e){alert('تعذر إنشاء النسخة: '+String(e?.message||e))}}
 async function encryptedBackup(){if(!allowed('vaultEncryptedBackup'))return alert('الأدمن عطّل النسخ الاحتياطي لهذا الفرع.');let pass=prompt('كلمة مرور النسخة المشفرة: 12 محرفًا على الأقل، حرف + رقم + رمز.');if(pass===null)return;if(!strong(pass))return alert('استخدم كلمة مرور قوية: 12 محرفًا على الأقل وتتضمن حرفًا ورقمًا ورمزًا.');if(prompt('أعد كلمة مرور النسخة المشفرة:')!==pass)return alert('كلمتا المرور غير متطابقتين.');try{const bytes=await backupBytes(),enc=await encryptBackup(bytes,pass);pass='';await saveBlob('Abu_Bassam_Branch_Encrypted_'+Date.now()+'.abuvault','application/octet-stream',new Blob([enc],{type:'application/octet-stream'}));window.AbuBassamOps?.add?.({type:'backup',title:'نسخة مشفرة للفرع',details:'AES-GCM / PBKDF2',section:'الحفظ والمستندات'});alert('تم إنشاء نسخة مشفرة لهذا الفرع ✓')}catch(e){pass='';alert('تعذر إنشاء النسخة المشفرة: '+String(e?.message||e))}}
-async function safeRestore(file,options={}){if(!file)return false;if(!allowed('vaultRestoreBackup')){alert('الأدمن عطّل استعادة النسخ لهذا الفرع.');return false}const mode=options.mode==='merge'?'merge':'snapshot';if(file.size>MAX_ZIP+40*1024*1024){alert('حجم النسخة أكبر من الحد الآمن.');return false}if(Date.now()<restoreLockedUntil){alert('تم إيقاف محاولات فك النسخة مؤقتًا. حاول لاحقًا.');return false}try{let bytes=new Uint8Array(await file.arrayBuffer());if(isEncrypted(bytes)){let pass=prompt('أدخل كلمة مرور النسخة المشفرة:');if(pass===null)return false;try{bytes=await decryptBackup(bytes,pass);restoreFails=0;pass=''}catch(_){pass='';restoreFails++;if(restoreFails>=5){restoreLockedUntil=Date.now()+5*60*1000;restoreFails=0}throw new Error('كلمة مرور النسخة غير صحيحة')}}if(bytes.byteLength>MAX_ZIP)throw new Error('حجم ZIP بعد فك التشفير أكبر من الحد الآمن');if(!window.JSZip)throw new Error('أداة الاستعادة غير جاهزة');const zip=await JSZip.loadAsync(bytes),entry=zip.file('manifest.json');if(!entry)throw new Error('النسخة لا تحتوي manifest صالحًا');const manifest=JSON.parse(await entry.async('string'));if(manifest.format!=='AbuBassamVault'||!Array.isArray(manifest.items))throw new Error('تنسيق النسخة غير معروف');if(manifest.items.length>MAX_ITEMS)throw new Error('النسخة تحتوي أكثر من 1000 عنصر');const d=device();if(manifest.branchDeviceId&&manifest.branchDeviceId!==d.id)throw new Error('هذه النسخة تخص فرعًا آخر ولا يمكن فتحها في هذا الفرع');if(!manifest.branchDeviceId&&role()!=='owner')throw new Error('نسخة قديمة بلا هوية فرع؛ استعادتها متاحة للأدمن فقط');if(!manifest.branchDeviceId&&!options.silentConfirm&&!confirm('هذه نسخة قديمة قبل عزل الفروع. استعادتها ستصبح حالة فرع الأدمن الحالي. متابعة؟'))return false;let declared=0,seenIds=new Set(),seenPaths=new Set();for(const m of manifest.items){const archiveId=String(m.id||'');if(archiveId){if(seenIds.has(archiveId))throw new Error('معرّف ملف مكرر داخل النسخة');seenIds.add(archiveId)}const size=Math.max(0,Number(m.size)||0);if(size>MAX_FILE)throw new Error('ملف داخل النسخة يتجاوز 100MB');declared+=size;if(declared>MAX_TOTAL)throw new Error('إجمالي الملفات بعد الفك يتجاوز 500MB');const p=String(m.path||'');if(!/^files\/[A-Za-z0-9_.-]+\//.test(p)||p.includes('..'))throw new Error('مسار غير آمن داخل النسخة');if(seenPaths.has(p))throw new Error('مسار ملف مكرر داخل النسخة');seenPaths.add(p)}if(!options.silentConfirm){const msg=mode==='snapshot'?'ستُستبدل حالة الأرشيف الحالية بالحالة الموجودة في هذه النسخة. سيتم إنشاء نسخة أمان للحالة الحالية أولًا. متابعة؟':'سيتم دمج النسخة مع ملفات هذا الفرع مع حفظ التعارضات كنسخ مستقلة. متابعة؟';if(!confirm(msg))return false}const existing=await all();if(!options.skipSafetyBackup&&existing.some(x=>!x.deleted)){const current=await backupBytes(),name='Abu_Bassam_Before_Restore_'+Date.now()+'.zip';await saveBlob(name,'application/zip',new Blob([current],{type:'application/zip'}))}const byId=new Map(existing.map(x=>[String(x.id),x])),prepared=[],usedIds=new Set(mode==='merge'?existing.map(x=>String(x.id)):[]);let total=0;for(const meta of manifest.items){const packed=zip.file(meta.path);if(!packed)throw new Error('ملف مفقود داخل النسخة: '+nice(meta.name));const internal=Number(packed?._data?.uncompressedSize||0);if(internal>MAX_FILE)throw new Error('تم اكتشاف ملف مضغوط أكبر من الحد الآمن');const blob=await packed.async('blob');if(blob.size>MAX_FILE)throw new Error('ملف مفكوك أكبر من 100MB');total+=blob.size;if(total>MAX_TOTAL)throw new Error('تجاوز إجمالي الفك 500MB');let id=String(meta.id||crypto.randomUUID?.()||('rest-'+Date.now()+'-'+prepared.length)),name=nice(meta.name),createdAt=meta.createdAt||new Date().toISOString();if(mode==='merge'&&usedIds.has(id)){const old=byId.get(id);let same=false;if(old&&!old.deleted&&old.blob&&Number(old.size||old.blob.size)===blob.size){same=(await blobHash(old.blob))===(await blobHash(blob))}if(!same){id=crypto.randomUUID?.()||('rest-'+Date.now()+'-'+Math.random().toString(36).slice(2));name=nice(String(meta.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة مستعادة)$1'))}else{continue}}usedIds.add(id);prepared.push({id,name,category:meta.category==='image'?'image':'file',mime:meta.mime||blob.type||'application/octet-stream',size:blob.size,createdAt,updatedAt:meta.updatedAt||new Date().toISOString(),folder:meta.folder||'',favorite:!!meta.favorite,lastOpenedAt:meta.lastOpenedAt||'',manualOrder:Number.isInteger(meta.manualOrder)?meta.manualOrder:null,blob,syncState:'pending',deleted:false})}if(mode==='merge'){const currentCount=existing.filter(x=>!x.deleted).length,newCount=prepared.filter(x=>!byId.has(String(x.id))).length;if(currentCount+newCount>MAX_ITEMS)throw new Error('الدمج سيتجاوز حد 1000 عنصر')}await applyAtomic(prepared,{replaceAll:mode==='snapshot',expectedRows:existing});const settingsEntry=zip.file('app-settings.json');if(settingsEntry){const snap=JSON.parse(await settingsEntry.async('string'));if(snap?.format==='AbuBassamSettings')restoreSettings(snap,mode)}try{window.AbuBassamOps?.add?.({type:'restore',title:'استعادة نسخة فرع',details:`${prepared.length} عنصر • ${mode==='snapshot'?'Snapshot':'دمج'}`,section:'الحفظ والمستندات'})}catch(_){}await window.DocumentVault?.onShow?.();if(!options.silentSuccess)alert(`تمت استعادة ${prepared.length} عنصر داخل هذا الفرع ✓`);return true}catch(error){if(!options.silentError)alert('تعذرت الاستعادة: '+String(error?.message||error));return false}finally{if($('vBackupInput'))$('vBackupInput').value=''}}
+async function safeRestore(file,options={}){if(!file)return false;if(!allowed('vaultRestoreBackup')){alert('الأدمن عطّل استعادة النسخ لهذا الفرع.');return false}const mode=options.mode==='merge'?'merge':'snapshot';if(file.size>MAX_ZIP+40*1024*1024){alert('حجم النسخة أكبر من الحد الآمن.');return false}if(Date.now()<restoreLockedUntil){alert('تم إيقاف محاولات فك النسخة مؤقتًا. حاول لاحقًا.');return false}try{let bytes=new Uint8Array(await file.arrayBuffer());if(isEncrypted(bytes)){let pass=prompt('أدخل كلمة مرور النسخة المشفرة:');if(pass===null)return false;try{bytes=await decryptBackup(bytes,pass);restoreFails=0;pass=''}catch(_){pass='';restoreFails++;if(restoreFails>=5){restoreLockedUntil=Date.now()+5*60*1000;restoreFails=0}throw new Error('كلمة مرور النسخة غير صحيحة')}}if(bytes.byteLength>MAX_ZIP)throw new Error('حجم ZIP بعد فك التشفير أكبر من الحد الآمن');if(!window.JSZip)throw new Error('أداة الاستعادة غير جاهزة');const zip=await JSZip.loadAsync(bytes),entry=zip.file('manifest.json');if(!entry)throw new Error('النسخة لا تحتوي manifest صالحًا');const manifest=JSON.parse(await entry.async('string'));if(manifest.format!=='AbuBassamVault'||!Array.isArray(manifest.items))throw new Error('تنسيق النسخة غير معروف');if(manifest.items.length>MAX_ITEMS)throw new Error('النسخة تحتوي أكثر من 1000 عنصر');const d=device();if(manifest.branchDeviceId&&manifest.branchDeviceId!==d.id)throw new Error('هذه النسخة تخص فرعًا آخر ولا يمكن فتحها في هذا الفرع');if(!manifest.branchDeviceId&&role()!=='owner')throw new Error('نسخة قديمة بلا هوية فرع؛ استعادتها متاحة للأدمن فقط');if(!manifest.branchDeviceId&&!options.silentConfirm&&!confirm('هذه نسخة قديمة قبل عزل الفروع. استعادتها ستصبح حالة فرع الأدمن الحالي. متابعة؟'))return false;let declared=0,seenIds=new Set(),seenPaths=new Set();for(const m of manifest.items){const archiveId=String(m.id||'');if(archiveId){if(seenIds.has(archiveId))throw new Error('معرّف ملف مكرر داخل النسخة');seenIds.add(archiveId)}const size=Math.max(0,Number(m.size)||0);if(size>MAX_FILE)throw new Error('ملف داخل النسخة يتجاوز 100MB');declared+=size;if(declared>MAX_TOTAL)throw new Error('إجمالي الملفات بعد الفك يتجاوز 500MB');const p=String(m.path||'');if(!/^files\/[A-Za-z0-9_.-]+\//.test(p)||p.includes('..'))throw new Error('مسار غير آمن داخل النسخة');if(seenPaths.has(p))throw new Error('مسار ملف مكرر داخل النسخة');seenPaths.add(p)}
+if(manifest.trash!==undefined){
+ if(!Array.isArray(manifest.trash)||manifest.trash.length>MAX_ITEMS)throw Error('INVALID_TRASH_MANIFEST');
+ if(typeof manifest.trashScope!=='string'||manifest.trashScope!==trashScope())throw Error('VAULT_TRASH_SCOPE_MISMATCH');
+ if(manifest.trash.some(m=>Number(m.expiresAt)>Date.now())&&!allowed('vaultRestoreDeleted'))throw Error('VAULT_TRASH_RESTORE_PERMISSION');
+ const trashIds=new Set(),now=Date.now();
+ for(const meta of manifest.trash){
+   const id=String(meta.id||''),path=String(meta.path||''),deleted=Number(meta.deletedAtMs),expires=Number(meta.expiresAt),size=Number(meta.size);
+   if(!id||id.length>160||trashIds.has(id))throw Error('VAULT_TRASH_DUPLICATE');
+   trashIds.add(id);
+   if(!/^trash\/[A-Za-z0-9_.-]+\//.test(path)||path.includes('..')||seenPaths.has(path))throw Error('VAULT_TRASH_UNSAFE_PATH');
+   seenPaths.add(path);
+   if(!Number.isFinite(deleted)||deleted<=0||deleted>now+300000||!Number.isFinite(expires)||expires<=deleted||expires>deleted+30*86400000)throw Error('VAULT_TRASH_INVALID_EXPIRY');
+   if(!Number.isFinite(size)||size<0||size>MAX_FILE)throw Error('VAULT_TRASH_INVALID_SIZE');
+   if(!/^[0-9a-f]{64}$/i.test(String(meta.sha256||'')))throw Error('VAULT_TRASH_HASH_REQUIRED');
+   if(expires>now){declared+=size;if(declared>MAX_TOTAL)throw Error('إجمالي الملفات وسلة المحذوفات يتجاوز 500MB')}
+ }
+}
+if(!options.silentConfirm){const msg=mode==='snapshot'?'ستُستبدل حالة الأرشيف الحالية بالحالة الموجودة في هذه النسخة. سيتم إنشاء نسخة أمان للحالة الحالية أولًا. متابعة؟':'سيتم دمج النسخة مع ملفات هذا الفرع مع حفظ التعارضات كنسخ مستقلة. متابعة؟';if(!confirm(msg))return false}const existing=await all();if(!options.skipSafetyBackup&&existing.some(x=>!x.deleted)){const current=await backupBytes(),name='Abu_Bassam_Before_Restore_'+Date.now()+'.zip';await saveBlob(name,'application/zip',new Blob([current],{type:'application/zip'}))}const byId=new Map(existing.map(x=>[String(x.id),x])),prepared=[],usedIds=new Set(mode==='merge'?existing.map(x=>String(x.id)):[]);let total=0;for(const meta of manifest.items){const packed=zip.file(meta.path);if(!packed)throw new Error('ملف مفقود داخل النسخة: '+nice(meta.name));const internal=Number(packed?._data?.uncompressedSize||0);if(internal>MAX_FILE)throw new Error('تم اكتشاف ملف مضغوط أكبر من الحد الآمن');const blob=await packed.async('blob');if(blob.size>MAX_FILE)throw new Error('ملف مفكوك أكبر من 100MB');total+=blob.size;if(total>MAX_TOTAL)throw new Error('تجاوز إجمالي الفك 500MB');let id=String(meta.id||crypto.randomUUID?.()||('rest-'+Date.now()+'-'+prepared.length)),name=nice(meta.name),createdAt=meta.createdAt||new Date().toISOString();if(mode==='merge'&&usedIds.has(id)){const old=byId.get(id);let same=false;if(old&&!old.deleted&&old.blob&&Number(old.size||old.blob.size)===blob.size){same=(await blobHash(old.blob))===(await blobHash(blob))}if(!same){id=crypto.randomUUID?.()||('rest-'+Date.now()+'-'+Math.random().toString(36).slice(2));name=nice(String(meta.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة مستعادة)$1'))}else{continue}}usedIds.add(id);prepared.push({id,name,category:meta.category==='image'?'image':'file',mime:meta.mime||blob.type||'application/octet-stream',size:blob.size,createdAt,updatedAt:meta.updatedAt||new Date().toISOString(),folder:meta.folder||'',favorite:!!meta.favorite,lastOpenedAt:meta.lastOpenedAt||'',manualOrder:Number.isInteger(meta.manualOrder)?meta.manualOrder:null,blob,syncState:'pending',deleted:false})}if(mode==='merge'){const currentCount=existing.filter(x=>!x.deleted).length,newCount=prepared.filter(x=>!byId.has(String(x.id))).length;if(currentCount+newCount>MAX_ITEMS)throw new Error('الدمج سيتجاوز حد 1000 عنصر')}
+const hasTrash=Array.isArray(manifest.trash),preparedTrash=[],expectedTrash=hasTrash?await backupTrash():null,restoreScope=hasTrash?trashScope():'';
+if(hasTrash){
+  const now=Date.now();
+  for(const meta of manifest.trash){
+    if(Number(meta.expiresAt)<=now)continue; // Even an old valid backup cannot extend 30-day retention.
+    const entry=zip.file(meta.path);
+    if(!entry)throw Error('VAULT_TRASH_MISSING_CONTENT');
+    if(Number(entry?._data?.uncompressedSize||0)>MAX_FILE)throw Error('VAULT_TRASH_UNCOMPRESSED_LIMIT');
+    const blob=await entry.async('blob');
+    if(blob.size!==Number(meta.size))throw Error('VAULT_TRASH_SIZE_MISMATCH');
+    total+=blob.size;
+    if(total>MAX_TOTAL)throw Error('إجمالي الاستعادة يتجاوز 500MB');
+    if((await blobHash(blob)).toLowerCase()!==String(meta.sha256).toLowerCase())throw Error('VAULT_TRASH_HASH_MISMATCH');
+    preparedTrash.push({
+      id:String(meta.id),sourceId:String(meta.sourceId||''),name:nice(meta.name),
+      category:meta.category==='image'?'image':'file',mime:String(meta.mime||blob.type||'application/octet-stream'),
+      size:blob.size,createdAt:meta.createdAt||new Date(Number(meta.deletedAtMs)).toISOString(),
+      updatedAt:meta.updatedAt||new Date(Number(meta.deletedAtMs)).toISOString(),
+      folder:String(meta.folder||''),favorite:!!meta.favorite,lastOpenedAt:String(meta.lastOpenedAt||''),
+      manualOrder:Number.isInteger(meta.manualOrder)?meta.manualOrder:null,
+      deletedAtMs:Number(meta.deletedAtMs),expiresAt:Number(meta.expiresAt),
+      scope:restoreScope,blob,deleted:false,syncState:'local-trash'
+    })
+  }
+}
+if(hasTrash)await applyAtomicWithTrash(prepared,preparedTrash,{replaceAll:mode==='snapshot',expectedRows:existing,expectedTrash,scope:restoreScope});
+else await applyAtomic(prepared,{replaceAll:mode==='snapshot',expectedRows:existing});
+const settingsEntry=zip.file('app-settings.json');if(settingsEntry){const snap=JSON.parse(await settingsEntry.async('string'));if(snap?.format==='AbuBassamSettings')restoreSettings(snap,mode)}try{window.AbuBassamOps?.add?.({type:'restore',title:'استعادة نسخة فرع',details:`${prepared.length} عنصر • ${mode==='snapshot'?'Snapshot':'دمج'}`,section:'الحفظ والمستندات'})}catch(_){}await window.DocumentVault?.onShow?.();if(!options.silentSuccess)alert(`تمت استعادة ${prepared.length} عنصر داخل هذا الفرع ✓`);return true}catch(error){if(!options.silentError)alert('تعذرت الاستعادة: '+String(error?.message||error));return false}finally{if($('vBackupInput'))$('vBackupInput').value=''}}
 window.AbuDocumentVaultHardening=Object.freeze({backup:plainBackup,encryptedBackup,restore:safeRestore,safeSettingKey});
 })();
