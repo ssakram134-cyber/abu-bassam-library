@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { registerRootComponent } from 'expo';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
@@ -212,6 +212,29 @@ function App() {
     } catch (_) { setCameraBusy(false); cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.'); }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
+  const scanBarcodeImage = useCallback(async ({ dataUrl }) => {
+    let temporaryUri = '';
+    try {
+      const input = String(dataUrl || '');
+      const parsed = splitDataUrl(input);
+      if (!['image/jpeg','image/png','image/webp'].includes(parsed.mime))
+        throw new Error('اختر صورة JPG أو PNG أو WebP للباركود');
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(parsed.base64) || parsed.base64.length > 10 * 1024 * 1024)
+        throw new Error('الصورة كبيرة أو غير صالحة للمسح. اختر صورة بحجم أصغر');
+      if (!FileSystem.cacheDirectory) throw new Error('تعذر الوصول إلى الملفات المؤقتة');
+      temporaryUri = FileSystem.cacheDirectory + 'abu_bassam_barcode_' + Date.now() +
+        (parsed.mime === 'image/png' ? '.png' : parsed.mime === 'image/webp' ? '.webp' : '.jpg');
+      await FileSystem.writeAsStringAsync(temporaryUri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      const codes = await Camera.scanFromURLAsync(temporaryUri, BARCODE_TYPES);
+      const detected = Array.isArray(codes) ? codes.find(item => String(item?.data || '').length > 0) : null;
+      if (!detected) throw new Error('لم يتم العثور على باركود. قرّب الرمز واقصص الحواف ثم أعد المحاولة');
+      inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(detected.data), barcodeType: String(detected.type || '') });
+    } catch (error) { cameraError(String(error?.message || error || 'تعذرت قراءة الباركود من الصورة')); }
+    finally {
+      if (temporaryUri) await FileSystem.deleteAsync(temporaryUri, { idempotent: true }).catch(() => {});
+    }
+  }, [cameraError, inject]);
+
   const onBarcodeScanned = useCallback((result) => {
     if (barcodeScanGuard.current || barcodeLocked || cameraMode !== 'barcode' || !result?.data) return;
     barcodeScanGuard.current = true;
@@ -405,6 +428,7 @@ function App() {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setStartupFailed(false); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
+    if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
     if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
@@ -419,7 +443,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64, scanBarcodeImage]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
