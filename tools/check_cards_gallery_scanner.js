@@ -11,7 +11,7 @@ const fakeFileSystem={cacheDirectory:'file:///test/',EncodingType:{Base64:'base6
 const fakeCamera={scanFromURLAsync:async(...args)=>{scans.push(args);return[{type:'qr',data:'ملاك أكرم حاتم'}]}};
 const parse=data=>{const marker=';base64,',i=data.indexOf(marker);return{mime:data.slice(5,i),base64:data.slice(i+marker.length)}};
 const scan=new Function('useCallback','inject','Camera','FileSystem','BARCODE_TYPES','splitDataUrl',resultSource)(fn=>fn,(...args)=>answers.push(args),fakeCamera,fakeFileSystem,['qr','code128'],parse);
-const sent=[],warnings=[],webWindow={addEventListener(){},Android:{scanBarcodeImage:data=>sent.push(data)}},input={value:'chosen-file'};
+const sent=[],warnings=[],webWindow={addEventListener(){},AbuBassamSecurity:{role:()=> 'owner'},Android:{scanBarcodeImage:(data,requestId)=>sent.push({data,requestId})}},input={value:'chosen-file'};
 const webDocument={getElementById:id=>id==='csBarcodeImageInput'?input:null,addEventListener(){}};
 class FakeReader{readAsDataURL(){this.result='data:image/png;base64,QUJD';this.onload()}}
 const gallerySource=cards.replace('window.CardsStudio={','window.__galleryRegression={decodeBarcodeImage};window.CardsStudio={');
@@ -20,13 +20,15 @@ new Function('window','document','localStorage','FileReader','alert',gallerySour
 (async()=>{
  await webWindow.__galleryRegression.decodeBarcodeImage({size:1024,type:'image/png',name:'barcode.png'});
  assert.equal(sent.length,1,'Gallery image must be sent to Android if BarcodeDetector is unavailable');
+ assert.equal(sent[0].requestId,'1','Gallery scanner must send a request identity');
  assert.equal(input.value,'','Gallery input must reset after scan');
  await webWindow.__galleryRegression.decodeBarcodeImage({size:10*1024*1024,type:'image/png',name:'too-large.png'});
  assert.ok(warnings.some(text=>String(text).includes('8MB')),'Oversized gallery files must be refused');
- await scan({data:sent[0]});
+ await scan(sent[0]);
  assert.equal(scans.length,1,'Native reader must scan one local image');
  assert.equal(writes[0][1],'QUJD','Only base64 image content must be written to cache');
  assert.equal(answers[0][1].data,'ملاك أكرم حاتم','Arabic QR content must reach WebView');
+ assert.equal(answers[0][1].requestId,'1','Native scan must echo the originating request identity');
  assert.equal(deletes.length,1,'Private temporary image must always be deleted');
  await scan({data:'data:text/html;base64,QUJD'});
  assert.equal(scans.length,1,'Unsupported MIME must not reach native QR reader');
