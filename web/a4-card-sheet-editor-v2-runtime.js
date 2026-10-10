@@ -26,7 +26,43 @@ function rotate(h,el){h.addEventListener('pointerdown',ev=>{ev.preventDefault();
 function group(doc,id){return [...doc.querySelectorAll(`[data-a4group="${id}"]`)]}
 function sync(doc,id){const n=group(doc,id).length;group(doc,id).forEach(el=>{const input=el.querySelector(':scope > .a4v2-count input');if(input)input.value=n})}
 function newPage(page){const p=page.cloneNode(false);p.innerHTML='';page.parentNode.appendChild(p);return p}
-function copies(el,d){const doc=el.ownerDocument,id=el.dataset.a4group,all=group(doc,id);if(d<0){if(all.length<=1)return;all[all.length-1].remove();sync(doc,id);return}if(all.length>=25)return;const last=all[all.length-1],g=getG(last);let page=last.closest('.pair-page,.duplex-page,.abu-a4-card-page,.a4-page'),x=g.x,y=g.y+g.h+5;if(y+g.h>H-5){x=g.x+g.w+5;y=5}if(x+g.w>W-5){page=newPage(page);x=5;y=5}const clone=last.cloneNode(true);clearControls(clone);clone.dataset.a4group=id;page.appendChild(clone);setG(clone,{...g,x,y});bind(clone,Date.now());sync(doc,id)}
+function copies(el,d){
+ const doc=el.ownerDocument,id=el.dataset.a4group,all=group(doc,id);
+ if(d<0){
+  if(all.length<=1)return;
+  const last=all[all.length-1],twin=duplexTwins.get(last),otherId=twin?.dataset.a4group;
+  last.remove();if(twin?.isConnected)twin.remove();
+  sync(doc,id);if(otherId)sync(doc,otherId);
+  return
+ }
+ if(all.length>=25)return;
+ const last=all[all.length-1],twin=duplexTwins.get(last),g=getG(last);
+ if(twin&&group(doc,twin.dataset.a4group).length>=25)return;
+ let page=last.closest('.pair-page,.duplex-page,.abu-a4-card-page,.a4-page'),otherPage=twin?.closest('.duplex-page'),x=g.x,y=g.y+g.h+5;
+ if(y+g.h>H-5){x=g.x+g.w+5;y=5}
+ if(x+g.w>W-5){
+  if(otherPage){
+   const isFront=page.dataset.a4Side==='front',frontPage=isFront?page:otherPage,backPage=isFront?otherPage:page;
+   const newFront=newPage(frontPage),newBack=newPage(backPage);
+   page=isFront?newFront:newBack;otherPage=isFront?newBack:newFront
+  }else page=newPage(page);
+  x=5;y=5
+ }
+ const clone=last.cloneNode(true);clearControls(clone);clone.dataset.a4group=id;
+ const pos={...g,x,y};
+ if(twin?.isConnected&&otherPage){
+  const twinClone=twin.cloneNode(true);clearControls(twinClone);
+  const pairId='clone-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  clone.dataset.a4PairId=pairId;twinClone.dataset.a4PairId=pairId;
+  page.appendChild(clone);otherPage.appendChild(twinClone);
+  setG(clone,pos,false);setG(twinClone,mirroredG(clone,pos),false);
+  bind(clone,Date.now());bind(twinClone,Date.now()+1);
+  duplexTwins.set(clone,twinClone);duplexTwins.set(twinClone,clone);
+  sync(doc,id);sync(doc,twin.dataset.a4group)
+ }else{
+  page.appendChild(clone);setG(clone,pos,false);bind(clone,Date.now());sync(doc,id)
+ }
+}
 function prepare(frame){const doc=frame.contentDocument;if(!doc)return;const snapshots=allPages(doc).map(page=>({page,items:items(page).map(el=>({el,g:rectMM(el,page)}))}));styleEditor(doc);let i=0;snapshots.forEach(({page,items:shots})=>{Object.assign(page.style,{position:'relative',display:'block',padding:'0'});shots.forEach(({el,g})=>{setG(el,g,false);bind(el,i++)})});pairDuplex(doc)}
 function clean(doc){doc.querySelectorAll('[data-editor="1"],.a4v2-h,.a4v2-rot,.a4v2-count').forEach(n=>n.remove());doc.querySelectorAll('.a4v2-item').forEach(el=>{el.classList.remove('a4v2-item');delete el.dataset.a4bound;delete el.dataset.a4group});allPages(doc).forEach(p=>{p.style.overflow='hidden';p.style.boxShadow='none'});return '<!doctype html>'+doc.documentElement.outerHTML}
 function run(){if(!job)return;const frame=document.getElementById('abuA4EditorV2Frame'),doc=frame?.contentDocument;if(!doc)return;try{const html=clean(doc),j=job;let result;if(j.kind==='pdf'){if(direct('savePdfHtml',{name:j.name,html}))result=true;else if(window.Android?.savePdfHtml)result=Android.savePdfHtml(j.name,html);else throw new Error('حفظ PDF يتطلب تطبيق Android. لم تتغير صفحة التطبيق.')}else if(direct('printHtml',{html}))result=true;else if(window.Android?.printHtml)result=Android.printHtml(html);else if(frame.contentWindow?.print){frame.contentWindow.print();result=true}else throw new Error('الطباعة غير متاحة على هذا الجهاز');document.getElementById('abuA4EditorV2').classList.remove('show');job=null;return result}catch(error){alert(String(error?.message||error));return false}}
