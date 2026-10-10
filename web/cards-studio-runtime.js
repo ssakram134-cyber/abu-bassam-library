@@ -328,15 +328,15 @@ function resetBrand(){if(!requireCard('cardsEdit'))return;state.brand=clone(DEFA
 function pickBrandLogo(){if(!requireCard('cardsImportImage'))return;$('csBrandLogoInput').click()}
 function openHistory(){if(!requireCard('cardsView'))return;renderHistory();openModal('csHistoryModal')}
 function deleteHistory(index){if(!requireCard('cardsDelete'))return;state.history.splice(index,1);localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history));renderHistory()}
-function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;state.queue=item.models.map(model=>({model:clone(model),copies:1}));state.output=item.mode||'a4-pairs';renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
+function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;state.queue=item.models.map(model=>({model:clone(model),copies:1}));state.output=item.mode||'a4-pairs';savePrintSettings();renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
 function pickPhoto(){if(!requireCard('cardsImportImage'))return;$('csPhotoInput').click()}
 function cameraPhoto(){if(!requireCard('cardsImportImage'))return;if(!requestNative('cardPhoto'))$('csPhotoCameraInput').click()}
 function removePhoto(){if(!requireCard('cardsEditImage'))return;state.photo='';renderForm();renderPreview()}
 function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransform={zoom:1,x:0,y:0,rotate:0};renderForm();renderPreview()}
 function photoControl(){if(!canCard('cardsEditImage'))return;state.photoTransform={zoom:Number($('csPhotoZoom').value),x:Number($('csPhotoX').value),y:Number($('csPhotoY').value),rotate:Number($('csPhotoRotate').value)};renderPreview()}
 function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPhotoTools');if(!tools)return alert('هذا النوع من الكروت لا يحتاج صورة');tools.scrollIntoView({behavior:'smooth',block:'center'})}
-function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];renderPrintSettings();renderPreview();renderStatus()}
-function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();renderAll()}
+function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];savePrintSettings();renderPrintSettings();renderPreview();renderStatus()}
+function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();savePrintSettings();renderAll()}
 function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);if($('csCopies'))$('csCopies').value=state.copies;savePrintSettings();renderPreview();renderStatus()}
 function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
@@ -352,7 +352,18 @@ function useBarcode(){if(!requireCard('cardsQr'))return;let value=state.forms.re
 function openLoginOcr(){if(!requireCard('cardsEditText'))return;if(window.DocumentVault&&DocumentVault.openOcr)return DocumentVault.openOcr('login');alert('أداة تحويل الصورة إلى نص غير جاهزة')}
 function importOcrText(text){if(!requireCard('cardsEditText'))return;let lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),account='',password='';for(let line of lines){let email=line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(email&&!account)account=email[0];if(!account&&/(?:الحساب|البريد|email|user(?:name)?|phone)\s*[:：-]/i.test(line))account=line.replace(/^.*?[:：-]\s*/,'').trim();if(!password&&/(?:كلمة\s*السر|الرمز|password|pass)\s*[:：-]/i.test(line))password=line.replace(/^.*?[:：-]\s*/,'').trim()}if(!account)account=lines[0]||'';if(!password)password=lines.find(line=>line!==account&&!/@/.test(line))||'';state.type='login';state.forms.login.account=account;state.forms.login.password=password;saveDraft();renderAll();alert('تم توزيع النص على حقول الحساب وكلمة السر. راجعهما قبل الطباعة.')}
 function exportBackup(){if(!requireCard('backupCreate'))return;let forms=clone(state.forms),history=clone(state.history);if(forms.login)forms.login.password='';if(forms.wifi)forms.wifi.password='';history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password=''}));let typography=window.AbuBassamTypography?AbuBassamTypography.exportData():null,json=JSON.stringify({version:5,createdAt:new Date().toISOString(),brand:state.brand,forms,textStyles:state.textStyles,typography,history}),data='data:application/json;base64,'+btoa(unescape(encodeURIComponent(json)));saveBase64('Abu_Bassam_Backup_'+Date.now()+'.json','application/json',data)}
-function resetData(){if(!requireCards(['cardsDelete','backupCreate']))return;if(!confirm('سيتم تصدير نسخة احتياطية أولاً ثم إعادة ضبط بيانات الكروت. متابعة؟'))return;exportBackup();state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(HISTORY_KEY);renderAll();closeModal('csBrandModal')}
+let resetArmed=false;
+function resetData(){
+ if(!requireCards(['cardsDelete','backupCreate']))return;
+ if(!resetArmed){
+  if(!confirm('سيتم طلب حفظ نسخة احتياطية. لن تُحذف بيانات الكروت قبل أن تتأكد بنفسك من وجود الملف. متابعة؟'))return;
+  exportBackup();resetArmed=true;
+  alert('تحقق من اكتمال حفظ النسخة الاحتياطية وإمكانية فتحها. بعد ذلك اضغط إعادة الضبط مرة أخرى للتأكيد النهائي.');
+  return
+ }
+ if(!confirm('تأكيد نهائي: هل تحققت من وجود النسخة الاحتياطية وصحتها؟ ستُحذف المسودات وسجل الكروت المحلي نهائيًا.'))return;
+ resetArmed=false;state.forms=clone(DEFAULT_FORMS);state.queue=[];state.history=[];state.photo='';localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(HISTORY_KEY);renderAll();closeModal('csBrandModal')
+}
 function onShow(){renderPreview();renderStatus()}
 function getTextStyle(role){return clone(state.textStyles[state.type]&&state.textStyles[state.type][role]||{})}
 function setTextStyle(role,value){if(!requireCard('cardsEditText'))return;state.textStyles[state.type]=state.textStyles[state.type]||{};state.textStyles[state.type][role]=clone(value||{});saveDraft();renderPreview()}
