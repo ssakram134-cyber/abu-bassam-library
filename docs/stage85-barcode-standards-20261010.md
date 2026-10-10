@@ -1,0 +1,4 @@
+# Stage85 — Barcode proposal #7 only
+Add true numeric barcode encoding (EAN-13, UPC-A, ITF-14) with GTIN modulo-10 checksum validation, automatic check digit for 12/11/13 digits, and a scannable quiet-zone-preserving vector SVG. No fake QR substitutes, no unsupported media codecs, no server calls. The panel is inside "الباركود والكروت" and subject to cardsBarcode permissions. Source is offline and a separate addition, leaving the original QR/camera reader intact.
+
+Stage84 registered 62 user-selected requests; this PR implements **barcode #7**, raising actual additions across stages 84/85 to **2 of 62**. Other 60 requests remain pending, not implemented. Real scanner validation after printing EAN-13, UPC-A, ITF-14 on CR80/A4 remains necessary, as does Android export behavior. No APK, Actions, Supabase deploy, or main merge.
