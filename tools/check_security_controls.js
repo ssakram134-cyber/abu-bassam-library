@@ -17,7 +17,8 @@ need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLega
 need('web/security-hardening-runtime.js',["SECURE_TRUST_KEY='abu_bassam_offline_trust_v2'","name:'HMAC',hash:'SHA-256'",'constantTime(expected,env.mac)','OFFLINE_GRACE_MS=12*60*60*1000','AbuBassamNativeSecurity']);
 forbid('web/security-hardening-runtime.js',['window.AbuBassamNativeSecurityResult']);
 need('web/security-extras-runtime.js',['verifyDangerPin','changePassword','safeSnapshot','restoreSnapshot',"nativeRequest('privacyMode'",'v.length<12','AbuBassamNativeSecurity']);
-forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_']);
+forbid('web/security-extras-runtime.js',['window.AbuBassamNativeSecurityResult','__dev_secure_','const timer=setInterval(()=>{const t=window.AbuBassamTypography','setTimeout(()=>clearInterval(timer),15000']);
+need('web/security-extras-runtime.js',["const t=window.AbuBassamTypography;if(!t)return false",'return true']);
 need('web/password-policy-runtime.js',['v.length<12','enforceSignup',"setAttribute('minlength','12')","c.auth.updateUser({password:next})"]);
 need('web/login-input-direction-runtime.js',["setAttribute('dir','ltr')","setAttribute('autocapitalize','off')","setAttribute('spellcheck','false')"]);
 need('web/device-name-runtime.js',['script.async=false','await loadSecurity();','await loadBranchVault();','await loadAccountCenter();','signalBootReady()']);

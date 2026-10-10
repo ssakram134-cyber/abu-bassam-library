@@ -2,11 +2,16 @@ const fs=require('fs'),vm=require('vm');
 const read=p=>{if(!fs.existsSync(p))throw new Error('missing '+p);return fs.readFileSync(p,'utf8')};
 const need=(s,t,l)=>{if(!s.includes(t))throw new Error('backup center check failed: '+l)};
 const forbid=(s,t,l)=>{if(s.includes(t))throw new Error('backup center check failed: '+l)};
-const runtime=read('web/backup-center-runtime.js'),loader=read('web/device-name-runtime.js'),edge=read('supabase/functions/backup-center/index.ts'),migration=read('supabase/migrations/202609260001_backup_center.sql'),state=read('supabase/migrations/202609260002_backup_snapshot_state.sql'),deny=read('supabase/migrations/202609260003_backup_metadata_direct_deny.sql');
+const runtime=read('web/backup-center-runtime.js'),vaultHardening=read('web/document-vault-hardening-runtime.js'),native=read('index.js'),loader=read('web/device-name-runtime.js'),edge=read('supabase/functions/backup-center/index.ts'),migration=read('supabase/migrations/202609260001_backup_center.sql'),state=read('supabase/migrations/202609260002_backup_snapshot_state.sql'),deny=read('supabase/migrations/202609260003_backup_metadata_direct_deny.sql');
 new vm.Script(runtime,{filename:'backup-center-runtime.js'});new vm.Script(loader,{filename:'device-name-runtime.js'});
 for(const m of ['__ABU_BACKUP_CENTER_V1__','CHUNK=5*1024*1024','MAX_ZIP=120*1024*1024','crypto.subtle.digest','backupItems()','stateScope()','scopedKey(key)','part_count:parts','uploadToSignedUrl','backup_kind:kind','pre_restore','backupCreate','backupRestore','backupDelete','AbuBassamNativeSecurity',"kind==='pre_restore'?'backupRestore':'backupCreate'","const d=await downloadBytes(id)","await backupNow('pre_restore',true)","restore(file,{mode:'snapshot',silentConfirm:true})","await api('cleanup','POST',{retention:retention()})",'15*60*1000'])need(runtime,m,m);
 forbid(runtime,'__dev_secure_','device secret must never use web storage');
 forbid(runtime,'window.AbuBassamNativeSecurityResult','Backup Center must not install another native callback');
+for(const src of [runtime,vaultHardening]){need(src,"abubassamcustomfontsv5'?8*1024*1024:500000",'custom font backup size allowance');need(src,'settingValueLimit(','per-setting backup size guard')}
+for(const m of ['captureSettings()','replaceSettingsSnapshot(before)','value.length>=settingValueLimit(k)','if(archiveApplied)','await applyAtomic(existing,{replaceAll:true})'])need(vaultHardening,m,'atomic restore rollback '+m);
+need(vaultHardening,'AbuBassamTypography?.reloadPersisted?.()','successful restore must refresh typography runtime');
+for(const m of ['saveBase64Confirmed','AbuBassamNativeFileSaveResult','writeBase64Download',"message.type === 'saveBase64Confirmed'"])need(native,m,'confirmed native backup save '+m);
+for(const m of ['{confirmed=false}={}','Android.saveBase64Confirmed',"نسخة Android الحالية لا تدعم تأكيد حفظ نسخة الأمان","{confirmed:true}"])need(vaultHardening,m,'confirmed safety backup '+m);
 for(const m of ['loadBackupCenter','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__','await loadBackupCenter();'])need(loader,m,'deterministic loader '+m);
 
 for(const m of ["const TABLE='abu_bassam_backups'","const MAX_BYTES=512*1024*1024","MAX_PARTS=120",'sha256','verifyParts','hasher.update(bytes)','BACKUP_PART_MISSING','BACKUP_SIZE_MISMATCH','BACKUP_SHA256_MISMATCH','sha256_verified:true','cleanupReady','backup_kind===\'pre_restore\'','createSignedUploadUrl','createSignedUrl','backupCreate','backupRestore','backupDelete','branch_device_id',"ready:true"])need(edge,m,'edge '+m);
