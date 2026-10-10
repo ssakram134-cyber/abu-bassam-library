@@ -4,7 +4,7 @@ if(window.__ABU_PASSWORD_RECOVERY_V1__)return;
 window.__ABU_PASSWORD_RECOVERY_V1__=true;
 
 const DEFAULT_ACCOUNT_EMAIL='akrama1992@gmail.com';
-function accountEmail(){return String(window.AbuBassamSecurity?.email||window.AbuBassamCloud?.session?.()?.user?.email||DEFAULT_ACCOUNT_EMAIL).trim().toLowerCase()}
+function accountEmail(){return DEFAULT_ACCOUNT_EMAIL}
 const CALLBACK='abu-bassam-library://auth/callback';
 const CALLBACK_KEY='abu_bassam_auth_callback_v1';
 const FLOW='password-recovery';
@@ -22,6 +22,14 @@ function setLoginMessage(message,bad=false){
 }
 function cloud(){return window.AbuBassamCloud||null}
 function client(){return cloud()?.client||null}
+async function verifyOwnerSession(c){
+  if(!c?.auth?.getUser)throw new Error('خدمة التحقق من هوية الحساب غير جاهزة');
+  const {data,error}=await c.auth.getUser();
+  if(error)throw error;
+  const user=data?.user;
+  if(!user?.id||String(user.email||'').trim().toLowerCase()!==accountEmail())throw new Error('الحساب المفتوح لا يطابق حساب المكتبة المعتمد');
+  return user
+}
 
 function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 function addUi(){
@@ -96,10 +104,11 @@ async function consumeRecoveryCallback(){
     const c=client();if(!c?.auth?.exchangeCodeForSession)throw new Error('خدمة التحقق من رابط الاستعادة غير جاهزة');
     const {data,error}=await c.auth.exchangeCodeForSession(code);
     if(error)throw error;
-    const email=String(data?.session?.user?.email||data?.user?.email||'').toLowerCase();
-    if(email&&email!==accountEmail()){
+    const recovered=data?.session;
+    const email=String(recovered?.user?.email||'').trim().toLowerCase();
+    if(!recovered?.access_token||!recovered?.user?.id||email!==accountEmail()){
       await c.auth.signOut({scope:'local'}).catch(()=>{});
-      throw new Error('رابط الاستعادة لا يخص حساب مكتبة أبو بسام المعتمد');
+      throw new Error('رابط الاستعادة لا يخص حساب مكتبة أبو بسام المعتمد أو لم تبدأ جلسة موثقة');
     }
     await native('secureDelete',{key:CALLBACK_KEY});
     openResetModal();
@@ -122,6 +131,7 @@ async function saveNewPassword(){
   passwordBusy=true;const button=$('abuSaveNewPassword');if(button)button.disabled=true;resetStatus('جاري حفظ كلمة المرور الجديدة...');
   try{
     const c=client();if(!c?.auth?.updateUser)throw new Error('خدمة تغيير كلمة المرور غير جاهزة');
+    await verifyOwnerSession(c);
     const {data,error}=await c.auth.updateUser({password});
     if(error)throw error;
     const email=String(data?.user?.email||'').toLowerCase();
@@ -140,8 +150,8 @@ function installAuthListener(){
   authListenerInstalled=true;
   c.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){
-      const email=String(session?.user?.email||'').toLowerCase();
-      if(!email||email===accountEmail())openResetModal();
+      // An auth event alone cannot authorize a password reset dialog.
+      void consumeRecoveryCallback();
     }
   });
 }
