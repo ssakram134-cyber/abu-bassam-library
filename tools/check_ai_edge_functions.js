@@ -15,6 +15,14 @@ for(const marker of [
 ])need(photo,marker,'AI photo edge');
 for(const marker of ["Deno.env.get('AI_APP_TOKEN')",'async function sameToken','crypto.subtle.digest',"req.headers.get('x-pro-token')",'Cache-Control','X-Content-Type-Options'])need(status,marker,'AI status edge');
 for(const marker of ['abu-bassam-ai-photo',"localStorage.removeItem('abuBassamAiProToken')",'x-pro-token'])need(web,marker,'AI client');
+// Deployed AI functions require an authenticated cloud user in addition to the PRO token.
+for(const [file,label] of [[photo,'AI photo'],[status,'AI status']]){
+ need(file,'async function authenticatedUser(req','authenticated '+label);
+ need(file,"req.headers.get('authorization')",'Bearer auth '+label);
+ need(file,"/auth/v1/user",'server verification '+label);
+}
+need(web,"window.AbuBassamCloud?.session?.()?.access_token",'AI user session source');
+need(web,"Authorization:'Bearer '+cloudToken",'AI sends bearer token');
 for(const marker of ['sk-proj-','sk-live-','AIzaSy','AI_APP_TOKEN=','OPENAI_API_KEY=','GEMINI_API_KEY=']){forbid(photo,marker,'AI photo embedded secret');forbid(status,marker,'AI status embedded secret')}
 forbid(web,"localStorage.setItem('abuBassamAiProToken'",'AI client must not persist PRO token');
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
