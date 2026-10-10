@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,8 +48,12 @@ async function existsEnough(path,minBytes){try{return (await stat(path)).size>=m
 async function fetchWithTimeout(url){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),DOWNLOAD_TIMEOUT_MS);
-  try{return await fetch(url,{redirect:'follow',signal:controller.signal})}
-  finally{clearTimeout(timer)}
+  try{
+    // Keep AbortController live until the BODY is fully read, not just headers.
+    const response=await fetch(url,{redirect:'follow',signal:controller.signal});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }finally{clearTimeout(timer)}
 }
 async function download(urls,path,minBytes){
   if(await existsEnough(path,minBytes))return;
@@ -57,16 +61,18 @@ async function download(urls,path,minBytes){
   let lastError;
   for(const url of urls){
     for(let attempt=1;attempt<=3;attempt+=1){
+      // Never expose an incomplete download as a valid offline OCR asset.
+      const temporary=path+'.partial-'+process.pid;
       try{
-        const response=await fetchWithTimeout(url);
-        if(!response.ok)throw new Error(`HTTP ${response.status}`);
-        const data=Buffer.from(await response.arrayBuffer());
+        const data=await fetchWithTimeout(url);
         if(data.length<minBytes)throw new Error(`asset too small: ${data.length}`);
-        await writeFile(path,data);
+        await writeFile(temporary,data);
+        await rename(temporary,path);
         process.stdout.write(`OCR Android asset ready: ${path.replace(projectRoot,'')} (${data.length} bytes) from ${new URL(url).hostname}\n`);
         return;
       }catch(error){
         lastError=error;
+        try{await rm(temporary,{force:true})}catch(_){}
         if(attempt<3)await new Promise(r=>setTimeout(r,1000*attempt));
       }
     }

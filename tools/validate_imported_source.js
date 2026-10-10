@@ -33,8 +33,9 @@ if(!checkWeb.startsWith('node tools/check_project.js'))fail('check:web must be r
 if(/scripts\/patch-|repair:source/.test(checkWeb))fail('check:web must not repair or mutate source');
 for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
 for(const name of ['start','android','android:prebuild'])if(/scripts\/patch-/.test(String(pkg.scripts?.[name]||'')))fail(`${name} must not auto-patch canonical source`);
-const repair=String(pkg.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker))fail(`repair:source missing explicit compatibility repair: ${marker}`);
+// A source ZIP must not resurrect source-mutating repair scripts; importing the
+// current canonical package.json (which has no repair:source) must be accepted.
+if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source script is forbidden in source imports');
 const buildScript=read('scripts/build-android-local.mjs');
 for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'",'Production release signing is required.','SIGNING_CERTIFICATE.txt'])if(!buildScript.includes(marker))fail(`local APK signing safeguard missing: ${marker}`);
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);
