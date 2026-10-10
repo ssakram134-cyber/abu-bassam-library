@@ -108,6 +108,8 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
+  const cameraRequestIdRef = useRef(null);
+  const cameraSessionRef = useRef(0);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -127,6 +129,8 @@ function App() {
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    cameraSessionRef.current += 1;
+    cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
@@ -155,32 +159,47 @@ function App() {
     return () => subscription.remove();
   }, [inject, webReady]);
 
-  const openCamera = useCallback(async (mode, frameKind = 'paper') => {
+  const openCamera = useCallback(async (mode, frameKind = 'paper', requestId = null) => {
+    const cameraSession = ++cameraSessionRef.current;
+    cameraRequestIdRef.current = requestId == null ? null : String(requestId);
     try {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
-      if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      if (cameraSession !== cameraSessionRef.current) return;
+      if (!permission?.granted) { cameraRequestIdRef.current = null; cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
-    } catch (_) { cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.'); }
+    } catch (_) {
+      if (cameraSession !== cameraSessionRef.current) return;
+      cameraRequestIdRef.current = null;
+      cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.');
+    }
   }, [cameraError, cameraPermission, requestCameraPermission]);
 
   const captureDocument = useCallback(async () => {
     if (!cameraReady || cameraBusy || !cameraRef.current) return;
+    const cameraSession = cameraSessionRef.current;
+    const requestId = cameraRequestIdRef.current;
+    const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
     setCameraBusy(true);
     try {
       const picture = await cameraRef.current.takePictureAsync({ base64: true, exif: false, quality: 1, skipProcessing: false });
+      if (cameraSession !== cameraSessionRef.current) return;
       if (!picture?.base64) throw new Error('لم تُحفظ الصورة');
-      const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
       closeCamera();
-      inject('AbuBassamNativeCameraResult', { mode, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
-    } catch (_) { setCameraBusy(false); cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.'); }
+      inject('AbuBassamNativeCameraResult', { mode, requestId, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
+    } catch (_) {
+      if (cameraSession !== cameraSessionRef.current) return;
+      setCameraBusy(false);
+      cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.');
+    }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
     if (barcodeLocked || !result?.data) return;
     setBarcodeLocked(true);
+    cameraSessionRef.current += 1; cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
     setTimeout(() => setBarcodeLocked(false), 500);
@@ -382,7 +401,7 @@ function App() {
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
-    if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
+    if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind, message.requestId);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
