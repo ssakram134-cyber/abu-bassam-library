@@ -75,6 +75,7 @@ function viewOriginal(){let it=selected();if(it)zoomOpen(it.orig)}
 function maker(){makerSession++;makerFileChain=Promise.resolve();S.front=null;S.back=null;alert('صانع الهوية: التقط الوجه الأمامي أولاً، ثم الخلفي.');if(!requestNativeCamera('maker')){$('natMakerInput').value='';$('natMakerInput').click()}}
 function makerFile(f){const epoch=nationalSessionEpoch,sequence=makerSession;const operation=makerFileChain.catch(()=>{}).then(()=>epoch===nationalSessionEpoch&&sequence===makerSession?processMakerFile(f,epoch,sequence):undefined);makerFileChain=operation.catch(()=>{});return operation}
 async function processMakerFile(f,epoch,sequence){if(!f)return;try{
+ if(S.back)throw new Error('اكتمل وجها الهوية؛ اضغط صانع الهوية لبدء بطاقة جديدة');
  if(!/^image\/(png|jpeg|webp)$/i.test(String(f.type||''))&&!(!f.type&&/\.(jpe?g|png|webp)$/i.test(f.name||'')))throw new Error('صيغة صورة الهوية غير مدعومة');
  if(S.items.length+2>MAX_IMAGES)throw new Error('يلزم توفير مكان لوجهين؛ الحد الإجمالي 100 صورة');
  if(f.size>MAX_IMAGE_FILE_BYTES||currentImageBytes()+f.size>MAX_IMAGE_BATCH_BYTES)throw new Error('صورة الهوية تتجاوز حد الذاكرة الآمن');
