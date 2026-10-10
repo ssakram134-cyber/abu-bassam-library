@@ -108,9 +108,9 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
 
  let busy=false,cloudCalls=0,paintCalls=0,attempt=0;
  const last=new Map(),events=[];
- const backup=new Function('busy','can','status','fingerprint','stateGet','stateSet','stateRemove','packageBytes','digest','CHUNK','api','uploadPart','retention','log','fmt','refreshList','paint','Date','Blob','LASTERR','RETRY','LASTFP','LAST',backupSrc+
+ const backup=new Function('busy','can','stateScope','retry','status','fingerprint','stateGet','stateSet','stateRemove','packageBytes','digest','CHUNK','api','uploadPart','retention','log','fmt','refreshList','paint','Date','Blob','LASTERR','RETRY','LASTFP','LAST',backupSrc+
  ';return (...args)=>backupNow(...args)')(
- busy,()=>true,()=>{},async()=>++attempt===1?'same':'changed',
+ busy,()=>true,()=> 'owner:device',async fn=>fn(),()=>{},async()=>++attempt===1?'same':'changed',
  ()=>null,(k,v)=>last.set(k,v),k=>last.delete(k),
  async()=>({bytes:new Uint8Array([1,2,3]),count:1}),digest,5*1024*1024,
  async()=>{cloudCalls++;throw Error('CLOUD_SHOULD_NOT_BE_CALLED')},
