@@ -59,6 +59,18 @@ try{
  fields.abuPosterW.value='500';fields.abuPosterH.value='500';
  let refused=false;try{plan()}catch(e){refused=/6×6/.test(String(e.message||e))}
  if(!refused)throw new Error('oversized poster was not rejected');
+ // Build the six actual (mock-canvas) tiles, preserving A4 landscape page dimensions.
+ Object.assign(fields,{paperSize:{value:'A4'},paperCustomW:{value:'21'},paperCustomH:{value:'29.7'},'info-text':{textContent:''},abuPosterMarks:{checked:false},abuPosterLabels:{checked:false}});
+ fields.abuPosterMode.value='grid';fields.abuPosterCols.value='2';fields.abuPosterRows.value='3';fields.abuPosterDpi.value='96';
+ let canvasCount=0,drawCount=0;const mockContext={fillRect(){},drawImage(){drawCount++}};
+ sandbox.document.createElement=tag=>{if(tag!=='canvas')throw new Error('unexpected DOM element '+tag);canvasCount++;return {width:0,height:0,getContext(){return mockContext}}};
+ sandbox.document.querySelector=()=>({classList:{remove(){}}});
+ sandbox.setBusy=()=>{};sandbox.showPage=()=>{};sandbox.toggleCustomPaper=()=>{};sandbox.saveAppSettings=()=>{};
+ sandbox.pageCanvases=[];sandbox.currentPage=0;
+ const built=sandbox.window.AbuPhotoAdvanced.buildPoster();
+ if(!built||sandbox.pageCanvases.length!==6||canvasCount!==6||drawCount!==6)throw new Error('2x3 poster failed to produce six image tiles');
+ if(fields.paperSize.value!=='custom'||Number(fields.paperCustomW.value)!==29.7||Number(fields.paperCustomH.value)!==21)throw new Error('landscape paper dimensions were not propagated to print');
+
 }catch(error){errors.push('Poster functional regression: '+String(error.message||error))}
 const posterRuntime=read('photo-print-advanced-runtime.js');
 need(posterRuntime,"if(typeof printDirectly==='function')return printDirectly()",'poster must use the single shared print path');
