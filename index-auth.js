@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { DeviceEventEmitter, Linking } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 const AUTH_CALLBACK_KEY = 'abu_bassam_auth_callback_v1';
@@ -22,6 +22,8 @@ async function captureAuthCallback(url) {
   try {
     await SecureStore.setItemAsync(AUTH_CALLBACK_KEY, value);
     lastCallback = value;
+    // Notify the already-running WebView without sending the one-time auth code through events.
+    DeviceEventEmitter.emit('abu-bassam-auth-callback-saved');
   } catch (_) {
     // Keep lastCallback unchanged so the same OS event can be retried safely.
   }
