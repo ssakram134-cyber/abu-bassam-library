@@ -1,0 +1,35 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const cards=fs.readFileSync('web/cards-studio-runtime.js','utf8');
+const native=fs.readFileSync('index.js','utf8');
+const intro=native.indexOf('  const scanBarcodeImage = useCallback(');
+const outro=native.indexOf('  const onWebMessage = useCallback(',intro);
+assert.ok(intro>=0&&outro>intro,'Native gallery scanner must exist');
+const resultSource=native.slice(intro,outro)+'\nreturn scanBarcodeImage;';
+const writes=[],deletes=[],answers=[],scans=[];
+const fakeFileSystem={cacheDirectory:'file:///test/',EncodingType:{Base64:'base64'},writeAsStringAsync:async(...args)=>writes.push(args),deleteAsync:async(...args)=>deletes.push(args)};
+const fakeCamera={scanFromURLAsync:async(...args)=>{scans.push(args);return[{type:'qr',data:'ملاك أكرم حاتم'}]}};
+const parse=data=>{const marker=';base64,',i=data.indexOf(marker);return{mime:data.slice(5,i),base64:data.slice(i+marker.length)}};
+const scan=new Function('useCallback','inject','Camera','FileSystem','BARCODE_TYPES','splitDataUrl',resultSource)(fn=>fn,(...args)=>answers.push(args),fakeCamera,fakeFileSystem,['qr','code128'],parse);
+const sent=[],warnings=[],webWindow={addEventListener(){},Android:{scanBarcodeImage:data=>sent.push(data)}},input={value:'chosen-file'};
+const webDocument={getElementById:id=>id==='csBarcodeImageInput'?input:null};
+class FakeReader{readAsDataURL(){this.result='data:image/png;base64,QUJD';this.onload()}}
+const gallerySource=cards.replace('window.CardsStudio={','window.__galleryRegression={decodeBarcodeImage};window.CardsStudio={');
+assert.notEqual(gallerySource,cards,'Web gallery scanner must be accessible to test');
+new Function('window','document','localStorage','FileReader','alert',gallerySource)(webWindow,webDocument,{getItem(){return null},setItem(){}},FakeReader,text=>warnings.push(text));
+(async()=>{
+ await webWindow.__galleryRegression.decodeBarcodeImage({size:1024,type:'image/png',name:'barcode.png'});
+ assert.equal(sent.length,1,'Gallery image must be sent to Android if BarcodeDetector is unavailable');
+ assert.equal(input.value,'','Gallery input must reset after scan');
+ await webWindow.__galleryRegression.decodeBarcodeImage({size:10*1024*1024,type:'image/png',name:'too-large.png'});
+ assert.ok(warnings.some(text=>String(text).includes('8MB')),'Oversized gallery files must be refused');
+ await scan({data:sent[0]});
+ assert.equal(scans.length,1,'Native reader must scan one local image');
+ assert.equal(writes[0][1],'QUJD','Only base64 image content must be written to cache');
+ assert.equal(answers[0][1].data,'ملاك أكرم حاتم','Arabic QR content must reach WebView');
+ assert.equal(deletes.length,1,'Private temporary image must always be deleted');
+ await scan({data:'data:text/html;base64,QUJD'});
+ assert.equal(scans.length,1,'Unsupported MIME must not reach native QR reader');
+ assert.ok(answers[1][1].error,'Invalid gallery payload must return a user error');
+ console.log('cards gallery scanner checks passed: WebView fallback, safe file bounds, native scan result and temporary-file cleanup');
+})().catch(error=>{console.error(error);process.exitCode=1});
