@@ -5,7 +5,7 @@ window.__ABU_A4_CARD_SHEET_EDITOR_V2__=true;
 const W=210,H=297,DIRS=['nw','n','ne','e','se','s','sw','w'];let job=null;
 function isA4(html){const s=String(html||'');return /A4|210mm/i.test(s)&&/pair-page|duplex-page|abu-a4-card-page|a4-page/.test(s)&&/cs-print-card|pair-card|print-card|abu-a4-card-item/.test(s)}
 function direct(type,payload){try{if(window.ReactNativeWebView?.postMessage){window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({type},payload||{})));return true}}catch(e){}return false}
-function modal(){if(document.getElementById('abuA4EditorV2'))return;const d=document.createElement('div');d.id='abuA4EditorV2';d.innerHTML=`<div class="a4v2-sheet"><div class="a4v2-head"><div><b>ترتيب الكروت على A4</b><small>كل كارت مستقل: سحب • تكبير/تصغير • دوران • عدد النسخ</small></div><button data-close>×</button></div><div class="a4v2-tools"><button data-run>متابعة</button><button data-reset>استعادة البداية</button><span>أسفل كل كارت: ▼ عدد النسخ ▲</span></div><iframe id="abuA4EditorV2Frame"></iframe></div>`;document.body.appendChild(d);const s=document.createElement('style');s.textContent=`#abuA4EditorV2{position:fixed;z-index:36500;inset:0;background:#000d;display:none;padding:8px}#abuA4EditorV2.show{display:block}.a4v2-sheet{height:100%;width:min(1100px,100%);margin:auto;border-radius:16px;overflow:hidden;background:#ddd;display:grid;grid-template-rows:auto auto 1fr}.a4v2-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#075b4d;color:#fff}.a4v2-head b{display:block}.a4v2-head small{display:block;font-size:9px;margin-top:3px}.a4v2-head button{width:36px;height:36px;border:0;border-radius:50%;font-size:22px}.a4v2-tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:8px;background:#fff}.a4v2-tools button{min-height:38px;border:0;border-radius:9px;padding:0 12px;background:#087f72;color:#fff;font-weight:900}.a4v2-tools button:nth-child(2){background:#6b5a4e}.a4v2-tools span{font-size:9px;font-weight:900}#abuA4EditorV2Frame{width:100%;height:100%;border:0;background:#777}`;document.head.appendChild(s);d.querySelector('[data-close]').onclick=close;d.querySelector('[data-run]').onclick=run;d.querySelector('[data-reset]').onclick=()=>job&&load(job.html)}
+function modal(){if(document.getElementById('abuA4EditorV2'))return;const d=document.createElement('div');d.id='abuA4EditorV2';d.innerHTML=`<div class="a4v2-sheet"><div class="a4v2-head"><div><b>ترتيب الكروت على A4</b><small>سحب • تغيير المقاس • دوران • نسخ | الطباعة المزدوجة تتطلب محاذاة متناظرة للوجهين</small></div><button data-close>×</button></div><div class="a4v2-tools"><button data-run>متابعة</button><button data-reset>استعادة البداية</button><span>أسفل كل كارت: ▼ عدد النسخ ▲</span></div><iframe id="abuA4EditorV2Frame"></iframe></div>`;document.body.appendChild(d);const s=document.createElement('style');s.textContent=`#abuA4EditorV2{position:fixed;z-index:36500;inset:0;background:#000d;display:none;padding:8px}#abuA4EditorV2.show{display:block}.a4v2-sheet{height:100%;width:min(1100px,100%);margin:auto;border-radius:16px;overflow:hidden;background:#ddd;display:grid;grid-template-rows:auto auto 1fr}.a4v2-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#075b4d;color:#fff}.a4v2-head b{display:block}.a4v2-head small{display:block;font-size:9px;margin-top:3px}.a4v2-head button{width:36px;height:36px;border:0;border-radius:50%;font-size:22px}.a4v2-tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:8px;background:#fff}.a4v2-tools button{min-height:38px;border:0;border-radius:9px;padding:0 12px;background:#087f72;color:#fff;font-weight:900}.a4v2-tools button:nth-child(2){background:#6b5a4e}.a4v2-tools span{font-size:9px;font-weight:900}#abuA4EditorV2Frame{width:100%;height:100%;border:0;background:#777}`;document.head.appendChild(s);d.querySelector('[data-close]').onclick=close;d.querySelector('[data-run]').onclick=run;d.querySelector('[data-reset]').onclick=()=>job&&load(job.html)}
 function close(){document.getElementById('abuA4EditorV2')?.classList.remove('show');job=null}
 function open(kind,name,html){modal();job={kind,name,html:String(html)};const d=document.getElementById('abuA4EditorV2');d.classList.add('show');d.querySelector('[data-run]').textContent=kind==='pdf'?'حفظ PDF':'متابعة للطباعة';load(html)}
 function load(html){const f=document.getElementById('abuA4EditorV2Frame');f.onload=()=>setTimeout(()=>prepare(f),90);f.srcdoc=String(html)}
@@ -25,7 +25,49 @@ function newPage(page){const p=page.cloneNode(false);p.innerHTML='';page.parentN
 function copies(el,d){const doc=el.ownerDocument,id=el.dataset.a4group,all=group(doc,id);if(d<0){if(all.length<=1)return;all[all.length-1].remove();sync(doc,id);return}if(all.length>=25)return;const last=all[all.length-1],g=getG(last);let page=last.closest('.pair-page,.duplex-page,.abu-a4-card-page,.a4-page'),x=g.x,y=g.y+g.h+5;if(y+g.h>H-5){x=g.x+g.w+5;y=5}if(x+g.w>W-5){page=newPage(page);x=5;y=5}const clone=last.cloneNode(true);clearControls(clone);clone.dataset.a4group=id;page.appendChild(clone);setG(clone,{...g,x,y});bind(clone,Date.now());sync(doc,id)}
 function prepare(frame){const doc=frame.contentDocument;if(!doc)return;const snapshots=allPages(doc).map(page=>({page,items:items(page).map(el=>({el,g:rectMM(el,page)}))}));styleEditor(doc);let i=0;snapshots.forEach(({page,items:shots})=>{Object.assign(page.style,{position:'relative',display:'block',padding:'0'});shots.forEach(({el,g})=>{setG(el,g);bind(el,i++)})})}
 function clean(doc){doc.querySelectorAll('[data-editor="1"],.a4v2-h,.a4v2-rot,.a4v2-count').forEach(n=>n.remove());doc.querySelectorAll('.a4v2-item').forEach(el=>{el.classList.remove('a4v2-item');delete el.dataset.a4bound;delete el.dataset.a4group});allPages(doc).forEach(p=>{p.style.overflow='hidden';p.style.boxShadow='none'});return '<!doctype html>'+doc.documentElement.outerHTML}
-function run(){if(!job)return;const doc=document.getElementById('abuA4EditorV2Frame')?.contentDocument;if(!doc)return;const html=clean(doc),j=job;document.getElementById('abuA4EditorV2').classList.remove('show');job=null;if(j.kind==='pdf'){if(direct('savePdfHtml',{name:j.name,html}))return true;if(window.Android?.savePdfHtml)return Android.savePdfHtml(j.name,html);throw new Error('PDF_BRIDGE_UNAVAILABLE')}if(direct('printHtml',{html}))return true;if(window.Android?.printHtml)return Android.printHtml(html);document.open();document.write(html);document.close();window.print();return true}
+function duplexCells(page){
+  return [...page.children].filter(el=>el.classList?.contains('pair-card')||el.classList?.contains('duplex-empty'))
+}
+function checkDuplexAlignment(doc){
+  const pages=allPages(doc).filter(page=>page.classList.contains('duplex-page'));
+  if(!pages.length)return true;
+  const sides=pages.map(page=>page.dataset.duplexSide||'');
+  if(sides.every(side=>side==='front')||sides.every(side=>side==='back'))return true;
+  if(pages.length%2!==0)throw new Error('صفحات الوجه والظهر غير متساوية؛ لا يمكن ضمان التطابق');
+  const epsilon=.55;
+  for(let i=0;i<pages.length;i+=2){
+    const frontPage=pages[i],backPage=pages[i+1],flip=frontPage.dataset.duplexFlip;
+    if(frontPage.dataset.duplexSide!=='front'||backPage.dataset.duplexSide!=='back'
+      ||!['horizontal','vertical'].includes(flip)||backPage.dataset.duplexFlip!==flip)
+      throw new Error('ترتيب صفحات الوجه والظهر غير صالح');
+    const front=duplexCells(frontPage),back=duplexCells(backPage);
+    if(front.length!==back.length||front.length%2!==0)throw new Error('أعداد بطاقات الوجه والظهر غير متطابقة');
+    const rows=front.length/2;
+    for(let slot=0;slot<front.length;slot++){
+      const row=Math.floor(slot/2),col=slot%2,
+        other=flip==='vertical'?(rows-1-row)*2+col:row*2+(1-col),
+        first=front[slot],second=back[other];
+      const frontCard=first.classList.contains('pair-card'),backCard=second.classList.contains('pair-card');
+      if(frontCard!==backCard)throw new Error('اختلاف موقع بطاقة بين الوجه والظهر');
+      if(!frontCard)continue;
+      const g=getG(first),h=getG(second);
+      const x=flip==='vertical'?g.x:W-g.x-g.w,
+        y=flip==='vertical'?H-g.y-g.h:g.y;
+      const angle=((g.r+h.r)%360+360)%360;
+      if(Math.abs(h.x-x)>epsilon||Math.abs(h.y-y)>epsilon
+         ||Math.abs(h.w-g.w)>epsilon||Math.abs(h.h-g.h)>epsilon
+         ||Math.min(angle,360-angle)>1)
+        throw new Error('فقدت بطاقة محاذاة الوجه والظهر. اجعل موضع الوجهين متماثلاً قبل الطباعة، أو اختر استعادة البداية.')
+    }
+  }
+  return true
+}
+function canFinalize(kind){
+  const can=key=>window.AbuBassamSecurity?.role?.()==='owner'||window.AbuBassamPermissions?.can?.(key)===true;
+  const need=kind==='pdf'?['cardsExportPdf','pdfCreate','pdfSave']:['cardsPrint','printCards','printGeneral'];
+  return can('cardsA4Layout')&&can('printA4')&&need.every(can)
+}
+function run(){if(!job)return false;if(!canFinalize(job.kind)){alert('تم تعطيل صلاحية الطباعة أو التصدير لهذا الفرع');return false}const doc=document.getElementById('abuA4EditorV2Frame')?.contentDocument;if(!doc)return false;try{checkDuplexAlignment(doc)}catch(e){alert(String(e?.message||e));return false}const html=clean(doc),j=job;document.getElementById('abuA4EditorV2').classList.remove('show');job=null;if(j.kind==='pdf'){if(direct('savePdfHtml',{name:j.name,html}))return true;if(window.Android?.savePdfHtml)return Android.savePdfHtml(j.name,html);throw new Error('PDF_BRIDGE_UNAVAILABLE')}if(direct('printHtml',{html}))return true;if(window.Android?.printHtml)return Android.printHtml(html);document.open();document.write(html);document.close();window.print();return true}
 function openPrint(html){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('print','',html);return true}
 function openPdf(name,html){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('pdf',name,html);return true}
 function boot(){modal()}

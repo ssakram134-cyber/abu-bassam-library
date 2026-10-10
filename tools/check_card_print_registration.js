@@ -13,10 +13,10 @@ function segment(start, next) {
   assert.ok(a !== -1 && b > a, 'Missing canonical print code: ' + start);
   return source.slice(a, b);
 }
-const layout = segment('function a4SheetRows(', '\nfunction queueCount(');
+const layout = segment('function printGeometry(', '\nfunction queueCount(');
 const print = segment('function printDocument(){', '\nfunction recordHistory(');
 const build = new Function(
-  'state','expandedJobs','cardHtml','fullPrintCss','freeLayoutCss','cap','$','queueCount',
+  'state','expandedJobs','cardHtml','fullPrintCss','freeLayoutCss','cap','$','queueCount','validatePrintBarcodes',
   layout + '\n' + print + '\nreturn {a4SheetRows,duplexSheetSlots,printDocument,renderStatus};'
 );
 
@@ -29,7 +29,7 @@ function create(count, options={}) {
   const api = build(state, () => models,
     (model,side)=>'<div data-card="'+model.id+'" data-side="'+side+'"></div>',
     ()=>'.root{color:#000}', ()=>'', (value,min,max)=>Math.max(min,Math.min(max,Number(value)||0)),
-    ()=>status, ()=>models.length);
+    ()=>status, ()=>models.length, ()=>true);
   return { state, models, api, status };
 }
 function pages(html, klass) {
