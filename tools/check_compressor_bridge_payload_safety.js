@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start);
 const section=source.slice(start,end);
 const alerts=[],posted=[],downloads=[],results=[];
 let selected=results;
-const window={parent:{Android:{savePagesToGallery(){}}},postMessage:(payload)=>posted.push(payload)};
+const window={parent:{Android:{savePagesToGallery(){}},postMessage:(payload)=>posted.push(payload)}};
 const namedDataUrl=(data,name)=>data+';name='+name;
 const browserSave=(name,data)=>downloads.push({name,data});
 const $=id=>({textContent:''});
