@@ -32,6 +32,11 @@ need(childTemplates,"document.addEventListener('abu-cards-rendered'",'child temp
 need(studio,'const PRINT_SETTINGS_KEY=','validated card printer preferences');
 need(studio,'function validateSymbols(jobs)','protect against printing invalid QR');
 need(studio,'let resetArmed=false','confirmation required before destructive reset');
+need(studio,"state.forms.login.password=''",'clear stored login secrets during startup');
+need(studio,"finally{URL.revokeObjectURL(url)}",'release temporary card image blobs on failure');
+need(studio,"row('هاتف سائق الخط',d.driverPhone)",'display the driver phone in the child back');
+for(const fake of ['Example@Email.com','Password123'])if(studio.includes(fake))throw new Error('cards check failed: printable fake login credential remains: '+fake);
+
 need(studio,'36_000_000','memory safe image budget');
 // Execute the canonical QR renderer and the exact A4 duplex grid, including incomplete sheets.
 const barcodeFactory=new Function(read('web/qrcode.js')+'\n'+read('web/qrcode_UTF8.js')+'\nreturn qrcode;')();
