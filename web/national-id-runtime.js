@@ -5,7 +5,7 @@ const S={items:[],sel:-1,front:null,back:null,doc:null,mergeMode:'h',recent:[],d
 const MAX_IMAGES=100,MAX_IMAGE_FILE_BYTES=24*1024*1024,MAX_IMAGE_BATCH_BYTES=80*1024*1024,MAX_IMAGE_PIXELS=24_000_000;
 let nationalSessionEpoch=0;
 function recentKey(){const user=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),device=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{};return 'abuNationalRecentV2:'+user+':'+String(device.device_id||device.id||'device')}
-function loadRecent(){try{const rows=JSON.parse(localStorage.getItem(recentKey())||'[]');S.recent=Array.isArray(rows)?rows.slice(0,30).filter(r=>r&&typeof r==='object').map(r=>({id:r.id,type:String(r.type||'').slice(0,80),name:String(r.name||'').slice(0,180),time:String(r.time||'')})):[]}catch(e){S.recent=[]}renderRecent()}
+function loadRecent(){try{localStorage.removeItem?.('abuNationalRecentV2')}catch(e){}try{const rows=JSON.parse(localStorage.getItem(recentKey())||'[]');S.recent=Array.isArray(rows)?rows.slice(0,30).filter(r=>r&&typeof r==='object').map(r=>({id:r.id,type:String(r.type||'').slice(0,80),name:String(r.name||'').slice(0,180),time:String(r.time||'')})):[]}catch(e){S.recent=[]}renderRecent()}
 
 function saveRecent(){try{localStorage.setItem(recentKey(),JSON.stringify(S.recent.slice(0,30)))}catch(e){}}
 function recent(type,name){S.recent.unshift({id:Date.now()+Math.random(),type,name,time:new Date().toISOString()});S.recent=S.recent.slice(0,30);saveRecent();renderRecent()}
@@ -134,7 +134,7 @@ function open(id){$(id).classList.add('show')}function close(id){$(id).classList
 function scrollRecent(){$('natRecent').scrollIntoView({behavior:'smooth'})}
 function clearNationalPrivateState(){
  nationalSessionEpoch++;S.items=[];S.sel=-1;S.front=null;S.back=null;S.doc=null;S.docReady=false;S.mergeMode='h';
- const img=$('natCanvas');if(img){img.width=1;img.height=1;img.style.display='none'}
+ for(const id of ['natCanvas','natResultCanvas','natMergeCanvas']){const canvas=$(id);if(canvas){canvas.width=1;canvas.height=1;if(id==='natCanvas')canvas.style.display='none'}}const title=$('natDocTitle');if(title)title.textContent='📄 المستند';
  for(const id of ['natDocView','natThumbs','natRGrid']){const node=$(id);if(node)node.textContent=''}
  for(const id of ['natDocModal','natMergeModal','natResultModal','natZoom','natCropModal'])$(id)?.classList.remove('show');
  zoomSource='';const zoomImg=$('natZoomImg');if(zoomImg)zoomImg.removeAttribute('src');
