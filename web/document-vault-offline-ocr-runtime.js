@@ -48,7 +48,7 @@ function cancel(){
   imageTimer=0
 }
 function boot(){
-  document.addEventListener('abu-bassam-auth-changed',cancel);
+  document.addEventListener('abu-bassam-auth-changed',()=>{cancel();void terminate()});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')scheduleIdle(15000)})
 }
 window.AbuDocumentVaultOfflineOcr={recognize,cancel,ready:()=>!!window.Tesseract?.createWorker,terminate};
