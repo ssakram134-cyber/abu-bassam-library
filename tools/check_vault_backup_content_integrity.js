@@ -61,7 +61,6 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
  const packaged=await makePackage();
  assert.equal(packaged.count,1);
  assert.ok(added.includes('manifest.json'));
- const saved=JSON.parse(String(new TextDecoder().decode(new TextEncoder().encode(''+new JSZip().entries['manifest.json']))||'null'))||'null');
  // Verify the actual zip manifest instead of a constructed source fixture.
  let captured;
  class Archive extends JSZip{file(name,data){super.file(name,data);if(name==='manifest.json')captured=JSON.parse(data)}}
