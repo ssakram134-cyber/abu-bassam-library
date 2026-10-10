@@ -78,6 +78,7 @@ try{
  if(!built||sandbox.pageCanvases.length!==6||canvasCount!==6||drawCount!==6)throw new Error('2x3 poster failed to produce six image tiles');
  if(fields.paperSize.value!=='custom'||Number(fields.paperCustomW.value)!==29.7||Number(fields.paperCustomH.value)!==21)throw new Error('landscape paper dimensions were not propagated to print');
   if(sandbox.pagePrintMeta?.kind!=='poster'||sandbox.pagePrintMeta.paper.w!==297||sandbox.pagePrintMeta.paper.h!==210||sandbox.pagePrintMeta.paperKey!=='CUSTOM:297:210')throw new Error('poster output lost its original print dimensions');
+  if(!sandbox.window.AbuPhotoAdvanced.invalidatePosterPages()||sandbox.pageCanvases.length||sandbox.pagePrintMeta!==null)throw new Error('stale poster pages were not invalidated');
 
 }catch(error){errors.push('Poster functional regression: '+String(error.message||error))}
 const posterRuntime=read('photo-print-advanced-runtime.js');
@@ -86,6 +87,8 @@ need(home,"Android.printBase64('Abu_Bassam_Print.pdf'",'large poster PDF print f
 for(const m of ['pagePrintMeta?.paper||getPaperSize()','pagePrintMeta?.paperKey||getPaperPrintKey()','pagePrintMeta?.dpi??printDpi()'])need(home,m,'print output dimensions must be locked');
 need(home,"if(pageCanvases.length>20)return alert('العمل يحتوي على أكثر من 20 صفحة",'gallery must refuse unsupported oversized native batch');
 need(posterRuntime,"pagePrintMeta?.kind!=='poster'",'poster buttons must refuse outdated ordinary photo pages');
+need(home,'invalidatePosterPages?.()','photo selection must invalidate a prior poster');
+need(posterRuntime,'function invalidatePosterPages()','poster settings must invalidate previously generated pages');
 for(const m of ["INPUT_IDS.includes(id)","window.AbuPhotoAdvanced?.buildPoster?.()","36000000","f.size>65000000"])need(posterProject,m,'safe poster project import and reopen');
 // Exercise the real embedded photo-print functions after the user changes the paper dropdown.
 try{
