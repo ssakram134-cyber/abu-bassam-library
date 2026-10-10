@@ -46,6 +46,7 @@
   const loadNotificationExcel=()=>loadScript('abuNotificationExcelRuntime','notification-excel-runtime.js','__ABU_NOTIFICATION_EXCEL_V1__');
   const loadBranchVault=()=>loadScript('abuBranchVaultRuntime','branch-vault-runtime.js','__ABU_BRANCH_VAULT_V1__');
   const loadDocumentVaultHardening=()=>loadScript('abuDocumentVaultHardeningRuntime','document-vault-hardening-runtime.js','__ABU_DOCUMENT_VAULT_HARDENING_V1__');
+  const loadDocumentVaultOfflineOcr=()=>loadScript('abuDocumentVaultOfflineOcrRuntime','document-vault-offline-ocr-runtime.js','__ABU_DOCUMENT_VAULT_OFFLINE_OCR_V1__');
   const loadBackupCenter=()=>loadScript('abuBackupCenterRuntime','backup-center-runtime.js','__ABU_BACKUP_CENTER_V1__');
   const loadAppUpdate=()=>loadScript('abuAppUpdateRuntime','app-update-runtime.js','__ABU_APP_UPDATE_V1__');
   const loadAccountRecoveryHardening=()=>loadScript('abuAccountRecoveryHardeningRuntime','account-recovery-hardening-runtime.js','__ABU_ACCOUNT_RECOVERY_HARDENING_V1__');
@@ -82,6 +83,7 @@
     await loadSecurity();
     await loadBranchVault();
     await loadDocumentVaultHardening();
+    await loadDocumentVaultOfflineOcr();
     await loadBackupCenter();
     await loadAccountCenter();
     await loadPasswordRecovery();
