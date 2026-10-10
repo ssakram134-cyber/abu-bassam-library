@@ -72,7 +72,7 @@ function syncFields(el=selected()){
 function applyFields(){let el=selected();if(!el||updating)return;let g={x:clamp($('dsAdvX').value,-20,120),y:clamp($('dsAdvY').value,-20,120),w:clamp($('dsAdvW').value,2,120),h:clamp($('dsAdvH').value,2,120),rot:Number($('dsAdvR').value)||0};setGeometry(el,g);el.dataset.rotation=String(g.rot);el.style.transform=`rotate(${g.rot}deg)`}
 function center(which){let el=selected();if(!el)return;let g=geometry(el);if(which==='x'||which==='both')g.x=(100-g.w)/2;if(which==='y'||which==='both')g.y=(100-g.h)/2;setGeometry(el,g)}
 function resetSelected(){let el=selected();if(!el)return;let g=geometry(el);g.rot=0;el.dataset.rotation='0';el.style.transform='rotate(0deg)';if(el.dataset.kind==='img'){g.w=30;g.h=30}else{g.w=Math.max(20,g.w);g.h=Math.max(8,g.h)};g.x=(100-g.w)/2;g.y=(100-g.h)/2;setGeometry(el,g)}
-function enhance(){style();injectBar();applyGrid();document.querySelectorAll('#dsCanvas .ds-el').forEach(addHandles);syncFields()}
+function enhance(){style();injectBar();applyGrid();document.querySelectorAll('#dsCanvas .ds-el').forEach(addHandles);syncFields();document.dispatchEvent(new CustomEvent('abu-design-advanced-ready'))}
 function observe(){let canvas=$('dsCanvas');if(!canvas)return setTimeout(observe,80);enhance();new MutationObserver(()=>{document.querySelectorAll('#dsCanvas .ds-el').forEach(addHandles);syncFields()}).observe(canvas,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','data-rotation']});document.addEventListener('pointerup',()=>{let el=selected();if(!el)return;if(snapEnabled){let g=snapGeom(geometry(el));setGeometry(el,g)}syncFields(el)},true)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
 })();
