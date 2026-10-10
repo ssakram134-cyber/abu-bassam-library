@@ -384,7 +384,26 @@ function saveBase64(name,mime,data){if(window.Android&&Android.saveBase64)return
 function saveImage(name,mime,data){if(window.Android&&Android.saveToGallery)return Android.saveToGallery(name,mime,data);saveBase64(name,mime,data)}
 function logOperation(type,title,details=''){if(window.AbuBassamOps&&AbuBassamOps.add)AbuBassamOps.add({type,title,details})}
 
-async function decodeBarcodeImage(file){if(!file)return;try{let data=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=data});if(!('BarcodeDetector'in window))throw new Error('استخدم الكاميرا الأصلية داخل تطبيق Android');let detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});let result=await detector.detect(image);if(!result.length)throw new Error('لم يتم العثور على باركود');onBarcode({data:result[0].rawValue,barcodeType:result[0].format})}catch(e){alert(e.message||'تعذرت قراءة الباركود')}finally{$('csBarcodeImageInput').value=''}}
+async function decodeBarcodeImage(file){
+  if(!file||!requireCard('cardsBarcode'))return false;
+  try{
+    if(file.size>7.5*1024*1024)throw new Error('الصورة أكبر من الحد الآمن للمسح (7.5MB). قصّها أو صغّرها');
+    const data=await fileData(file);
+    if(window.ReactNativeWebView?.postMessage&&window.__ABU_BASSAM_NATIVE_CAMERA__===true){
+      window.ReactNativeWebView.postMessage(JSON.stringify({type:'scanBarcodeImage',dataUrl:data}));
+      return true
+    }
+    if(!('BarcodeDetector'in window))throw new Error('قارئ الصور يحتاج تطبيق Android أو متصفحاً يدعم BarcodeDetector');
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر فتح صورة الباركود'));image.src=data});
+    const detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});
+    const result=await detector.detect(image);
+    if(!result.length)throw new Error('لم يتم العثور على باركود');
+    onBarcode({data:result[0].rawValue,barcodeType:result[0].format});
+    return true
+  }catch(e){alert(e.message||'تعذرت قراءة الباركود');return false}
+  finally{$('csBarcodeImageInput').value=''}
+}
 function onBarcode(result){let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
 function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;let blob=fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}))).catch(()=>{state.photo=dataUrl;renderForm();renderPreview()});return blob}
 
@@ -416,8 +435,8 @@ function previewPrint(){if(!requireCard('cardsPrint')||!requireOutputPermission(
 function printNow(){if(!requireCards(['cardsPrint','printCards','printGeneral'])||!requireOutputPermission())return;try{let html=printDocument();recordHistory('طباعة');logOperation('print','طباعة الكروت',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPrint)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPrint(html)}if(window.Android&&Android.printHtml)return Android.printHtml(html);let frame=$('csPrintFrame');frame.srcdoc=html;openModal('csPrintModal');setTimeout(()=>frame.contentWindow&&frame.contentWindow.print(),700)}catch(e){alert(e.message)}}
 function savePdf(){if(!requireCards(['cardsExportPdf','pdfCreate','pdfSave'])||!requireOutputPermission())return;try{let html=printDocument(),name='Abu_Bassam_Cards_'+Date.now()+'.pdf';recordHistory('حفظ PDF');logOperation('pdf','حفظ الكروت PDF',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPdf)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPdf(name,html)}if(window.Android&&Android.savePdfHtml)return Android.savePdfHtml(name,html);previewPrint();alert('حفظ PDF المباشر متاح داخل تطبيق Android')}catch(e){alert(e.message)}}
 async function exportPng(){if(!requireCards(['cardsExportImage','imageExport','exportOutsideApp']))return;try{assertModelBarcodes(modelNow());let pages=[],labels=[],stamp=Date.now();if(state.sides!=='back'){pages.push(await domCardPng('front'));labels.push('الأمامي')}if(state.sides!=='front'){pages.push(await domCardPng('back'));labels.push('الخلفي')}recordHistory('حفظ '+labels.join(' و')+' في المعرض');if(window.Android&&Android.savePagesToGallery)Android.savePagesToGallery('Abu_Bassam_Card_'+labels.join('_'),JSON.stringify(pages),'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage('Abu_Bassam_Card_'+labels[index]+'_'+stamp+'.png','image/png',data),index*250));logOperation('gallery','حفظ أوجه الكارت كصور مستقلة',TYPE_LABELS[state.type]+' • '+labels.join(' و'))}catch(e){alert('تعذر إنشاء صور الكارت: '+String(e?.message||e))}}
-function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative('barcode'))$('csBarcodeImageInput').click()}
-function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.click()}
+function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative('barcode')){const input=$('csBarcodeImageInput');input.setAttribute('capture','environment');input.value='';input.click()}}
+function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.value='';input.click()}
 function openStandalone(title,src){if(!requireCard('cardsView'))return;if(window.AbuFeatureRecovery?.openTool)return AbuFeatureRecovery.openTool(title,src);alert('أداة الكروت المستقلة غير جاهزة بعد.')}
 
 function useBarcode(){if(!requireCard('cardsQr'))return;let value=state.forms.reader.result;if(!value)return alert('اقرأ باركود أولاً');state.forms.qr.content=value;state.forms.qr.title='نسخة الباركود';selectType('qr')}
