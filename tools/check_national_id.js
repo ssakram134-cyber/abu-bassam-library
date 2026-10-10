@@ -10,6 +10,7 @@ for(const viewer of ['pdf.min.js','pdf.worker.min.js','mammoth.browser.min.js','
  assert.ok(src.includes("vendor/documents/"+viewer),'National preview must use local '+viewer);
 }
 assert.ok(assets.includes('DOCUMENT_ASSETS'),'Missing offline PDF/DOCX/XLSX asset manifest');
+assert.ok(src.includes('pdfjsLib.getDocument({data:ab,isEvalSupported:false})'),'PDF.js 3.x must disable eval for untrusted scanned PDFs (CVE-2024-4367)');
 for(const domain of ['https://unpkg.com/','https://cdnjs.cloudflare.com/']){
  assert.ok(!src.includes(domain),'National ID runtime must not load document viewers from live CDN');
 }
