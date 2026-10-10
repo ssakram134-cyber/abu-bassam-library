@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { registerRootComponent } from 'expo';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
@@ -46,6 +46,7 @@ const ANDROID_BRIDGE = `
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
     printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
     printBase64: function (name, mime, data) { send('printBase64', { name: name, mime: mime, data: data }); },
+    scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
     printHtml: function (html) { send('printHtml', { html: html }); },
     savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
     shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
@@ -359,10 +360,30 @@ function App() {
     } catch (error) { replySecurity(requestId, false, null, error?.message || error); }
   }, [cameraPermission, replySecurity]);
 
+  const scanBarcodeImage = useCallback(async ({ data }) => {
+    let uri = null;
+    try {
+      const raw = String(data || '');
+      if (raw.length > 11_200_000 || !/^data:image\/(png|jpeg|webp);base64,/i.test(raw)) throw new Error('صيغة الصورة غير مدعومة أو حجمها أكبر من 8MB');
+      const parsed = splitDataUrl(raw);
+      const suffix = parsed.mime === 'image/png' ? 'png' : parsed.mime === 'image/webp' ? 'webp' : 'jpg';
+      uri = FileSystem.cacheDirectory + 'abu_barcode_gallery_' + Date.now() + '.' + suffix;
+      await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      const matches = await Camera.scanFromURLAsync(uri, BARCODE_TYPES);
+      const first = matches?.find(item => typeof item.data === 'string' && item.data.length > 0);
+      inject('AbuBassamNativeBarcodeImageResult', first ? { data: first.data, barcodeType: first.type || 'qr' } : { error: 'لم يتم العثور على باركود؛ قص الصورة ليملأ الرمز معظم مساحتها.' });
+    } catch (error) {
+      inject('AbuBassamNativeBarcodeImageResult', { error: String(error?.message || 'تعذرت قراءة صورة الباركود') });
+    } finally {
+      if (uri) await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    }
+  }, [inject]);
+
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
+    if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
     if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
@@ -377,7 +398,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
