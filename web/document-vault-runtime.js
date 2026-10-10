@@ -78,7 +78,32 @@ function openDb(){
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
 async function dbPut(item){if(item?.syncState==='pending')item.syncRevision=uuid();let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
-async function dbPutBatch(items){if(!items.length)return;const db=await openDb();return new Promise((resolve,reject)=>{let tx;try{tx=db.transaction(STORE,'readwrite');const store=tx.objectStore(STORE);for(const item of items)store.add(item);tx.oncomplete=()=>resolve(items.length);tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ دفعة الأرشيف'));tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))}catch(error){try{tx?.abort()}catch(_){}reject(error)}})}
+async function dbPutBatch(items){
+  if(!items.length)return 0;
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let tx,reason=null;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.getAll();
+      request.onsuccess=()=>{
+        try{
+          const rows=request.result||[],existingIds=new Set(rows.map(row=>String(row.id))),
+            incomingIds=new Set(items.map(row=>String(row.id)));
+          if(incomingIds.size!==items.length||items.some(row=>!row.id||row.deleted||existingIds.has(String(row.id))))
+            throw new Error('VAULT_DUPLICATE_ITEM');
+          if(rows.filter(row=>!row.deleted).length+items.length>MAX_ITEMS)
+            throw new Error('VAULT_LIMIT_1000');
+          for(const row of items)store.add(row);
+        }catch(error){reason=error;try{tx.abort()}catch(_){reject(error)}}
+      };
+      request.onerror=()=>{reason=request.error;try{tx.abort()}catch(_){reject(reason)}};
+      tx.oncomplete=()=>resolve(items.length);
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذر حفظ دفعة الأرشيف'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
+  })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 async function dbTrashAll(){const db=await openDb();return new Promise((resolve,reject)=>{const request=db.transaction(TRASH_STORE,'readonly').objectStore(TRASH_STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error||new Error('TRASH_READ_FAILED'))})}
 function trashScopeOk(item){return !!item&&String(item.scope||'')===syncScope()&&vaultScopeOk(false)}
@@ -204,6 +229,106 @@ async function dbMarkSyncedIfUnchanged(uploaded,remoteUpdatedAt){
       tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة تحديث حالة المزامنة'))
     }catch(error){reject(error)}
   })
+}
+
+async function dbApplySyncIfUnchanged(id,expected,replacement,localCopy=null){
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    let applied=false,tx,reason=null;
+    try{
+      tx=db.transaction(STORE,'readwrite');
+      const store=tx.objectStore(STORE),request=store.get(id);
+      const fail=error=>{reason=error;try{tx.abort()}catch(_){}};
+      request.onsuccess=()=>{
+        try{
+          const current=request.result;
+          const unchanged=expected===null?!current:!!current&&
+            current.syncState===expected.syncState&&
+            String(current.remoteUpdatedAt||'')===String(expected.remoteUpdatedAt||'')&&
+            syncSnapshot(current)===syncSnapshot(expected);
+          if(!unchanged)return;
+          // All checks and writes must share this transaction with other local uploads.
+          const activeBefore=!!current&&!current.deleted;
+          const activeAfter=!!replacement&&!replacement.deleted;
+          const activeCopy=!!localCopy&&!localCopy.deleted;
+          const growth=Number(activeAfter)+Number(activeCopy)-Number(activeBefore);
+          const commit=()=>{
+            try{
+              if(localCopy)store.add(localCopy);
+              if(replacement)store.put(replacement);
+              else store.delete(id);
+              applied=true
+            }catch(error){fail(error)}
+          };
+          if(growth<=0){commit();return}
+          // A cursor counts live records without materializing up to 1000 large Blobs.
+          // It also sees the transaction's current snapshot, so two concurrent
+          // downloads/conflict copies cannot each consume the last free slot.
+          let count=0;
+          const cursor=store.openCursor();
+          cursor.onsuccess=()=>{
+            try{
+              const entry=cursor.result;
+              if(entry){
+                if(!entry.value.deleted)count++;
+                entry.continue();
+                return
+              }
+              if(count+growth>MAX_ITEMS)throw new Error('VAULT_LIMIT_1000');
+              commit()
+            }catch(error){fail(error)}
+          };
+          cursor.onerror=()=>fail(cursor.error||new Error('VAULT_CAPACITY_READ_FAILED'))
+        }catch(error){fail(error)}
+      };
+      request.onerror=()=>fail(request.error||new Error('VAULT_SYNC_READ_FAILED'));
+      tx.oncomplete=()=>resolve(applied);
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذرت معاملة مزامنة الملف'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغيت معاملة مزامنة الملف'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
+  })
+}
+
+
+async function dbReconcileRemoteDeletionToTrashIfUnchanged(expected,{remoteEdited=null,remoteBlob=null,remoteVersion=''}={}){
+ const db=await openDb(),scope=syncScope(),now=Date.now(),trashId=uuid();
+ return new Promise((resolve,reject)=>{
+  let changed=false,reason=null,tx;
+  try{
+   tx=db.transaction([STORE,TRASH_STORE],'readwrite');
+   const store=tx.objectStore(STORE),trash=tx.objectStore(TRASH_STORE),request=store.get(expected.id);
+   const fail=e=>{reason=e;try{tx.abort()}catch(_){}};
+   request.onsuccess=()=>{
+    try{
+     const current=request.result;
+     if(!current||current.syncState!==expected.syncState||
+        String(current.remoteUpdatedAt||'')!==String(expected.remoteUpdatedAt||'')||
+        syncSnapshot(current)!==syncSnapshot(expected))return;
+     if(scope!==syncScope()||!vaultScopeOk(false))throw new Error('VAULT_TRASH_SCOPE');
+     let archived;
+     if(remoteEdited){
+      if(!current.deleted||remoteEdited.deleted||!remoteBlob||!remoteVersion)throw new Error('VAULT_DELETE_CONFLICT_INVALID');
+      const incoming=remoteItem({...remoteEdited,id:expected.id},remoteBlob,remoteVersion);
+      archived={...incoming,name:niceName(incoming.name+' (تعديل جهاز آخر قبل الحذف)')};
+     }else{
+      if(current.deleted||!current.blob)throw new Error('VAULT_TRASH_EMPTY');
+      archived=current
+     }
+     trash.add({...archived,id:trashId,sourceId:expected.id,scope,
+       deletedAtMs:now,expiresAt:now+TRASH_MS,deleted:false,syncState:'local-trash'});
+     if(remoteEdited){
+      // Record preserved remote revision: the existing deletion is uploaded on the next sync pass.
+      store.put({...current,remoteUpdatedAt:String(remoteVersion),syncRevision:uuid(),syncState:'pending'})
+     }else store.delete(expected.id);
+     changed=true
+    }catch(e){fail(e)}
+   };
+   request.onerror=()=>fail(request.error||new Error('VAULT_TRASH_READ_FAILED'));
+   tx.oncomplete=()=>resolve(changed);
+   tx.onerror=()=>reject(reason||tx.error||new Error('VAULT_TRASH_SYNC_FAILED'));
+   tx.onabort=()=>reject(reason||tx.error||new Error('VAULT_TRASH_SYNC_ABORTED'))
+  }catch(e){try{tx?.abort()}catch(_){}reject(e)}
+ })
 }
 
 function addCss(){
@@ -601,7 +726,7 @@ function pickIntoFolder(kind){if(!requireVault('vaultAdd'))return;if(!state.filt
 function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupInput').value='';$('vBackupInput').click()}
 
 function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:fileMime(name,blob.type),size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncRevision:uuid(),syncState:'pending',deleted:false}}
-async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
+async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPutBatch([item]);return item}
 function previousVersionName(name){
   const text=niceName(name),match=text.match(/^(.*?)(\.[^.]*)?$/),tag=new Date().toISOString().replace(/[:.]/g,'-');
   return (match?.[1]||text)+' (الأصل قبل التعديل '+tag+')'+(match?.[2]||'')
@@ -609,38 +734,50 @@ function previousVersionName(name){
 async function commitEditedFile(previous,blob,meta,keepOriginal){
   const db=await openDb();
   return new Promise((resolve,reject)=>{
-    let tx;
+    let tx,reason=null;
     try{
       tx=db.transaction(STORE,'readwrite');
-      const store=tx.objectStore(STORE),request=store.get(previous.id);
-      request.onsuccess=()=>{
-        const current=request.result;
-        if(!current||current.deleted||current.syncRevision!==previous.syncRevision){
-          try{tx.abort()}catch(_){}
-          return
-        }
-        if(keepOriginal){
-          const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
-          original.originalOf=current.id;
-          original.favorite=current.favorite;
-          original.mime=current.mime;
-          original.size=current.size;
-          store.add(original)
-        }
-        store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),syncState:'pending',syncRevision:uuid()})
+      const store=tx.objectStore(STORE),request=store.get(previous.id),all=keepOriginal?store.getAll():null;
+      let current=null,rows=null,handled=false;
+      const commit=()=>{
+        if(handled||current===null||(keepOriginal&&rows===null))return;
+        handled=true;
+        try{
+          if(!current||current.deleted||String(current.syncRevision||'')!==String(previous.syncRevision||''))
+            throw new Error('VAULT_STALE_ITEM');
+          if(keepOriginal&&rows.filter(item=>!item.deleted).length>=MAX_ITEMS)
+            throw new Error('VAULT_LIMIT_1000');
+          if(keepOriginal){
+            const original=newVaultItem(previousVersionName(current.name),current.blob,current.category,undefined,current.folder);
+            original.originalOf=current.id;
+            original.favorite=current.favorite;
+            original.mime=current.mime;
+            original.size=current.size;
+            store.add(original)
+          }
+          store.put({...current,name:niceName(meta.name||current.name),mime:String(meta.mime||blob.type||current.mime),
+            category:meta.category||current.category,blob,size:blob.size,updatedAt:new Date().toISOString(),
+            syncState:'pending',syncRevision:uuid()})
+        }catch(error){reason=error;try{tx.abort()}catch(_){reject(error)}}
       };
-      request.onerror=()=>{try{tx.abort()}catch(_){}};
+      request.onsuccess=()=>{current=request.result||false;commit()};
+      request.onerror=()=>{reason=request.error;try{tx.abort()}catch(_){reject(reason)}};
+      if(all){
+        all.onsuccess=()=>{rows=all.result||[];commit()};
+        all.onerror=()=>{reason=all.error;try{tx.abort()}catch(_){reject(reason)}}
+      }
       tx.oncomplete=()=>resolve(true);
-      tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ التعديل'));
-      tx.onabort=()=>reject(new Error('أُلغي الحفظ: الملف تغيّر أثناء التحرير أو تعذر التخزين'))
-    }catch(e){try{tx?.abort()}catch(_){}reject(e)}
+      tx.onerror=()=>reject(reason||tx.error||new Error('تعذر حفظ التعديل'));
+      tx.onabort=()=>reject(reason||tx.error||new Error('أُلغي الحفظ: الملف تغيّر أو تجاوز الأرشيف حد السعة'))
+    }catch(error){try{tx?.abort()}catch(_){}reject(error)}
   })
 }
 async function saveEditedBlob(id,blob,meta={}){
   const required=meta.image?'vaultImageEdit':'vaultEdit';
   if(!requireVault(required))return false;
-  const previous=findItem(id);
-  if(!previous||previous.deleted||!previous.blob||!blob)return false;
+  const currentItem=findItem(id);
+  if(!currentItem||currentItem.deleted||!currentItem.blob||!blob)return false;
+  const previous={...currentItem}; // Stable revision while prompts and async DB reads run.
   if(blob.size<1||blob.size>100*1024*1024)return alert('يجب ألا يتجاوز حجم الملف المعدل 100 ميغابايت.'),false;
   const mode=prompt('طريقة حفظ التعديل:\\n1 - الاحتفاظ بالنسخة الأصلية كملف مستقل\\n2 - استبدال الملف الحالي فقط\\nإلغاء: عدم حفظ أي تغيير','1');
   if(mode===null)return false;
@@ -826,36 +963,42 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
   if(!window.AbuBassamSecurity?.device?.()?.device_id){setSyncStatus('يلزم اعتماد الجهاز قبل المزامنة');return false}
   state.syncing=true;setSyncStatus('جاري رفع التغييرات إلى الحاوية الخاصة...');
   try{
+    let deletionConflictsSaved=0;
     const service=cloud(),pending=(await dbAll()).filter(item=>item.syncState==='pending');
     for(const item of pending){
       const row=await service.get('vault',item.id),remote=row?.data||null,remoteVersion=String(row?.updated_at||''),knownVersion=String(item.remoteUpdatedAt||'');
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbDelete(item.id);continue}
+          if(remote?.deleted){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);
-          await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+          if(!await dbReconcileRemoteDeletionToTrashIfUnchanged(item,{remoteEdited:remote,remoteBlob,remoteVersion})){
+            autoSyncRerunRequested=true
+          }else{
+            deletionConflictsSaved++;
+            autoSyncRerunRequested=true;
+            logOperation('sync','حفظ تعديل الجهاز الآخر في سلة المحذوفات قبل الحذف',String(remote.name||item.name))
+          }
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbPut(copy);await dbDelete(item.id);continue
+          if(!await dbApplySyncIfUnchanged(item.id,item,null,copy))autoSyncRerunRequested=true;continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-        await dbPut(localCopy);
-        await dbPut(remoteItem(remote,remoteBlob,remoteVersion));
+        if(!await dbApplySyncIfUnchanged(item.id,item,remoteItem(remote,remoteBlob,remoteVersion),localCopy))autoSyncRerunRequested=true;
         continue
       }
 
       if(item.deleted){
-        if(!row){await dbDelete(item.id);continue}
+        if(!row){if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',manualOrder:Number.isInteger(item.manualOrder)?item.manualOrder:null,deleted:true,storagePath:''};
         await service.upsert('vault',item.id,data);
-        await dbDelete(item.id);
+        if(!await dbApplySyncIfUnchanged(item.id,item,null))autoSyncRerunRequested=true;
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -877,11 +1020,16 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbDelete(id);continue}
+      if(data.deleted){if(here&&!await dbReconcileRemoteDeletionToTrashIfUnchanged(here))autoSyncRerunRequested=true;continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);
-      await dbPut(remoteItem(data,blob,remoteVersion))
+      if(!await dbApplySyncIfUnchanged(id,here||null,remoteItem(data,blob,remoteVersion)))autoSyncRerunRequested=true
+    }
+    if(deletionConflictsSaved){
+      await refresh();
+      setSyncStatus('حُفظت نسخ التعارض في سلة المحذوفات • الحذف بانتظار الرفع');
+      return false
     }
     syncSet(LAST_SYNC_KEY,String(Date.now()));
     await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');

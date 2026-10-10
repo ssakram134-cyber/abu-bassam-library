@@ -50,21 +50,29 @@ function simulate(previous){
  const db={transaction(_name,mode){
    assert.equal(mode,'readwrite');run.transactions++;
    const staged=new Map(records);
+   let pending=0,settled=false;
    const tx={
-     oncomplete:null,onerror:null,onabort:null,
+     oncomplete:null,onerror:null,onabort:null,aborted:false,
      objectStore(){return{
-       get(id){const req={result:null,onsuccess:null,onerror:null};Promise.resolve().then(()=>{req.result=staged.get(id);req.onsuccess();Promise.resolve().then(()=>{if(tx.aborted)tx.onabort();else{records.clear();for(const [key,val] of staged)records.set(key,val);tx.oncomplete()}})});return req},
+       get(id){const request={result:null,onsuccess:null,onerror:null};pending++;
+         queueMicrotask(()=>{request.result=staged.get(id);request.onsuccess?.();finish()});return request},
+       getAll(){const request={result:null,onsuccess:null,onerror:null};pending++;
+         queueMicrotask(()=>{request.result=[...staged.values()];request.onsuccess?.();finish()});return request},
        add(v){assert.equal(staged.has(v.id),false);staged.set(v.id,v);run.writes++},
        put(v){staged.set(v.id,v);run.writes++}
      }},
      abort(){tx.aborted=true;run.aborts++}
    };
+   function finish(){pending--;if(!pending&&!settled){settled=true;queueMicrotask(()=>{
+     if(tx.aborted)tx.onabort?.();
+     else{records.clear();for(const [key,val] of staged)records.set(key,val);tx.oncomplete?.()}
+   })}}
    return tx
  }};
- const commit=new Function('openDb','STORE','newVaultItem','previousVersionName','uuid','niceName',atomic+';return commitEditedFile')(
+ const commit=new Function('openDb','STORE','newVaultItem','previousVersionName','uuid','niceName','MAX_ITEMS',atomic+';return commitEditedFile')(
  async()=>db,'items',
  (name,blob,category,id,folder)=>({id:'original-copy',name,blob,category,folder,syncState:'pending'}),
- name=>'before-'+name,()=> 'revision-new',name=>name
+ name=>'before-'+name,()=> 'revision-new',name=>name,1000
  );
  return {commit,records,run}
 }

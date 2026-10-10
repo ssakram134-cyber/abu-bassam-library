@@ -51,39 +51,42 @@ assert.equal(api.automaticDue(),true,'Account B pending changes must not be bloc
 
 // One IndexedDB transaction per file batch. The fake commits only on complete,
 // mimicking IDB transaction atomicity rather than emulating browser storage internals.
-const batch=source.match(/^async function dbPutBatch\(items\)\{.*\}$/m)?.[0];
+const batch=between('async function dbPutBatch(items){','\nasync function dbDelete(');
 const newItem=source.match(/^function newVaultItem\(.*\)\{.*\}$/m)?.[0];
 const addFiles=between('async function addFiles(fileList,category,input){','\nfunction findItem(');
 assert.ok(batch&&newItem&&addFiles);
-function database(failAt=-1) {
+function database(failAt=-1){
   const saved=[];
-  return {
+  return{
     saved,
-    async openDb(){
-      return {transaction(){
-        let changes=[],aborted=false;
-        const tx={
-          objectStore(){return {add(item){
+    async openDb(){return{transaction(){
+      const changes=[],tx={
+        oncomplete:null,onerror:null,onabort:null,aborted:false,
+        abort(){this.aborted=true},
+        objectStore(){return{
+          getAll(){const request={result:null,onsuccess:null,onerror:null};
+            queueMicrotask(()=>{request.result=saved.slice();request.onsuccess?.();queueMicrotask(()=>{
+              if(tx.aborted)tx.onabort?.();else{saved.push(...changes);tx.oncomplete?.()}
+            })});return request},
+          add(item){
             if(changes.length===failAt)throw new Error('QUOTA_OR_DUPLICATE');
-            if(saved.some(x=>x.id===item.id)||changes.some(x=>x.id===item.id))throw new Error('DUPLICATE_ID');
-            changes.push(item);
-          }}},
-          abort(){aborted=true;changes=[];queueMicrotask(()=>tx.onabort?.())}
-        };
-        queueMicrotask(()=>{if(!aborted){saved.push(...changes);tx.oncomplete?.()}});
-        return tx;
-      }};
-    }
-  };
+            if(saved.some(x=>x.id===item.id)||changes.some(x=>x.id===item.id))throw Error('DUPLICATE_ID');
+            changes.push(item)
+          }
+        }}
+      };
+      return tx
+    }}}
+  }
 }
-const createBatch=new Function('openDb','STORE',batch+'\nreturn dbPutBatch;');
-const goodDb=database();const putBatch=createBatch(goodDb.openDb,'items');
+const createBatch=new Function('openDb','STORE','MAX_ITEMS',batch+'\nreturn dbPutBatch;');
+const goodDb=database();const putBatch=createBatch(goodDb.openDb,'items',1000);
 const entries=[{id:'1',blob:'one'},{id:'2',blob:'two'}];
 assert.equal(typeof putBatch,'function');
 const testWork=(async()=>{
   await putBatch(entries);
   assert.equal(goodDb.saved.length,2);
-  const badDb=database(1),tryBatch=createBatch(badDb.openDb,'items');
+  const badDb=database(1),tryBatch=createBatch(badDb.openDb,'items',1000);
   await assert.rejects(tryBatch(entries),/QUOTA_OR_DUPLICATE/);
   assert.equal(badDb.saved.length,0,'Any failure must roll back all files');
 
