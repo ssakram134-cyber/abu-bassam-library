@@ -11,6 +11,7 @@ need('web/secure-sync-runtime.js',['window.AbuBassamNativeSecurityResult','windo
 forbid('web/secure-sync-runtime.js',["localStorage.getItem('__dev_secure_'","upsert('operation'","upsert('device'"]);
 
 need('web/app-security-runtime.js',["MAIN_USERNAME='akrama1992'",'abu_bassam_register_device','SECONDARY_DEFAULT={edit:false','ATTEMPT_KEY','recordCredentialFailure','clearCredentialFailures',"signOut({scope:'local'})",'AbuBassamNativeSecurity']);
+need('web/permission-guard-runtime.js',["if(el.style.opacity==='.48')el.style.removeProperty('opacity')","startsWith('الصلاحية موقوفة:')"]);
 forbid('web/app-security-runtime.js',['window.AbuBassamNativeSecurityResult=function',"localStorage.getItem('__dev_secure_'"]);
 
 need('web/security-bootstrap-guard-runtime.js',['LEGACY_SECRET_PREFIX','wipeLegacySecretStorage','installLegacySecretStorageBlock','localStorage.removeItem(LEGACY_TRUST_KEY)','stopImmediatePropagation']);

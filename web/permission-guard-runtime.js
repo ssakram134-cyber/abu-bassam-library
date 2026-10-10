@@ -41,7 +41,7 @@ function keyGuard(event){
 }
 function decorate(){
   if(!secondary())return;
-  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
+  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el),denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else{if(el.style.opacity==='.48')el.style.removeProperty('opacity');if(String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')}})
 }
 let decorateQueued=false;
 function scheduleDecorate(){
