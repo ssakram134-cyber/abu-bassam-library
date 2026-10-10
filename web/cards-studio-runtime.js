@@ -57,12 +57,13 @@ const state={
   textStyles:loadJson(CARD_STYLE_KEY,{}),
   history:loadJson(HISTORY_KEY,[]),
   lastBarcode:'',
+  qrFromScan:false,
   previewHtml:'',
   activePrintHtml:''
 };
 Object.keys(DEFAULT_FORMS).forEach(key=>state.forms[key]=Object.assign({},DEFAULT_FORMS[key],state.forms[key]||{}));
 // Secrets are intentionally ephemeral: purge any legacy passwords loaded from persisted drafts.
-state.forms.login.password='';state.forms.wifi.password='';
+state.forms.login.password='';state.forms.wifi.password='';state.forms.reader.result='';state.forms.reader.format='';
 state.history=state.history.filter(entry=>entry&&typeof entry==='object'&&Array.isArray(entry.models)).slice(0,12);
 state.history.forEach(entry=>{entry.models=entry.models.filter(model=>model&&typeof model==='object'&&model.data&&typeof model.data==='object');entry.models.forEach(model=>{if(model.type==='login'||model.type==='wifi')model.data.password=''})});
 state.brand=Object.assign({},DEFAULT_BRAND,state.brand||{});
@@ -82,11 +83,11 @@ function savePrintSettings(){
  try{localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(Object.fromEntries(PRINT_FIELDS.map(key=>[key,state[key]]))))}catch(e){}
 }
 restorePrintSettings();
-try{let persisted=clone(state.forms);if(persisted.login)persisted.login.password='';if(persisted.wifi)persisted.wifi.password='';localStorage.setItem(STORAGE_KEY,JSON.stringify(persisted))}catch(e){}
-try{state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password=''}));localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){}
+try{let persisted=clone(state.forms);if(persisted.login)persisted.login.password='';if(persisted.wifi)persisted.wifi.password='';if(persisted.reader){persisted.reader.result='';persisted.reader.format=''}localStorage.setItem(STORAGE_KEY,JSON.stringify(persisted))}catch(e){}
+try{state.history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password='';if(model.type==='qr'&&model.fromScannedQr&&model.data)model.data.content=''}));localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){}
 
 function saveDraft(){
-  try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';localStorage.setItem(STORAGE_KEY,JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
+  try{let safeForms=clone(state.forms);if(safeForms.login)safeForms.login.password='';if(safeForms.wifi)safeForms.wifi.password='';if(safeForms.reader){safeForms.reader.result='';safeForms.reader.format=''}if(state.qrFromScan&&safeForms.qr)safeForms.qr.content='';localStorage.setItem(STORAGE_KEY,JSON.stringify(safeForms));localStorage.setItem(BRAND_KEY,JSON.stringify(state.brand));localStorage.setItem(CARD_STYLE_KEY,JSON.stringify(state.textStyles||{}))}catch(e){}
 }
 
 function referenceCardCss(printMode=false){
@@ -182,7 +183,7 @@ function renderForm(){
   if(state.type==='wifi')form.querySelector('[data-field="security"]').value=d.security||'WPA';
   if(state.type==='qr')form.querySelector('[data-field="kind"]').value=d.kind||'text';
   if(state.type==='qr')form.querySelector('[data-field="symbology"]').value=d.symbology||'qr';
-  form.querySelectorAll('[data-field]').forEach(input=>{input.disabled=!canCard('cardsEditText');input.oninput=()=>{if(!requireCard('cardsEditText')){renderForm();return}let key=input.dataset.field,value=input.type==='checkbox'?input.checked:input.value;state.forms[state.type][key]=value;if(key==='service'||key==='institutionType'){renderForm()}saveDraft();renderPreview()}});
+  form.querySelectorAll('[data-field]').forEach(input=>{input.disabled=!canCard('cardsEditText');input.oninput=()=>{if(!requireCard('cardsEditText')){renderForm();return}let key=input.dataset.field,value=input.type==='checkbox'?input.checked:input.value;state.forms[state.type][key]=value;if(state.type==='qr'&&key==='content')state.qrFromScan=false;if(key==='service'||key==='institutionType'){renderForm()}saveDraft();renderPreview()}});
 }
 
 function serviceName(data){return data.service==='other'?(data.customService||'الخدمة'):SERVICE_LABELS[data.service]||'الخدمة'}
@@ -232,7 +233,7 @@ function code128Svg(text){
 function symbolSvg(model){return model.type==='qr'&&model.data.symbology==='code128'?code128Svg(payloadFor(model)):qrSvg(payloadFor(model))}
 function validateSymbols(jobs){if(state.sides==='front')return;for(const model of jobs){if(!symbolSvg(model).startsWith('<svg'))throw new Error('باركود غير قابل للقراءة ضمن هذا التصميم. قلل المعلومات أو اختر QR بدل Code 128 قبل الطباعة أو الحفظ.')}}
 
-function modelNow(){let type=state.type==='reader'?'qr':state.type;return {type,data:clone(state.forms[type]),brand:clone(state.brand),photo:state.photo,photoTransform:clone(state.photoTransform),textStyles:clone(state.textStyles[type]||{}),orientation:state.orientation,width:Number(state.width),height:Number(state.height),watermark:state.watermark,watermarkText:state.watermarkText,watermarkOpacity:state.watermarkOpacity}}
+function modelNow(){let type=state.type==='reader'?'qr':state.type;return {type,data:clone(state.forms[type]),brand:clone(state.brand),photo:state.photo,photoTransform:clone(state.photoTransform),textStyles:clone(state.textStyles[type]||{}),orientation:state.orientation,width:Number(state.width),height:Number(state.height),watermark:state.watermark,watermarkText:state.watermarkText,watermarkOpacity:state.watermarkOpacity,fromScannedQr:type==='qr'&&state.qrFromScan}}
 function cardHtml(model,side){let d=model.data,portrait=model.orientation==='portrait'?' portrait':'',wm=watermark(model),safe='<div class="cs-card-safe"></div>',geo='<div class="cs-geo"></div>';
   if(model.type==='personal'){
     if(side==='front')return `<div class="cs-print-card cs-personal cs-personal-front${portrait}" data-type="personal"><div class="cs-personal-top-corner"></div>${referenceBrand(model,'cs-personal-brand')}<div class="cs-photo-frame cs-photo-stage">${photoMarkup(model)}</div><div class="cs-personal-front-name cs-editable-text" ${textAttrs(model,'name','اسم الشخص')}>${esc(d.name||'')}</div><div class="cs-personal-title cs-editable-text" ${textAttrs(model,'title','عنوان الباج')}>▣&nbsp; الباج التعريفي</div>${wm}${safe}</div>`;
@@ -306,7 +307,7 @@ function printDocument(){let jobs=expandedJobs();if(!jobs.length)throw new Error
   }
   return `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body>${pages}</body></html>`
 }
-function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(_){}}}
+function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';if(copy.type==='qr'&&copy.fromScannedQr&&copy.data)copy.data.content='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(state.history))}catch(_){}}}
 function renderHistory(){let el=$('csHistory');if(!el)return;el.innerHTML=state.history.length?state.history.map((item,index)=>`<div class="cs-hitem"><div><b>${esc(item.action)} — ${item.models.length} كارت</b><small>${new Date(item.time).toLocaleString('ar-IQ')} • ${esc(item.mode)}</small></div><div class="cs-hitem-actions"><button onclick="CardsStudio.loadHistory(${index})">إعادة</button><button onclick="CardsStudio.deleteHistory(${index})">حذف</button></div></div>`).join(''):'<div class="cs-empty">لا توجد عمليات طباعة محفوظة بعد.</div>'}
 
 async function domCardPng(side){let model=modelNow();validateSymbols([model]);let ratio=Math.max(.1,Number(model.height)||53.98)/Math.max(.1,Number(model.width)||85.6),w=Math.max(1,Math.floor(Math.min(2022,8192/ratio,Math.sqrt(12_000_000/ratio)))),h=Math.max(1,Math.floor(w*ratio)),css=fullPrintCss()+freeLayoutCss(),markup=`<div xmlns="http://www.w3.org/1999/xhtml" class="root"><style>${css}.root{margin:0;width:${w}px;height:${h}px;background:transparent}.box{width:${w}px;height:${h}px}</style><div class="box">${cardHtml(model,side)}</div></div>`,svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`,url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),image=new Image();try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر رسم الباج بصيغة SVG'));image.src=url});let canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;let context=canvas.getContext('2d');if(!context)throw new Error('تعذر إنشاء لوحة الباج');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0);return canvas.toDataURL('image/png')}finally{URL.revokeObjectURL(url)}}
@@ -351,10 +352,10 @@ function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative(
 function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.click()}
 function openStandalone(title,src){if(!requireCard('cardsView'))return;if(window.AbuFeatureRecovery?.openTool)return AbuFeatureRecovery.openTool(title,src);alert('أداة الكروت المستقلة غير جاهزة بعد.')}
 
-function useBarcode(){if(!requireCard('cardsQr'))return;let value=state.forms.reader.result;if(!value)return alert('اقرأ باركود أولاً');state.forms.qr.content=value;state.forms.qr.title='نسخة الباركود';selectType('qr')}
+function useBarcode(){if(!requireCard('cardsQr'))return;let value=state.forms.reader.result;if(!value)return alert('اقرأ باركود أولاً');state.forms.qr.content=value;state.qrFromScan=true;state.forms.qr.title='نسخة الباركود';selectType('qr')}
 function openLoginOcr(){if(!requireCard('cardsEditText'))return;if(window.DocumentVault&&DocumentVault.openOcr)return DocumentVault.openOcr('login');alert('أداة تحويل الصورة إلى نص غير جاهزة')}
 function importOcrText(text){if(!requireCard('cardsEditText'))return;let lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),account='',password='';for(let line of lines){let email=line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(email&&!account)account=email[0];if(!account&&/(?:الحساب|البريد|email|user(?:name)?|phone)\s*[:：-]/i.test(line))account=line.replace(/^.*?[:：-]\s*/,'').trim();if(!password&&/(?:كلمة\s*السر|الرمز|password|pass)\s*[:：-]/i.test(line))password=line.replace(/^.*?[:：-]\s*/,'').trim()}if(!account)account=lines[0]||'';if(!password)password=lines.find(line=>line!==account&&!/@/.test(line))||'';state.type='login';state.forms.login.account=account;state.forms.login.password=password;saveDraft();renderAll();alert('تم توزيع النص على حقول الحساب وكلمة السر. راجعهما قبل الطباعة.')}
-function exportBackup(){if(!requireCard('backupCreate'))return;let forms=clone(state.forms),history=clone(state.history);if(forms.login)forms.login.password='';if(forms.wifi)forms.wifi.password='';history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password=''}));let typography=window.AbuBassamTypography?AbuBassamTypography.exportData():null,json=JSON.stringify({version:5,createdAt:new Date().toISOString(),brand:state.brand,forms,textStyles:state.textStyles,typography,history}),data='data:application/json;base64,'+btoa(unescape(encodeURIComponent(json)));saveBase64('Abu_Bassam_Backup_'+Date.now()+'.json','application/json',data)}
+function exportBackup(){if(!requireCard('backupCreate'))return;let forms=clone(state.forms),history=clone(state.history);if(forms.login)forms.login.password='';if(forms.wifi)forms.wifi.password='';if(forms.reader){forms.reader.result='';forms.reader.format=''}if(state.qrFromScan&&forms.qr)forms.qr.content='';history.forEach(entry=>(entry.models||[]).forEach(model=>{if((model.type==='login'||model.type==='wifi')&&model.data)model.data.password='';if(model.type==='qr'&&model.fromScannedQr&&model.data)model.data.content=''}));let typography=window.AbuBassamTypography?AbuBassamTypography.exportData():null,json=JSON.stringify({version:5,createdAt:new Date().toISOString(),brand:state.brand,forms,textStyles:state.textStyles,typography,history}),data='data:application/json;base64,'+btoa(unescape(encodeURIComponent(json)));saveBase64('Abu_Bassam_Backup_'+Date.now()+'.json','application/json',data)}
 let resetArmed=false;
 function resetData(){
  if(!requireCards(['cardsDelete','backupCreate']))return;
