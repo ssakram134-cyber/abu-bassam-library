@@ -14,7 +14,7 @@ const SERVICE_LABELS={facebook:'Facebook',google:'Google Play',apple:'Apple / Ap
 const DEFAULT_BRAND={name:'مكتبة أبو بسام للتصوير والقرطاسية',phone:'07829667521',address:'',email:'AKRAMA1992@GMAIL.COM',website:'www.maktabah-abubassam.com',logo:'abu_bassam_icon.webp'};
 const DEFAULT_FORMS={
   personal:{name:'',address:'',phone:'',email:'',telegram:'',notes:'',location:''},
-  child:{name:'',address:'',institutionType:'kindergarten',school:'',driverPhone:'',guardianPhone:'',notes:''},
+  child:{name:'',age:'',address:'',institutionType:'kindergarten',school:'',driverPhone:'',guardianPhone:'',notes:''},
   login:{service:'facebook',customService:'',account:'',password:'',notes:''},
   wifi:{ssid:'',password:'',security:'WPA',hidden:false},
   qr:{title:'باركود المعلومات',kind:'text',symbology:'qr',content:'',caption:''},
@@ -148,7 +148,7 @@ function photoTools(){let t=state.photoTransform;return `<div class="cs-photo-to
 function renderForm(){
   let form=$('csForm'),d=state.forms[state.type],html='';$('csFormTitle').textContent='بيانات '+TYPE_LABELS[state.type];
   if(state.type==='personal')html=field('الاسم','name')+field('السكن','address')+field('رقم الهاتف','phone','tel')+field('الإيميل','email','email')+field('معرف التليجرام','telegram')+field('رابط الموقع Google Maps','location','url')+field('الملاحظات','notes','textarea','full')+photoTools();
-  if(state.type==='child')html=field('اسم الطفل','name')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+field('الملاحظات','notes','textarea','full')+photoTools();
+  if(state.type==='child')html=field('اسم الطفل','name')+field('العمر بالسنوات','age')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+field('الملاحظات','notes','textarea','full')+photoTools();
   if(state.type==='login'){
     html=`<label class="cs-field">نوع الحساب<select data-field="service"><option value="facebook">Facebook</option><option value="google">Google / Google Play</option><option value="apple">Apple / App Store</option><option value="email">البريد الإلكتروني</option><option value="other">أخرى</option></select></label>`+(d.service==='other'?field('اسم الخدمة','customService'):'')+field('البريد / الهاتف / اسم المستخدم','account')+field('كلمة السر','password')+field('ملاحظات اختيارية','notes','textarea','full')+`<div class="abu-capital-hint" style="grid-column:1/-1;padding:7px 9px;border-radius:9px;background:#fff1f2;color:#a11d2d;font-size:9px;font-weight:900">A B C — أي حرف إنجليزي كبير يظهر باللون الأحمر داخل الباج تلقائيًا.</div><div class="cs-photo-tools"><div class="cs-photo-actions"><button onclick="CardsStudio.openLoginOcr()">📷 قراءة البريد وكلمة السر من صورة</button></div></div>`;
   }
@@ -187,6 +187,7 @@ function loginContact(model){let values=[model.brand.phone&&'☎ '+model.brand.p
 function vcardEscape(value){return String(value??'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,')}
 function vcardPhone(value){return String(value||'').replace(/[^0-9+]/g,'')}
 function guardianWhatsApp(value){const digits=String(value||'').replace(/\D/g,'');return /^07\d{9}$/.test(digits)?'https://wa.me/964'+digits.slice(1):''}
+function emergencyDial(value){const raw=String(value||'').trim(),digits=raw.replace(/\D/g,'');return /^07\d{9}$/.test(digits)?digits:/^9647\d{9}$/.test(digits)?'+'+digits:/^\+[1-9]\d{7,14}$/.test(raw)?raw:''}
 function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,b.address,b.email,b.website].filter(Boolean).join(' | ');
   if(model.type==='personal'){
     const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name)];
@@ -205,7 +206,7 @@ function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,
     if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
     const whatsapp=guardianWhatsApp(d.guardianPhone);
     if(whatsapp)rows.push('URL:'+whatsapp);
-    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand+(d.age?' | العمر: '+String(d.age):'')),'END:VCARD');
     return rows.join('\n');
   }
   if(model.type==='login')return 'الخدمة: '+serviceName(d)+'\nالحساب: '+(d.account||'')+'\nكلمة السر: '+(d.password||'')+'\nملاحظات: '+(d.notes||'')+'\nالمصدر: '+brand;
@@ -238,8 +239,8 @@ function cardHtml(model,side){let d=model.data,portrait=model.orientation==='por
   if(model.type==='child'){
     let institution=childInstitution(d),badgeTitle=d.institutionType==='school'?'باج المدرسة':'باج الروضة';
     if(side==='front')return `<div class="cs-print-card cs-child cs-child-front${portrait}" data-type="child"><div class="cs-child-sun">☀️</div>${referenceBrand(model,'cs-child-brand')}<div class="cs-photo-frame cs-photo-stage">${photoMarkup(model)}</div><div class="cs-child-school cs-editable-text" ${textAttrs(model,'institution','اسم الروضة أو المدرسة')}>${esc(institution)}${d.name?` • ${esc(d.name)}`:''}</div><div class="cs-child-ribbon cs-editable-text" ${textAttrs(model,'title','عنوان الباج')}>${badgeTitle}</div>${wm}${safe}</div>`;
-    let emergency=d.guardianPhone||d.driverPhone;
-    return `<div class="cs-print-card cs-child cs-child-back cs-back${portrait}" data-type="child"><div class="cs-qr-box">${qrSvg(payloadFor(model))}</div><div class="cs-info cs-editable-text" ${textAttrs(model,'info','بيانات الطفل وولي الأمر')}>${row('اسم الطفل',d.name)}${row('السكن',d.address)}${row('رقم هاتف ولي الأمر',d.guardianPhone)}</div>${emergency?`<div class="cs-call-qr">${qrSvg('tel:'+emergency)}</div><div class="cs-call-label cs-editable-text" ${textAttrs(model,'secondary','اتصال طارئ')}>اتصال طارئ</div>`:''}${footer(model)}${wm}${safe}</div>`
+    let emergency=emergencyDial(d.guardianPhone)||emergencyDial(d.driverPhone);
+    return `<div class="cs-print-card cs-child cs-child-back cs-back${portrait}" data-type="child"><div class="cs-qr-box">${qrSvg(payloadFor(model))}</div><div class="cs-info cs-editable-text" ${textAttrs(model,'info','بيانات الطفل وولي الأمر')}>${row('اسم الطفل',d.name)}${d.age?row('العمر',d.age+' سنوات'):''}${row('السكن',d.address)}${row('رقم هاتف ولي الأمر',d.guardianPhone)}${row('رقم سائق الخط',d.driverPhone)}</div>${emergency?`<div class="cs-call-qr">${qrSvg('tel:'+emergency)}</div><div class="cs-call-label cs-editable-text" ${textAttrs(model,'secondary','اتصال طارئ')}>اتصال طارئ</div>`:''}${footer(model)}${wm}${safe}</div>`
   }
   if(model.type==='login'){
     let service=serviceName(d);
