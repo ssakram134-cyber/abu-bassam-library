@@ -266,7 +266,19 @@ function renderQueue(){let el=$('csQueue');if(!el)return;if(!state.queue.length)
 function renderAll(){document.querySelectorAll('.cs-type').forEach(button=>{button.classList.toggle('active',button.dataset.type===state.type);if(button.dataset.type==='qr')button.disabled=!canCard('cardsQr');else if(button.dataset.type==='reader')button.disabled=!canCard('cardsBarcode');else if(button.dataset.type)button.disabled=!canCard('cardsView')});renderForm();renderPreview();renderPrintSettings();renderQueue()}
 
 async function loadDefaultLogo(){if(state.brand.logo!=='abu_bassam_icon.webp')return;try{let response=await fetch('abu_bassam_icon.webp'),blob=await response.blob(),reader=new FileReader();reader.onload=()=>{state.brand.logo=reader.result;saveDraft();renderPreview()};reader.readAsDataURL(blob)}catch(e){}}
-async function resizeImage(file){let src=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=src});return src}
+async function resizeImage(file,maxDim=3000){
+ if(!file||file.size>16*1024*1024)throw new Error('الصورة تتجاوز 16MB');
+ if(!/^image\/(png|jpeg|webp)$/i.test(String(file.type||''))&&!(!file.type&&/\.(png|jpe?g|webp)$/i.test(String(file.name||''))))throw new Error('صيغة الصورة غير مدعومة');
+ let src=await fileData(file),image=new Image();
+ await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر فك الصورة'));image.src=src});
+ let w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
+ if(!w||!h||w*h>36_000_000)throw new Error('أبعاد الصورة غير صالحة أو تتجاوز 36 ميغابكسل');
+ let scale=Math.min(1,Math.min(3000,Math.max(100,Number(maxDim)||3000))/Math.max(w,h)),canvas=document.createElement('canvas');
+ canvas.width=Math.max(1,Math.floor(w*scale));canvas.height=Math.max(1,Math.floor(h*scale));
+ let ctx=canvas.getContext('2d');if(!ctx)throw new Error('محرك معالجة الصور غير متاح');
+ ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
+ return canvas.toDataURL(maxDim<=1200&&/image\/png/i.test(file.type)?'image/png':'image/jpeg',.92)
+}
 async function loadPhoto(file){if(!file||!requireCard('cardsImportImage'))return;try{state.photo=await resizeImage(file);state.photoTransform={zoom:1,x:0,y:0,rotate:0};renderForm();renderPreview()}catch(e){alert('تعذر فتح الصورة')}finally{$('csPhotoInput').value='';$('csPhotoCameraInput').value=''}}
 async function loadBrandLogo(file){if(!file||!requireCard('cardsImportImage'))return;try{state.brand.logo=await resizeImage(file,1200);$('csBrandLogoPreview').src=state.brand.logo;saveDraft();renderPreview()}catch(e){alert('تعذر فتح الشعار')}finally{$('csBrandLogoInput').value=''}}
 function requestNative(mode){try{if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){window.ReactNativeWebView.postMessage(JSON.stringify({type:'openCamera',mode}));return true}}catch(e){}return false}
@@ -298,7 +310,7 @@ function logOperation(type,title,details=''){if(window.AbuBassamOps&&AbuBassamOp
 
 async function decodeBarcodeImage(file){if(!file)return;try{let data=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=data});if(!('BarcodeDetector'in window))throw new Error('استخدم الكاميرا الأصلية داخل تطبيق Android');let detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});let result=await detector.detect(image);if(!result.length)throw new Error('لم يتم العثور على باركود');onBarcode({data:result[0].rawValue,barcodeType:result[0].format})}catch(e){alert(e.message||'تعذرت قراءة الباركود')}finally{$('csBarcodeImageInput').value=''}}
 function onBarcode(result){let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
-function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;let blob=fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}))).catch(()=>{state.photo=dataUrl;renderForm();renderPreview()});return blob}
+function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;if(!/^data:image\/(png|jpeg|webp);base64,/i.test(dataUrl)||dataUrl.length>22_000_000)return alert('صيغة صورة الكاميرا غير مدعومة أو حجمها كبير جدًا');return fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:blob.type||'image/jpeg'}))).catch(()=>alert('تعذر معالجة صورة الكاميرا؛ اختر صورة أصغر.'))}
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result&&result.mode==='barcode')return onBarcode(result);if(result&&result.mode==='cardPhoto')return onPhoto(result.dataUrl);if(typeof previousNativeResult==='function')return previousNativeResult(result)};
