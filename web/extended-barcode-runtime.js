@@ -67,10 +67,21 @@ function render(){
   message('تم التحقق من الرقم '+result.value+' • نوع '+type+' • طول الرمز '+result.bits.length+' وحدة.');
  }catch(e){current='';$('extendedBarcodeGraphic').textContent='';message('قيمة غير صالحة: '+String(e.message||e))}
 }
-function save(){
+async function save(){
  if(!current||!authorized())return message('تحقق من الرقم والصلاحية قبل الحفظ.');
- const blob=new Blob([current],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
- a.href=url;a.download='Abu_Bassam_Barcode_'+Date.now()+'.svg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)
+ try{
+  const width=Number(current.match(/viewBox="0 0 (\d+)/)?.[1]||0);
+  if(!width||width>3000)throw Error('BARCODE_SIZE_INVALID');
+  const image=new Image(),source='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(current);
+  await new Promise((ok,fail)=>{image.onload=ok;image.onerror=()=>fail(Error('BARCODE_RASTERIZE_FAILED'));image.src=source});
+  const cv=document.createElement('canvas');cv.width=width*2;cv.height=288;
+  const ctx=cv.getContext('2d');if(!ctx)throw Error('BARCODE_CANVAS_UNAVAILABLE');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(image,0,0,cv.width,cv.height);
+  const data=cv.toDataURL('image/png'),name='Abu_Bassam_Barcode_'+Date.now()+'.png';
+  if(window.Android?.saveToGallery)window.Android.saveToGallery(name,'image/png',data);
+  else{const a=document.createElement('a');a.href=data;a.download=name;document.body.appendChild(a);a.click();a.remove()}
+  message('تم تجهيز رمز PNG مع مناطق صامتة حول الباركود، جاهز للحفظ والطباعة.');
+ }catch(error){message('تعذر تصدير الباركود: '+String(error?.message||error))}
 }
 function build(){
  const cards=$('cardsCenter');if(!cards||$('extendedBarcodePanel'))return;
@@ -83,7 +94,7 @@ function build(){
  '<button id="extendedBarcodeRun">إنشاء وتدقيق الباركود</button>'+
  '<div id="extendedBarcodeGraphic" role="img" aria-label="معاينة الباركود"></div>'+
  '<p id="extendedBarcodeMessage" role="status"></p>'+
- '<button id="extendedBarcodeSave">حفظ الباركود SVG قابل للطباعة</button>';
+ '<button id="extendedBarcodeSave">حفظ الباركود PNG عالي الدقة</button>';
  cards.appendChild(panel);
  $('extendedBarcodeRun').onclick=render;$('extendedBarcodeSave').onclick=save;
 }
