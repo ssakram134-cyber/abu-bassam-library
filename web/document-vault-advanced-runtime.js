@@ -61,7 +61,7 @@ async function save(){
   close();await window.DocumentVault?.onShow?.();alert(choice==='1'?'تم حفظ نسخة جديدة مع الاحتفاظ بالأصل ✓':'تم استبدال الصورة وفق اختيارك ✓')
  }catch(e){status('تعذر الحفظ: '+(e.message||e));alert(e.message||'تعذر حفظ التعديل')}finally{btn.disabled=false}
 }
-function enhanceCards(){document.querySelectorAll('#vGrid .v-item').forEach(card=>{if(card.querySelector('.abu-vault-advanced-btn')||!card.querySelector('.v-thumb img'))return;const actions=card.querySelector('.v-item-actions');if(!actions)return;let id='';for(const b of actions.querySelectorAll('button')){const m=String(b.getAttribute('onclick')||'').match(/DocumentVault\.(?:editItem|openItem)\('([^']+)'\)/);if(m){id=m[1];break}}if(!id)return;const b=document.createElement('button');b.className='abu-vault-advanced-btn';b.textContent='تحرير متقدم';b.onclick=()=>open(id);actions.insertBefore(b,actions.firstChild)})}
+function enhanceCards(){document.querySelectorAll('#vGrid .v-item[data-vault-id]').forEach(card=>{if(card.querySelector('.abu-vault-advanced-btn')||!card.querySelector('.v-thumb img'))return;const actions=card.querySelector('.v-item-actions'),id=String(card.dataset.vaultId||'');if(!actions||!id)return;const b=document.createElement('button');b.className='abu-vault-advanced-btn';b.textContent='تحرير متقدم';b.onclick=()=>open(id);actions.insertBefore(b,actions.firstChild)})}
 function boot(){addCss();modal();enhanceCards();const grid=$('vGrid');if(grid)new MutationObserver(()=>requestAnimationFrame(enhanceCards)).observe(grid,{childList:true})}
 window.AbuDocumentVaultAdvanced={open};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
