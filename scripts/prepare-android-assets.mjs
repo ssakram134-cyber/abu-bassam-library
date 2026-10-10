@@ -6,6 +6,7 @@ const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(projectRoot, 'web');
 const destination = resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library');
 const vendorRoot = resolve(destination, 'vendor', 'tesseract');
+const documentVendorRoot = resolve(destination, 'vendor', 'documents');
 const DOWNLOAD_TIMEOUT_MS = 45000;
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
@@ -42,6 +43,13 @@ const OCR_ASSETS = [
     'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
     'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz'
   ), 500000],
+];
+
+const DOCUMENT_ASSETS = [
+  ['pdf.min.js',pair('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js','https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js'),50000],
+  ['pdf.worker.min.js',pair('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js','https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'),100000],
+  ['mammoth.browser.min.js',pair('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js','https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js'),50000],
+  ['xlsx.full.min.js',pair('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'),100000],
 ];
 
 async function existsEnough(path,minBytes){try{return (await stat(path)).size>=minBytes}catch{return false}}
@@ -89,6 +97,12 @@ for(const [relative,,minBytes] of OCR_ASSETS){
   const path=resolve(vendorRoot,relative);
   if(!(await existsEnough(path,minBytes)))throw new Error(`Required offline OCR asset is missing or incomplete: ${relative}`);
 }
+for(const [relative,urls,minBytes] of DOCUMENT_ASSETS){
+  await download(urls,resolve(documentVendorRoot,relative),minBytes);
+}
+for(const [relative,,minBytes] of DOCUMENT_ASSETS){
+  if(!(await existsEnough(resolve(documentVendorRoot,relative),minBytes)))throw new Error(`Required offline document viewer asset is missing: ${relative}`);
+}
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
-process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
+process.stdout.write('Offline OCR and PDF/DOCX/XLSX viewer assets are embedded in generated Android assets; canonical web source remains unchanged.\n');
