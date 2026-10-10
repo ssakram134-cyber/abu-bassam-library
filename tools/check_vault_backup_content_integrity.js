@@ -71,6 +71,36 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
  assert.equal(captured.items[0].manualOrder,1,'The cloud ZIP manifest must preserve ordering');
  assert.equal(captured.branchDeviceId,'branch1','Do not merge different branch namespaces');
  assert.equal(captured.items[0].name,'contract.pdf');
+ // Sanitized legacy IDs may collide (a/b and a_b); ordinal paths must not.
+ files=[
+  {...files[0],id:'a/b',name:'same.pdf',size:1,blob:blob('AAAA')},
+  {...files[0],id:'a_b',name:'same.pdf',size:1,blob:blob('BBBB')}
+ ];
+ const previouslyAdded=added.length;
+ await packageAgain();
+ const cloudPaths=added.slice(previouslyAdded).filter(x=>x.startsWith('files/'));
+ assert.equal(cloudPaths.length,2);
+ assert.notEqual(cloudPaths[0],cloudPaths[1],'Both duplicate-looking IDs must get separate ZIP entries');
+ assert.equal(captured.items[0].size,4,'Manifest must reflect real Blob size, not stale metadata');
+ assert.equal(captured.items[1].size,4);
+ assert.equal(captured.items[0].id,'a/b','Original ID retained in metadata');
+
+ // Local ZIP exports must use the same collision-free entry policy.
+ const localStart=restoreSource.indexOf('async function backupBytes(){');
+ const localEnd=restoreSource.indexOf('\nfunction strong(',localStart);
+ assert.ok(localStart>=0&&localEnd>localStart);
+ const localBackupSource=restoreSource.slice(localStart,localEnd);
+ const localZip=new Function('window','all','JSZip','device','MAX_ITEMS','MAX_FILE','MAX_TOTAL','nice','settings','crypto',
+   localBackupSource+';return backupBytes')(
+    {JSZip:Archive},()=>Promise.resolve(files),Archive,()=>({id:'branch1',name:'فرع 1'}),
+    1000,100*1024*1024,500*1024*1024,String,()=>options,{randomUUID:()=> 'new'});
+ const localStartAt=added.length;
+ await localZip();
+ const localPaths=added.slice(localStartAt).filter(x=>x.startsWith('files/'));
+ assert.equal(localPaths.length,2);
+ assert.notEqual(localPaths[0],localPaths[1]);
+ assert.equal(captured.items[0].size,4);
+
 
  let busy=false,cloudCalls=0,paintCalls=0,attempt=0;
  const last=new Map(),events=[];
