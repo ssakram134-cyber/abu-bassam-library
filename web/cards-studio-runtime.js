@@ -404,7 +404,7 @@ async function decodeBarcodeImage(file){
   }catch(e){alert(e.message||'تعذرت قراءة الباركود');return false}
   finally{$('csBarcodeImageInput').value=''}
 }
-function onBarcode(result){let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
+function onBarcode(result){if(!canCard('cardsBarcode'))return false;let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
 function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;let blob=fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}))).catch(()=>{state.photo=dataUrl;renderForm();renderPreview()});return blob}
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
