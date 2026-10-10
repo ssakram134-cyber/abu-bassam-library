@@ -41,5 +41,16 @@ new Function('window','document','TextEncoder','JSZip','crypto','localStorage','
  assert.deepEqual(window.restored.items.map(x=>x.blob?.size||0),[3,2,0]);
  assert.ok(window.restored.items[1].deletedAt,'30-day trash timestamp must survive restore');
  assert.ok(window.restored.items.every(x=>x.syncState==='pending'),'Restored records must resync intentionally');
+ const original=ZipMock.current.entries.get('manifest.json'),snapshot=window.restored;
+ ZipMock.current.file('manifest.json',JSON.stringify({...manifest,items:[...manifest.items,{...manifest.items[0]}]}));
+ const duplicateAccepted=await window.testVault.safeRestore(file,{mode:'snapshot',skipSafetyBackup:true,silentConfirm:true,silentSuccess:true,silentError:true});
+ assert.equal(duplicateAccepted,false,'Duplicate document IDs must be rejected before mutating archive');
+ assert.equal(window.restored,snapshot,'Rejected restore must not commit any partial records');
+ const withoutMime={...manifest,items:manifest.items.map(x=>x.id==='tomb'?{...x,mime:''}:x)};
+ ZipMock.current.file('manifest.json',JSON.stringify(withoutMime));
+ const tombstoneRestored=await window.testVault.safeRestore(file,{mode:'snapshot',skipSafetyBackup:true,silentConfirm:true,silentSuccess:true,silentError:true});
+ assert.equal(tombstoneRestored,true,'Tombstone missing MIME must safely restore as octet-stream');
+ assert.equal(window.restored.items[2].mime,'application/octet-stream');
+ ZipMock.current.file('manifest.json',original);
  console.log('Vault trash backup checks passed: active file, 30-day deleted blob and deletion tombstone survive snapshot restore; conflicts/copy-vs-replace guarded.');
 })().catch(error=>{console.error(error);process.exitCode=1});
