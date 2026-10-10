@@ -45,7 +45,9 @@ assert.equal(idFn('user/branch-vault/device/item1/rev1',new Map()),'item1','Use 
 assert.equal(idFn('user/branch-vault/device/item1',new Map()),'');
 assert.match(branch,/if\(path&&!isItemRevision\(path,base\.user\.id,base\.deviceId,itemId\)\)/);
 assert.match(branch,/if\(path&&path===currentPath&&row\?\.data\?\.deleted!==true\)/);
-assert.equal((branch.match(/if\(!validItemId\(itemId\)\)return json/g)||[]).length,3);
+assert.equal((branch.match(/if\(!validItemId\(itemId\)\)return json/g)||[]).length,2);
+assert.match(branch,/if\(!validItemId\(itemId\)\|\|!expectedPath\|\|!expectedVersion\)/);
+assert.match(branch,/if\(!validItemId\(itemId\)\|\|!validItemId\(targetDevice\)\|\|!expected\)/);
 const start=client.indexOf('async function removeAllVault()'),end=client.indexOf('\nfunction registerCloudAdapter()',start);
 assert.ok(start>=0&&end>start);
 const clear=client.slice(start,end);
