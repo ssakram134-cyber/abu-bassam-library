@@ -12,7 +12,7 @@ function mock(settings={}){
  size:3,createdAt:'2026-10-10',updatedAt:'2026-10-10',deleted:false,syncState:'pending',remoteUpdatedAt:''};
  let rows=[row];
  const svc={
- get:async()=>{if(settings.switchAfterGet)scope='other:phone1';return null},
+ get:async()=>{if(settings.networkDropBeforeGet)throw Error('NETWORK_OFFLINE');if(settings.switchAfterGet)scope='other:phone1';return null},
  uploadVault:async()=>{sent.push('upload');if(settings.switchAfterUpload)scope='other:phone1';return 'path'},
  upsert:async()=>({updated_at:'remote-1'}),removeVault:async()=>{},list:async()=>{if(settings.switchAfterList)scope='other:phone1';return []},
  downloadVault:async()=>({size:3})
@@ -41,6 +41,13 @@ function mock(settings={}){
  assert.equal(p.checkpoint.length,0);
  p=mock({switchAfterUpload:true});
  assert.equal(await p.fn(true),false,'Session switch after upload must block server upsert');
+ assert.equal(p.checkpoint.length,0);
+ p=mock({switchAfterList:true});
+ assert.equal(await p.fn(true),false,'Account change after remote listing must abort before checkpoint');
+ assert.equal(p.checkpoint.length,0);
+ p=mock({networkDropBeforeGet:true});
+ assert.equal(await p.fn(true),false,'Network error must preserve the pending local edit');
+ assert.equal(p.sent.length,0);
  assert.equal(p.checkpoint.length,0);
  p=mock({concurrentEdit:true});
  assert.equal(await p.fn(true),false,'Concurrent local revision edit keeps pending queue');
