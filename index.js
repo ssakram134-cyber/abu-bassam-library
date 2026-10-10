@@ -107,6 +107,7 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
+  const barcodeScanGuard = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -116,6 +117,8 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [startupFailed, setStartupFailed] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -126,16 +129,22 @@ function App() {
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    barcodeScanGuard.current = true; // Ignore events from the closing camera; reset only on a new open.
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
   useEffect(() => {
-    if (webReady) return undefined;
-    const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
-    }, STARTUP_WATCHDOG_MS);
+    if (webReady || startupFailed) return undefined;
+    const timer = setTimeout(() => setStartupFailed(true), STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [webReady, startupFailed, startupAttempt]);
+
+  const retryStartup = useCallback(() => {
+    setWebReady(false);
+    setStartupFailed(false);
+    setStartupAttempt((attempt) => attempt + 1);
+    webRef.current?.reload();
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -159,6 +168,7 @@ function App() {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      barcodeScanGuard.current = false;
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
@@ -178,12 +188,12 @@ function App() {
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+    if (barcodeScanGuard.current || barcodeLocked || cameraMode !== 'barcode' || !result?.data) return;
+    barcodeScanGuard.current = true;
     setBarcodeLocked(true);
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
-  }, [barcodeLocked, inject]);
+  }, [barcodeLocked, cameraMode, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
   const saveBase64 = useCallback(async ({ name, mime, data }) => {
@@ -265,9 +275,11 @@ function App() {
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
+    let temporaryPdfUri = '';
     try {
       if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
       const result = await Print.printToFileAsync({ html: String(html), base64: true });
+      temporaryPdfUri = String(result.uri || '');
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
@@ -275,9 +287,14 @@ function App() {
       if (!permission.granted) return;
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
     } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+    finally {
+      const cacheDirectory = FileSystem.cacheDirectory;
+      if (cacheDirectory && temporaryPdfUri.startsWith(cacheDirectory)) {
+        await FileSystem.deleteAsync(temporaryPdfUri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
@@ -361,7 +378,7 @@ function App() {
 
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    if (message.type === 'webBootReady') { setStartupFailed(false); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -394,9 +411,26 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onError={() => { setWebReady(false); setStartupFailed(true); }}
       />
-      {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {!webReady && (
+        <View style={styles.loading}>
+          {startupFailed ? (
+            <>
+              <Text style={styles.startupErrorTitle}>تعذر تشغيل مكتبة أبو بسام</Text>
+              <Text style={styles.startupErrorMessage}>لم تكتمل مكونات التطبيق بأمان. بياناتك المحفوظة لم تُحذف. أعد محاولة التحميل دون الحاجة إلى اتصال بالإنترنت.</Text>
+              <TouchableOpacity style={styles.startupRetryButton} onPress={retryStartup} accessibilityRole="button" accessibilityLabel="إعادة محاولة تشغيل التطبيق">
+                <Text style={styles.startupRetryText}>إعادة المحاولة</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="large" color="#76533e" />
+              <Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text>
+            </>
+          )}
+        </View>
+      )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -426,6 +460,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
   loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
+  startupErrorTitle: { color: '#5b4438', fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  startupErrorMessage: { color: '#5b4438', fontSize: 13, fontWeight: '600', textAlign: 'center', lineHeight: 24, marginTop: 14, marginHorizontal: 22 },
+  startupRetryButton: { marginTop: 22, backgroundColor: '#087f72', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28, minHeight: 48, justifyContent: 'center', alignItems: 'center' },
+  startupRetryText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },
   cameraShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 38 },
   cameraHeader: { width: '100%', paddingTop: 14, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },

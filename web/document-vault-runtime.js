@@ -13,9 +13,9 @@ const VIEW_KEY='abuBassamVaultViewV5';
 const SYSTEM_FOLDERS=['المستمسكات','المعاملات','الباجات'];
 function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function syncKey(key){return key+':'+syncScope()}
-function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null&&key!==LAST_SYNC_KEY){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
-const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
+const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploading:false,uploadFolder:''};
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function uuid(){return globalThis.crypto&&crypto.randomUUID?crypto.randomUUID():'vault-'+Date.now()+'-'+Math.random().toString(36).slice(2)}
@@ -28,7 +28,7 @@ function sessionOk(){return !!(window.AbuBassamCloud&&AbuBassamCloud.isConnected
 function autoSync(){return syncGet(AUTO_SYNC_KEY)!=='0'}
 function syncPolicy(){try{const current=localStorage.getItem(SYNC_POLICY_KEY);return Object.assign({mode:'daily',wifiOnly:false},JSON.parse(current??syncGet(SYNC_POLICY_KEY)??'{}'))}catch(e){return{mode:'daily',wifiOnly:false}}}
 function wifiVerified(){let connection=navigator.connection||navigator.mozConnection||navigator.webkitConnection,type=String(connection&&connection.type||'').toLowerCase();return type==='wifi'}
-function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&!wifiVerified())return false;let elapsed=Date.now()-Number(syncGet(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return hasPending()||elapsed>=900000}
+function automaticDue(){if(!autoSync()||!navigator.onLine)return false;let policy=syncPolicy();if(policy.mode==='manual')return false;if(policy.wifiOnly&&!wifiVerified())return false;if(hasPending())return true;let elapsed=Date.now()-Number(syncGet(LAST_SYNC_KEY)||0);if(policy.mode==='weekly')return elapsed>=604800000;if(policy.mode==='daily')return elapsed>=86400000;return elapsed>=900000}
 
 function vaultOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function vaultScopeOk(show=true){const branch=window.AbuBassamBranchVault;if(!branch?.localScopeOk){if(show)alert('بوابة حماية الأرشيف غير جاهزة. أعد فتح التطبيق.');return false}return branch.localScopeOk(show)!==false}
@@ -59,6 +59,7 @@ function openDb(){
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
 async function dbPut(item){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function dbPutBatch(items){if(!items.length)return;const db=await openDb();return new Promise((resolve,reject)=>{let tx;try{tx=db.transaction(STORE,'readwrite');const store=tx.objectStore(STORE);for(const item of items)store.add(item);tx.oncomplete=()=>resolve(items.length);tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ دفعة الأرشيف'));tx.onabort=()=>reject(tx.error||new Error('أُلغيت معاملة حفظ الدفعة'))}catch(error){try{tx?.abort()}catch(_){}reject(error)}})}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 
 function addCss(){
@@ -148,18 +149,31 @@ function pickFiles(){if(!requireVault('vaultAdd'))return;state.uploadFolder='';$
 function pickCollection(folder){if(!requireVault('vaultAdd'))return;state.uploadFolder=SYSTEM_FOLDERS.includes(folder)?folder:'';$('vFileInput').value='';$('vFileInput').click()}
 function pickBackup(){if(!requireVault('vaultRestoreBackup'))return;$('vBackupInput').value='';$('vBackupInput').click()}
 
-async function addBlob(name,blob,category,id,folder=''){
-  let now=new Date().toISOString(),item={id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncState:'pending',deleted:false};
-  await dbPut(item);return item
-}
+function newVaultItem(name,blob,category,id,folder=''){let now=new Date().toISOString();return{id:id||uuid(),name:niceName(name),category,mime:blob.type||'application/octet-stream',size:blob.size,createdAt:now,updatedAt:now,folder:folder||'',favorite:false,lastOpenedAt:'',blob,syncState:'pending',deleted:false}}
+async function addBlob(name,blob,category,id,folder=''){const item=newVaultItem(name,blob,category,id,folder);await dbPut(item);return item}
 async function addFiles(fileList,category,input){
-  let files=[...(fileList||[])];if(!files.length)return;
-  let count=state.items.filter(item=>!item.deleted).length,room=MAX_ITEMS-count;if(room<=0){alert('وصل الأرشيف إلى الحد الأقصى: 1000 عنصر');return}
-  if(files.length>room){alert(`لا توجد مساحة كافية لكل الملفات المحددة. المتاح ${room} فقط من أصل ${files.length}. لم يُحفظ أي ملف.`);if(input)input.value='';state.uploadFolder='';return}
-  setBusy(true,'جاري حفظ الملفات بأسمائها الأصلية...');
-  try{let folder=state.uploadFolder;for(let file of files)await addBlob(file.name,file,category,undefined,folder);state.filter=folder?'folder:'+folder:category;await refresh();logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',files.length+' عنصر');setSyncStatus('تم الحفظ محلياً • بانتظار المزامنة');if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),700)}
-  catch(e){alert('تعذر حفظ أحد الملفات: '+(e.message||e))}
-  finally{setBusy(false);state.uploadFolder='';if(input)input.value=''}
+  const files=[...(fileList||[])];if(!files.length)return false;
+  if(state.uploading){alert('جاري حفظ دفعة أخرى. انتظر اكتمالها قبل إضافة ملفات جديدة.');if(input)input.value='';return false}
+  state.uploading=true;setBusy(true,'جاري حفظ الملفات بأسمائها الأصلية...');
+  let committed=false;
+  try{
+    const saved=await dbAll(),count=saved.filter(item=>!item.deleted).length,room=MAX_ITEMS-count;
+    if(files.length>room)throw new Error(room<=0?'وصل الأرشيف إلى الحد الأقصى: 1000 عنصر':`المتاح ${room} فقط من أصل ${files.length}. لم يُحفظ أي ملف.`);
+    const folder=state.uploadFolder;
+    const records=files.map(file=>newVaultItem(file.name,file,category,undefined,folder));
+    await dbPutBatch(records); // IndexedDB transaction is all-or-nothing on quota, abort or duplicate ID.
+    committed=true;
+    state.filter=folder?'folder:'+folder:category;
+    await refresh();
+    logOperation('upload',folder?'رفع إلى '+folder:category==='image'?'رفع صور إلى الأرشيف':'رفع ملفات إلى الأرشيف',records.length+' عنصر');
+    setSyncStatus('تم الحفظ محلياً • بانتظار المزامنة');
+    if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),700);
+    return true
+  }catch(e){
+    if(committed){setSyncStatus('الملفات محفوظة محلياً • تعذر تحديث العرض');alert('حُفظت الدفعة داخل الأرشيف، لكن تعذر تحديث عرضها. أعد فتح القسم. '+(e?.message||e));return true}
+    alert('لم تُحفظ الدفعة: '+(e?.message||e));
+    return false
+  }finally{state.uploading=false;setBusy(false);state.uploadFolder='';if(input)input.value=''}
 }
 function findItem(id){return state.items.find(item=>item.id===id)}
 async function blobDataUrl(blob){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})}
