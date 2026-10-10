@@ -9,7 +9,7 @@ const AUTO_SYNC_KEY='abuBassamVaultAutoSyncV4';
 const PRINTER_KEY='abuBassamPrinterProfilesV1';
 const DEFAULT_PRINTER_KEY='abuBassamDefaultPrinterV1';
 const ACTIVE_PRINTER_KEY='abuBassamActivePrinterProfileV1';
-const RESET_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamTypographyV5','abuBassamCustomFontsV5','abuBassamPrinterProfilesV1','abuBassamDefaultPrinterV1','abuBassamActivePrinterProfileV1','abuBassamProfessionalPrintPresetsV1'];
+const RESET_KEYS=['theme','abuBassamPrintSettingsV1','abuBassamDpiEnabledV1','abuBassamCardsPrintPreferencesV1','abuBassamTypographyV5','abuBassamCustomFontsV5','abuBassamPrinterProfilesV1','abuBassamDefaultPrinterV1','abuBassamActivePrinterProfileV1','abuBassamProfessionalPrintPresetsV1'];
 let printPatched=false,settingsPatched=false,enhancementsPatched=false;
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV3')||''}
