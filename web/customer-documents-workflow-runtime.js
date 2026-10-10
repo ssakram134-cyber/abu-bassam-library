@@ -71,6 +71,14 @@ function wireDrag(){let from=-1;document.querySelectorAll('#cwfOrder .cwf-order-
 function mergeHtml(){const m=W.merge,{cols,rows,cap}=layoutInfo(m.layout),title=esc($('cwfPageTitle').value||''),note=esc($('cwfPageNote').value||''),water=esc($('cwfWatermark').value||''),pages=[];for(let i=0;i<m.items.length;i+=cap)pages.push(m.items.slice(i,i+cap));const bodies=pages.map(items=>`<section class="page"><h3>${title}</h3><p>${note}</p>${water?`<div class="wm">${water}</div>`:''}<div class="grid">${items.map(it=>`<div class="cell"><img src="${it.url}"><small>${esc(it.label)}</small></div>`).join('')}</div></section>`).join('');return`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:A4;margin:7mm}*{box-sizing:border-box}body{margin:0;font-family:Arial}.page{position:relative;width:196mm;height:283mm;page-break-after:always;overflow:hidden}.page:last-child{page-break-after:auto}h3{height:8mm;margin:0;text-align:center;font-size:12pt}p{height:6mm;margin:0;text-align:center;font-size:8pt}.grid{display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:4mm;height:265mm}.cell{border:1px dashed #aaa;padding:2mm;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}.cell img{max-width:100%;max-height:92%;object-fit:contain}.cell small{font-size:7pt}.wm{position:absolute;z-index:3;left:20%;top:45%;font-size:34pt;opacity:.11;transform:rotate(-25deg);pointer-events:none}</style></head><body>${bodies}</body></html>`}
 function executeMerge(){if(!W.merge)return;const html=mergeHtml(),action=$('cwfMergeAction').value,name=`مستمسكات_${safe(W.current?.full_name||'زبون')}_${Date.now()}.pdf`;if(action==='pdf')window.Android?.savePdfHtml?.(name,html);else window.Android?.printHtml?.(html);log(action==='pdf'?'pdf':'print','دمج مستمسكات محددة',`${W.current?.full_name||''} • ${W.merge.items.length} مستمسك • ${W.merge.layout}`);closeMerge()}
 function boot(){addStyle();ensureEditor();ensureMerge();if(!overrideApi())throw new Error('CUSTOMER_DOCUMENTS_API_REQUIRED')}
-window.AbuCustomerWorkflow={moveMerge,editExisting,renderList,selectPreset};
+function clearPrivateState(){
+ W.thumbUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});W.thumbUrls=[];
+ W.customers=[];W.docs=[];W.currentId='';W.current=null;W.pending=null;W.pendingCamera=null;W.editor=null;W.merge=null;
+ for(const id of ['cwfEditor','cwfMerge'])document.getElementById(id)?.classList.remove('on');
+ if($('custGrid'))$('custGrid').textContent='';
+ if($('custDetail'))$('custDetail').textContent='';
+}
+window.AbuCustomerWorkflow={moveMerge,editExisting,renderList,selectPreset,clearPrivateState};
+document.addEventListener('abu-bassam-auth-changed',clearPrivateState);
 document.readyState==='loading'?document.addEventListener('DOMContentLoaded',boot,{once:true}):boot();
 })();
