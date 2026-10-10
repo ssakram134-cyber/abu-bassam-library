@@ -56,14 +56,24 @@ Deno.serve(async(req:Request)=>{
       return json({ok:true,path,token:data.token,mime:mime||'application/octet-stream'});
     }
     if(action==='download-url'&&req.method==='GET'){
-      const itemId=String(url.searchParams.get('item_id')||'');if(!validItemId(itemId))return json({error:'ITEM_ID_REQUIRED'},400);
+      const itemId=String(url.searchParams.get('item_id')||'');
+      const expectedPath=String(url.searchParams.get('expected_path')||'');
+      const expectedVersion=String(url.searchParams.get('expected_updated_at')||'');
+      if(!validItemId(itemId)||!expectedPath||!expectedVersion)
+        return json({error:'VAULT_ITEM_PATH_VERSION_REQUIRED'},400);
       const base=await context(req,'vaultView');
       if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
-      const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
-      if(rowError||!row)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
-      const path=String(row.data?.storagePath||'');if(!path||!isScoped(path,base.user.id,base.deviceId))return json({error:'VAULT_PATH_INVALID'},403);
-      const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,900,{download:false});if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
-      return json({ok:true,path,url:data.signedUrl,expiresIn:900});
+      const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data,updated_at').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
+      if(rowError)return json({error:'VAULT_METADATA_UNAVAILABLE'},500);
+      if(!row||row.data?.deleted===true)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
+      const path=String(row.data?.storagePath||'');
+      if(!path||!isItemRevision(path,base.user.id,base.deviceId,itemId))
+        return json({error:'VAULT_PATH_INVALID'},403);
+      if(path!==expectedPath||String(row.updated_at||'')!==expectedVersion)
+        return json({error:'VAULT_VERSION_CONFLICT'},409);
+      const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,60,{download:false});
+      if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
+      return json({ok:true,path,url:data.signedUrl,expiresIn:60});
     }
     if(action==='owner-download-url'&&req.method==='GET'){
       const itemId=String(url.searchParams.get('item_id')||'');
@@ -81,9 +91,9 @@ Deno.serve(async(req:Request)=>{
       const path=String(row.data?.storagePath||'');
       if(!path||!isItemRevision(path,base.user.id,targetDevice,itemId))
         return json({error:'VAULT_PATH_INVALID'},403);
-      const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,300,{download:false});
+      const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,60,{download:false});
       if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
-      return json({ok:true,path,url:data.signedUrl,expiresIn:300});
+      return json({ok:true,path,url:data.signedUrl,expiresIn:60});
     }
     const discardUpload=action==='discard-upload'&&req.method==='DELETE';
     if((action==='delete'&&req.method==='DELETE')||discardUpload){
