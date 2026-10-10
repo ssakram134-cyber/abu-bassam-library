@@ -223,27 +223,18 @@ function selectTemplate(id,openChild=true){
   active=id;
   try{localStorage.setItem(STORAGE_KEY,active)}catch(e){}
   if(openChild&&window.CardsStudio?.selectType)CardsStudio.selectType('child');
-  setTimeout(refresh,0);
-  setTimeout(refresh,80);
+  refresh();
   return active;
 }
 
-function patchCardsStudio(){
-  if(!window.CardsStudio||CardsStudio.__abuChildTemplatesPatched)return false;
-  const original=CardsStudio.selectType.bind(CardsStudio);
-  CardsStudio.selectType=function(type){const result=original(type);if(type==='child'){setTimeout(refresh,0);setTimeout(refresh,80)}return result};
-  CardsStudio.__abuChildTemplatesPatched=true;
-  return true;
-}
-
 function init(){
-  installStyle();
-  const tryPatch=()=>{patchCardsStudio();patchTypography();refresh()};
-  tryPatch();
-  let attempts=0;
-  const timer=setInterval(()=>{attempts+=1;tryPatch();if((window.CardsStudio&&window.AbuBassamTypography)||attempts>80)clearInterval(timer)},50);
-  const observer=new MutationObserver(()=>{if(window.CardsStudio?.currentType?.()==='child'){markCards();if(!document.getElementById('abuChildTemplatePicker'))installPicker()}});
-  observer.observe(document.documentElement,{childList:true,subtree:true});
+  refresh();
+  document.addEventListener('abu-cards-rendered',event=>{
+    if(event.detail?.type==='child'){markCards();installPicker()}
+  });
+  document.addEventListener('abu-runtime-loaded',event=>{
+    if(['cards-studio-runtime.js','typography-runtime.js'].includes(event.detail?.src))refresh()
+  })
 }
 
 window.AbuBassamChildTemplates={select:selectTemplate,current,list:()=>TEMPLATES.map(t=>({...t})),refresh,version:1};
