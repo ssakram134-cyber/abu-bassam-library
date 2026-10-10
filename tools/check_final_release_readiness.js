@@ -55,6 +55,7 @@ has('web/document-vault-hardening-runtime.js',/const entryId=String\(index\+1\)/
 has('web/cards-studio-runtime.js',/editor\.openPrint\(html,dispatched\)/,'Do not audit a canceled A4 print as dispatched');
 has('web/cards-studio-runtime.js',/editor\.openPdf\(name,html,dispatched\)/,'Do not audit a canceled A4 PDF as dispatched');
 has('web/a4-card-sheet-editor-v2-runtime.js',/function markDispatched\(j\)/,'A4 print log must follow accepted dispatch');
+has('web/a4-card-sheet-editor-v2-runtime.js',/const root=doc\.documentElement\.cloneNode\(true\)/,'Prepare print HTML without removing handles from the editor');
 has('web/cards-studio-runtime.js',/function printGeometry\(jobs\)/);
 has('web/cards-studio-runtime.js',/validatePrintBarcodes\(jobs\)/);
 has('web/cards-studio-runtime.js',/async function decodeBarcodeImage\(file\)/);
