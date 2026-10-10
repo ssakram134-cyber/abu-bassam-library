@@ -2,8 +2,8 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 const commands=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
-assert.equal(commands.length,92,'Keep 90 earlier checks plus owner recovery + stage integration');
-assert.equal(new Set(commands).size,92,'No duplicate test commands');
+assert.ok(commands.length>=92,'Keep all 92 stage75 checks while allowing future stage checks');
+assert.equal(new Set(commands).size,commands.length,'No duplicate test commands');
 for(const command of commands){assert.match(command,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(__dirname,'..',command.slice(5))),'Missing '+command)}
 for(const name of [
 'check_vault_device_recovery.js','check_stage75_device_recovery_integration.js',
@@ -56,4 +56,4 @@ assert.match(read('supabase/functions/backup-center/index.ts'),/scopeAllowed\(ba
 assert.match(read('supabase/functions/backup-center/index.ts'),/base\.device\.role==='owner'/);
 assert.match(read('supabase/functions/branch-vault/index.ts'),/createSignedUrl\(path,60,\{download:false\}\)/);
 assert.match(read('.github/workflows/android.yml'),/if:\s*\$\{\{\s*false\s*\}\}/);
-console.log('Stage75 replacement-device recovery source gate passed: 92 registered scripts; only authorized owner transfer to empty destination, original account/branch scope and rollback-aware atomic restore.');
+console.log('Stage75 replacement-device recovery source gate passed: at least 92 registered scripts; only authorized owner transfer to empty destination, original account/branch scope and rollback-aware atomic restore.');
