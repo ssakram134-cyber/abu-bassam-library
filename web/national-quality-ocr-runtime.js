@@ -57,6 +57,7 @@ async function recognize(){
    corePath:'vendor/tesseract/core'
   });
   const result=await worker.recognize(item.src);
+  if(source()?.src!==item.src)throw Error('تغيّرت الصورة المختارة أثناء OCR؛ رُفضت نتيجة الصورة السابقة لحماية البيانات');
   const value=String(result?.data?.text||'').replace(/\r/g,'').slice(0,6000).trim();
   if(!value)throw Error('لم يُكتشف نص واضح في المستمسك');
   $('natReviewOcr').value=value;lastText=value;
@@ -92,6 +93,9 @@ function build(){
  '<button id="natReviewApprove" disabled>✓ اعتماد النص بعد المراجعة</button>'+
  '<button id="natReviewSave">💾 حفظ النص المُعتمد TXT</button>';
  center.appendChild(box);
+ const styles=document.createElement('style');styles.id='natReviewStyles';
+ styles.textContent='#natReviewPanel{margin:12px;padding:12px;border:1px solid #047857;border-radius:12px;background:var(--surface2)}#natReviewPanel h3{font-size:16px}#natReviewPanel p,#natReviewStatus{font-size:11px;line-height:1.8}#natReviewPanel button{padding:9px;margin:4px;border-radius:9px;border:1px solid #047857;background:#065f46;color:white}#natReviewPanel textarea{display:block;width:100%;min-height:115px;margin:8px 0;direction:auto;border-radius:8px}#natReviewPanel button:disabled{opacity:.45}';
+ document.head.appendChild(styles);
  $('natReviewCamera').onclick=()=>window.Nat?.maker?.();
  $('natReviewCheck').onclick=drawCheck;$('natReviewRead').onclick=()=>{void recognize()};
  $('natReviewApprove').onclick=approve;$('natReviewSave').onclick=save;
