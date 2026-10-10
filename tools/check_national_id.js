@@ -4,6 +4,15 @@ const fs=require('node:fs');
 const path=require('node:path');
 const src=fs.readFileSync(path.join(__dirname,'../web/national-id-runtime.js'),'utf8');
 new Function(src);
+const assets=fs.readFileSync(path.join(__dirname,'../scripts/prepare-android-assets.mjs'),'utf8');
+for(const viewer of ['pdf.min.js','pdf.worker.min.js','mammoth.browser.min.js','xlsx.full.min.js']){
+ assert.ok(assets.includes("'"+viewer+"'"),'Offline Android packaging missing '+viewer);
+ assert.ok(src.includes("vendor/documents/"+viewer),'National preview must use local '+viewer);
+}
+assert.ok(assets.includes('DOCUMENT_ASSETS'),'Missing offline PDF/DOCX/XLSX asset manifest');
+for(const domain of ['https://unpkg.com/','https://cdnjs.cloudflare.com/']){
+ assert.ok(!src.includes(domain),'National ID runtime must not load document viewers from live CDN');
+}
 for(const marker of ['function safeDocumentHtml(','MAX_IMAGE_BATCH_BYTES=80*1024*1024','function printCanvas(','function buildScanPdf(','Math.sqrt(maxPixels/','window.Android?.','function merge()']){
  if(marker==='window.Android?.')continue;
  assert.ok(src.includes(marker),'Missing section protection: '+marker);
