@@ -80,13 +80,91 @@ async function secret(){const api=window.AbuBassamNativeSecurity;if(!api?.reques
 async function auth(){await cloud()?.ready?.();const s=cloud()?.session?.(),d=dev(),fallback=window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||fallback.id||''),sec=await secret();if(!s?.access_token)throw Error('اربط حساب المزامنة أولًا');if(!id||!sec)throw Error('هذا الجهاز غير موثق');return{token:s.access_token,id,secret:sec}}
 async function api(action,method='GET',body=null,query=''){const a=await auth(),res=await fetch(`${EP}?action=${encodeURIComponent(action)}${query}`,{method,headers:{Authorization:`Bearer ${a.token}`,'Content-Type':'application/json','x-device-id':a.id,'x-device-secret':a.secret},body:body===null?undefined:JSON.stringify(body)}),data=await res.json().catch(()=>({}));if(!res.ok||data?.error)throw Error(data?.error||`HTTP ${res.status}`);return data}
 async function retry(fn,n=3){let last;for(let i=0;i<n;i++){try{return await fn()}catch(e){last=e;if(i<n-1)await new Promise(r=>setTimeout(r,1000*(i+1)))} }throw last}
-async function uploadPart(path,token,blob){const c=cloud()?.client;if(!c)throw Error('خدمة التخزين غير جاهزة');return retry(async()=>{const {error}=await c.storage.from(BUCKET).uploadToSignedUrl(path,token,blob,{contentType:'application/octet-stream',cacheControl:'0'});if(error)throw error;return true})}
+async function uploadPart(path,token,blob,verify=()=>{}){
+ return retry(async()=>{
+   verify(); // Each retry must stop after a session/device switch.
+   const c=cloud()?.client;if(!c)throw Error('خدمة التخزين غير جاهزة');
+   const {error}=await c.storage.from(BUCKET).uploadToSignedUrl(path,token,blob,{contentType:'application/octet-stream',cacheControl:'0'});
+   verify();
+   if(error)throw error;
+   return true
+ })
+}
 function retention(){return Math.max(1,Math.min(30,Number(stateGet(KEEP)||7)||7))}
 function cadence(){return['daily','weekly','manual'].includes(stateGet(CAD)||'daily')?stateGet(CAD)||'daily':'daily'}
 function auto(){return stateGet(AUTO)!=='0'}
 function due(){if(!auto()||cadence()==='manual'||!navigator.onLine||!cloud()?.isConnected?.()||!can('backupCreate'))return false;const retryAt=Number(stateGet(RETRY)||0);if(retryAt&&Date.now()<retryAt)return false;const last=Number(stateGet(LAST)||0),ms=cadence()==='weekly'?7*86400000:86400000;return !last||Date.now()-last>=ms}
-async function backupNow(kind='manual',force=false){if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');const required=kind==='pre_restore'?'backupRestore':'backupCreate';if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');busy=true;status('جاري فحص التغييرات...');try{const fp=await fingerprint();if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){stateSet(LAST,String(Date.now()));stateRemove(LASTERR);status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');return{skipped:true}}status('جاري إنشاء Snapshot...');const pkg=await packageBytes();if(await fingerprint()!==fp)throw Error('BACKUP_CHANGED_DURING_CAPTURE');const sha=await digest(pkg.bytes),parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK)),plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});for(let i=0;i<plan.uploads.length;i++){status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK),blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob)}status('التحقق من اكتمال النسخة...');await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);stateRemove(LASTERR);stateRemove(RETRY);log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} ملف نشط • ${pkg.trashCount||0} محذوف ضمن 30 يوماً • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');await refreshList();return{ok:true,backup_id:plan.backup_id}}
-catch(e){const m=String(e?.message||e);stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000));status('فشل النسخ: '+m);log('backup','فشل النسخ الاحتياطي',m);throw e}finally{busy=false;paint()}}
+async function backupNow(kind='manual',force=false){
+ if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');
+ const required=kind==='pre_restore'?'backupRestore':'backupCreate';
+ if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');
+ const originalScope=stateScope();
+ const verifyScope=()=>{
+   if(stateScope()!==originalScope||!can(required))throw Error('BACKUP_SCOPE_CHANGED')
+ };
+ busy=true;status('جاري فحص التغييرات...');
+ let committed=false,backupId='';
+ try{
+   const fp=await fingerprint();
+   verifyScope();
+   if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){
+     stateSet(LAST,String(Date.now()));stateRemove(LASTERR);
+     status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');return{skipped:true}
+   }
+   status('جاري إنشاء Snapshot...');
+   const pkg=await packageBytes();
+   verifyScope();
+   if(await fingerprint()!==fp)throw Error('BACKUP_CHANGED_DURING_CAPTURE');
+   verifyScope();
+   const sha=await digest(pkg.bytes),parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK));
+   verifyScope();
+   const plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});
+   verifyScope();
+   backupId=String(plan.backup_id||'');
+   if(!backupId||!Array.isArray(plan.uploads)||plan.uploads.length!==parts)throw Error('BACKUP_PLAN_INVALID');
+   for(let i=0;i<plan.uploads.length;i++){
+     verifyScope();
+     status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);
+     const begin=i*CHUNK,end=Math.min(pkg.bytes.byteLength,begin+CHUNK);
+     const blob=new Blob([pkg.bytes.slice(begin,end)],{type:'application/octet-stream'});
+     await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob,verifyScope);
+     verifyScope();
+   }
+   status('التحقق من اكتمال النسخة...');
+   // Retry the SAME backup_id if the commit response was lost after the server committed.
+   // The server treats an already-ready backup_id as idempotent, avoiding another upload plan.
+   const receipt=await retry(async()=>{
+     verifyScope();
+     const reply=await api('commit','POST',{backup_id:backupId,retention:retention()});
+     if(reply?.ok!==true)throw Error('BACKUP_COMMIT_UNCONFIRMED');
+     committed=true; // A confirmed reply means the server committed, even if session now changed.
+     verifyScope();
+     return reply
+   },3);
+   committed=receipt.ok===true;
+   verifyScope();
+   // Database commit happened. Subsequent status/UI failures cannot turn this into a
+   // false failed backup or trigger an unnecessary repeat upload.
+   try{
+     stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);stateRemove(LASTERR);stateRemove(RETRY)
+   }catch(_){status('النسخة محفوظة على الخادم؛ تعذر تحديث وقت النسخة المحلي')}
+   log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} ملف نشط • ${pkg.trashCount||0} محذوف ضمن 30 يوماً • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);
+   try{await refreshList()}catch(_){}
+   status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');
+   return{ok:true,backup_id:backupId}
+ }catch(e){
+   if(committed){
+     if(stateScope()===originalScope)status('النسخة محفوظة على الخادم، لكن حدث خطأ في خطوة لاحقة');
+     return{ok:true,backup_id:backupId,postCommitWarning:true}
+   }
+   const msg=String(e?.message||e);
+   if(stateScope()===originalScope){
+     try{stateSet(LASTERR,msg);stateSet(RETRY,String(Date.now()+30*60000))}catch(_){}
+     status('فشل النسخ: '+msg);log('backup','فشل النسخ الاحتياطي',msg)
+   }
+   throw e
+ }finally{busy=false;try{paint()}catch(_){}}
+}
 async function downloadBytes(id){const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`),arrays=[],total=Number(d.backup?.size_bytes)||0;let got=0;for(let i=0;i<d.parts.length;i++){status(`تنزيل الجزء ${i+1} من ${d.parts.length}...`);const res=await retry(async()=>{const x=await fetch(d.parts[i].url,{cache:'no-store'});if(!x.ok)throw Error('تعذر تنزيل جزء النسخة');return x});const a=new Uint8Array(await res.arrayBuffer());arrays.push(a);got+=a.length}if(got!==total)throw Error('حجم النسخة المستعادة لا يطابق السجل');const out=new Uint8Array(got);let off=0;for(const a of arrays){out.set(a,off);off+=a.length}const sha=await digest(out);if(sha!==String(d.backup.sha256||''))throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');return{bytes:out,backup:d.backup}}
 async function restoreCloud(id,{ownerDeviceRecovery=false}={}){
   if(busy)return false;
