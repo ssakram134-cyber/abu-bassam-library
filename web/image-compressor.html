@@ -83,7 +83,7 @@ window.AbuBassamCompressorRestoreBridge=Object.freeze({
  }
 });
 window.addEventListener('message',e=>{if(e.data?.type==='abuBassamTabVisible')setTimeout(()=>window.dispatchEvent(new Event('resize')),30)});window.addEventListener('beforeunload',()=>selected.forEach(revoke));renderSelected();
+const restorationScript=document.createElement('script');restorationScript.src='photo-restoration-runtime.js';document.body.appendChild(restorationScript);
 </script>
-<script src="photo-restoration-runtime.js"></script>
 </body>
 </html>
