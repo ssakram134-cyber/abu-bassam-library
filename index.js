@@ -402,6 +402,7 @@ function App() {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind, message.requestId);
+    if (message.type === 'cancelCamera') return closeCamera();
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -417,7 +418,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, closeCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
