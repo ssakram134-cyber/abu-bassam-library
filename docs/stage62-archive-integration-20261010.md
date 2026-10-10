@@ -10,7 +10,7 @@ This is a **draft integration branch**, not a production release, build, or data
 - Because `web/document-vault-runtime.js`, `web/document-vault-hardening-runtime.js`, and `web/document-vault-advanced-runtime.js` matched the PR #36 baseline on PR #62, the archive changes to these files can be applied without overwriting the earlier account-switch and scheduler fixes.
 - **Did not copy** `web/branch-vault-runtime.js` from PR #40. Copied only its four new archive permission labels into PR #62's authoritative main-hotfix implementation, keeping item-path authorization and metadata-first deletion/audit.
 - **Did not copy** older `backup-center`, `customer-documents` or `branch-vault` Edge Functions from the stacked repair branch. They remain the independently merged and security-hardened versions from `main`.
-- Retained all 53 Stage61 test commands and registered five archive regression scripts and `check_stage62_archive_merge_regression.js`: **59 distinct commands**.
+- Retained all 53 Stage61 test commands and registered six archive regression scripts and `check_vault_backup_db_version.js` and `check_stage62_archive_merge_regression.js`: **60 distinct commands**.
 
 ## User-visible archive scope included
 - Preserve original versus replace on editing, external updated Word/Excel/PDF re-import, advanced image editing, text editing and file detail views.
@@ -23,7 +23,7 @@ This is a **draft integration branch**, not a production release, build, or data
 ## Verification and release limitations
 - Prior original archive PRs report isolated mocked source tests. Stage62 adds an integration gate but **this commit does not prove native `npm ci && npm run check:web` has executed**.
 - Android camera/print/storage/offline behavior, 30-day expiry and folder drag on real devices remain untested.
-- `indexedDB` archive schema is now at version **3** across the three copied archive modules. PR #43's Backup Center compatibility fix **has not been ported** and must be done before production integration to avoid version conflicts.
-- Cloud synchronization conflict and 30-day tombstone logic added later in PRs #43–#59 is **not yet integrated**.
+- `indexedDB` archive uses version **3**. Copied the exact PR #43 Backup Center compatibility fix: open the existing database without a stale version, reject a missing `items` store, and close on `versionchange`. The original backup-version regression test is registered but has not been executed natively in this turn.
+- Cloud synchronization conflict and 30-day tombstone logic added later in PRs #44–#59 is **not yet integrated**.
 - Do not merge any draft chain or deploy Supabase migrations or Edge Functions before reconciling subsequent stages, passing native full tests, and validating actual device behavior.
 - No APK, GitHub Actions, merge into `main`, Supabase mutation, or user-data deletion.

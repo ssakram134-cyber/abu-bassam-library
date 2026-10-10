@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const registered=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
-assert.ok(registered.length>=59,'Preserve the Stage61 and archive checks');
+assert.ok(registered.length>=60,'Preserve the Stage61 and archive checks');
 assert.equal(new Set(registered).size,registered.length,'Duplicate check:web commands');
 const must=[
  'check_stage61_auth_merge_regression.js','check_pr27_main_hotfix_integration.js',
@@ -13,7 +13,7 @@ const must=[
  'check_archive_reset_cleanup.js','check_archive_server_release_gate.js',
  'check_vault_file_management.js','check_vault_folder_operations.js',
  'check_vault_trash_drag.js','check_vault_numbering_selection.js',
- 'check_vault_recovery_points.js'
+ 'check_vault_recovery_points.js','check_vault_backup_db_version.js'
 ];
 for(const name of must){
  assert.ok(registered.includes('node tools/'+name),'Missing registered regression '+name);
@@ -38,6 +38,11 @@ assert.match(vault,/requireVault\('vaultPermanentDelete'\)/);
 const backup=read('web/document-vault-hardening-runtime.js'),advanced=read('web/document-vault-advanced-runtime.js');
 assert.match(backup,/indexedDB\.open\(DB,3\)/);
 assert.match(advanced,/indexedDB\.open\(DB_NAME,3\)/);
+const center=read('web/backup-center-runtime.js');
+assert.ok(center.includes('indexedDB.open(DB)'),'Backup Center must open the current DB version');
+assert.ok(!center.includes('indexedDB.open(DB,1)'),'No stale DB version');
+assert.ok(center.includes('onversionchange'),'Future upgrades must close backup DB connections');
+assert.ok(center.includes('ARCHIVE_STORE_UNAVAILABLE'),'Missing archive item store must fail closed');
 const branch=read('web/branch-vault-runtime.js');
 for(const permission of ['vaultImageEdit','vaultEnhance','vaultRestoreDeleted','vaultPermanentDelete'])assert.ok(branch.includes(permission),'Missing branch permission '+permission);
 const reset=branch.slice(branch.indexOf('async function removeAllVault('),branch.indexOf('\nfunction registerCloudAdapter('));
