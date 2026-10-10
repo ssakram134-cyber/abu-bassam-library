@@ -28,7 +28,7 @@ class MockPdf{constructor(){pdfs.push(this)}addPage(){}addImage(){this.pageCount
 const Android={printPages(...args){nativeEvents.push(['images',args])},printBase64(...args){nativeEvents.push(['pdf',args])}};
 const window={addEventListener(){},Android,jspdf:{jsPDF:MockPdf}};
 const fields={natMergeCanvas:canvas(),natMergeModal:{classList:{add(){}}},natB:{value:100},natC:{value:100},natS:{value:100}};
-const document={createElement:()=>canvas(),getElementById:id=>fields[id]||null};
+const document={createElement:()=>canvas(),getElementById:id=>fields[id]||null,addEventListener(){}};
 const source=src.replace('window.Nat={','window.__nationalTest={S,drawItem,printCanvas,drawMerge,merge};window.Nat={');
 assert.notEqual(source,src,'National test exports missing');
 new Function('window','document','localStorage','Android','jspdf','alert',source)(window,document,{getItem(){return null},setItem(){}},Android,window.jspdf,()=>{});
