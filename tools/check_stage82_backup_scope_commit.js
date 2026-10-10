@@ -22,7 +22,7 @@ function runner(options={}){
   digest:async()=> 'a'.repeat(64),CHUNK:2,
   api:async(action,method,body)=>{
    if(action==='plan'){plans++;if(options.switchAfterPlan)scope='other:device';return{backup_id:'fixed-id',uploads:[{path:'part1',token:'one'},{path:'part2',token:'two'}]}}
-   if(action==='commit'){commits++;if(options.failFirstCommit&&commits===1)throw Error('NETWORK_ACK_LOST');return{ok:true,already_ready:commits>1}}
+   if(action==='commit'){commits++;if(options.failFirstCommit&&commits===1)throw Error('NETWORK_ACK_LOST');if(options.switchAfterCommit)scope='other:device';return{ok:true,already_ready:commits>1}}
    throw Error('UNEXPECTED_API')
   },
   uploadPart:async(path,token,blob,verify)=>{verify();uploads++;if(options.switchAfterFirstPart&&uploads===1)scope='other:device';verify();return true},
@@ -31,7 +31,7 @@ function runner(options={}){
   paint:()=>{},
   Date,Blob,LASTERR:'err',RETRY:'retry',LASTFP:'fp',LAST:'last'
  };
- const backup=new Function(...Object.keys(opts),backupSource+';return backupNow')(...Object.values(opts));
+ const backup=new Function(...Object.keys(opts),'let busy=false;\n'+backupSource+';return backupNow')(...Object.values(opts));
  return{backup,events,state,get plans(){return plans},get commits(){return commits},get uploads(){return uploads},get refreshes(){return refreshes},get scope(){return scope}}
 }
 (async()=>{
@@ -52,6 +52,12 @@ function runner(options={}){
  assert.equal(x.plans,1,'Never make a second upload plan for a lost commit response');
  assert.equal(x.commits,2);
  assert.equal(x.state.get('fp'),'same-content');
+ x=runner({switchAfterCommit:true});
+ result=await x.backup('manual',true);
+ assert.equal(result.ok,true,'Server-confirmed backup must not be reported failed after switching account');
+ assert.equal(result.postCommitWarning,true);
+ assert.equal(x.commits,1,'No retry needed for a successful commit reply when account changes');
+ assert.equal(x.state.has('last'),false,'Do not persist backup success under another account');
  x=runner({refreshFails:true});
  result=await x.backup('manual',true);
  assert.equal(result.ok,true,'Offline UI refresh cannot negate committed backup');

@@ -136,8 +136,9 @@ async function backupNow(kind='manual',force=false){
    const receipt=await retry(async()=>{
      verifyScope();
      const reply=await api('commit','POST',{backup_id:backupId,retention:retention()});
-     verifyScope();
      if(reply?.ok!==true)throw Error('BACKUP_COMMIT_UNCONFIRMED');
+     committed=true; // A confirmed reply means the server committed, even if session now changed.
+     verifyScope();
      return reply
    },3);
    committed=receipt.ok===true;
