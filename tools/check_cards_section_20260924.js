@@ -42,10 +42,26 @@ need(studio,'36_000_000','memory safe image budget');
 need(a4,"page.querySelectorAll(':scope > .cut')",'A4 duplex cards must be selectable in free-position editor');
 if(a4.includes('document.write(html)'))throw new Error('cards check failed: printing may not overwrite the application document');
 const a4Window={addEventListener(){}},a4Document={readyState:'loading',addEventListener(){}};
-const inspectA4=a4.replace('window.AbuA4CardSheetEditorV2={','window.__a4Inspection={items};window.AbuA4CardSheetEditorV2={');
+const inspectA4=a4.replace('window.AbuA4CardSheetEditorV2={','window.__a4Inspection={items,pairDuplex,setG};window.AbuA4CardSheetEditorV2={');
 new Function('window','document',inspectA4)(a4Window,a4Document);
 const duplexPage={classList:{contains:name=>name==='duplex-page'},querySelectorAll:selector=>selector===':scope > .cut'?['front','back']:[]};
 if(a4Window.__a4Inspection.items(duplexPage).length!==2)throw new Error('cards check failed: duplex card elements are invisible to editor');
+need(studio,'data-a4-pair-id','A4 front/back cards must carry shared pairing identifiers');
+need(studio,'data-a4-flip','A4 pages must carry selected back-flip direction');
+for(const flip of ['horizontal','vertical']){
+ const pages=[],sheet={querySelectorAll:()=>pages};
+ for(const side of ['front','back']){
+  const page={dataset:{a4Side:side,a4Flip:flip},classList:{contains:key=>key==='duplex-page'},querySelectorAll:selector=>selector===':scope > .cut'?page.children:[],children:[]};
+  const item={dataset:{a4PairId:'test-pair'},style:{},isConnected:true,closest:()=>page};
+  page.children.push(item);pages.push(page)
+ }
+ a4Window.__a4Inspection.pairDuplex(sheet);
+ const front=pages[0].children[0],back=pages[1].children[0];
+ a4Window.__a4Inspection.setG(front,{x:7,y:5,w:85.6,h:53.98,r:10});
+ const expectedX=flip==='horizontal'?210-7-85.6:7,expectedY=flip==='vertical'?297-5-53.98:5;
+ if(Math.abs(Number(back.dataset.a4x)-expectedX)>0.0001||Math.abs(Number(back.dataset.a4y)-expectedY)>0.0001||back.dataset.a4r!==-10)throw new Error('cards check failed: editor does not mirror '+flip+' duplex geometry');
+}
+need(a4,'duplexTwins.set(clone,twinClone)','A4 repeated card copies must also pair both faces');
 // Android must support private, offline gallery decoding even when WebView BarcodeDetector is absent.
 const nativeIndex=read('index.js');
 for(const marker of ["scanBarcodeImage: function (data)","message.type === 'scanBarcodeImage'",'Camera.scanFromURLAsync(uri, BARCODE_TYPES)','AbuBassamNativeBarcodeImageResult','FileSystem.deleteAsync(uri'])need(nativeIndex,marker,'offline native gallery scan');
