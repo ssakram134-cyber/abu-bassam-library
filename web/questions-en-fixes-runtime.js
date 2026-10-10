@@ -15,8 +15,8 @@ try{const old=JSON.parse(localStorage.getItem(PAPER_KEY)||'null');if(old?.preset
 const dims=()=>({w:paper.w,h:paper.h});
 const mmToPx=mm=>Math.round(mm*96/25.4);
 function dbOpen(){return new Promise((resolve,reject)=>{try{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)}catch(e){reject(e)}})}
-async function dbPut(html){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({id:ROW_ID,html,updatedAt:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function dbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(ROW_ID);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
+async function dbPut(html){let db;try{db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({id:ROW_ID,html,updatedAt:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});return true}catch(e){return false}finally{db?.close?.()}}
+async function dbDelete(){let db;try{db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(ROW_ID);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});return true}catch(e){return false}finally{db?.close?.()}}
 function queueDraftWrite(work){const job=draftQueue.catch(()=>{}).then(work);draftQueue=job.catch(()=>{});return job}
 async function durableSave(show=false){
   if(draftResetting)return false;
