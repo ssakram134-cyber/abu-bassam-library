@@ -14,7 +14,7 @@ const SERVICE_LABELS={facebook:'Facebook',google:'Google Play',apple:'Apple / Ap
 const DEFAULT_BRAND={name:'مكتبة أبو بسام للتصوير والقرطاسية',phone:'07829667521',address:'',email:'AKRAMA1992@GMAIL.COM',website:'www.maktabah-abubassam.com',logo:'abu_bassam_icon.webp'};
 const DEFAULT_FORMS={
   personal:{name:'',address:'',phone:'',email:'',telegram:'',notes:'',location:''},
-  child:{name:'',address:'',institutionType:'kindergarten',school:'',driverPhone:'',guardianPhone:'',notes:''},
+  child:{name:'',age:'',address:'',institutionType:'kindergarten',school:'',driverPhone:'',guardianPhone:'',notes:''},
   login:{service:'facebook',customService:'',account:'',password:'',notes:''},
   wifi:{ssid:'',password:'',security:'WPA',hidden:false},
   qr:{title:'باركود المعلومات',kind:'text',symbology:'qr',content:'',caption:''},
@@ -148,7 +148,7 @@ function photoTools(){let t=state.photoTransform;return `<div class="cs-photo-to
 function renderForm(){
   let form=$('csForm'),d=state.forms[state.type],html='';$('csFormTitle').textContent='بيانات '+TYPE_LABELS[state.type];
   if(state.type==='personal')html=field('الاسم','name')+field('السكن','address')+field('رقم الهاتف','phone','tel')+field('الإيميل','email','email')+field('معرف التليجرام','telegram')+field('رابط الموقع Google Maps','location','url')+field('الملاحظات','notes','textarea','full')+photoTools();
-  if(state.type==='child')html=field('اسم الطفل','name')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+field('الملاحظات','notes','textarea','full')+photoTools();
+  if(state.type==='child')html=field('اسم الطفل','name')+field('العمر بالسنوات','age','number')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+field('الملاحظات','notes','textarea','full')+photoTools();
   if(state.type==='login'){
     html=`<label class="cs-field">نوع الحساب<select data-field="service"><option value="facebook">Facebook</option><option value="google">Google / Google Play</option><option value="apple">Apple / App Store</option><option value="email">البريد الإلكتروني</option><option value="other">أخرى</option></select></label>`+(d.service==='other'?field('اسم الخدمة','customService'):'')+field('البريد / الهاتف / اسم المستخدم','account')+field('كلمة السر','password')+field('ملاحظات اختيارية','notes','textarea','full')+`<div class="abu-capital-hint" style="grid-column:1/-1;padding:7px 9px;border-radius:9px;background:#fff1f2;color:#a11d2d;font-size:9px;font-weight:900">A B C — أي حرف إنجليزي كبير يظهر باللون الأحمر داخل الباج تلقائيًا.</div><div class="cs-photo-tools"><div class="cs-photo-actions"><button onclick="CardsStudio.openLoginOcr()">📷 قراءة البريد وكلمة السر من صورة</button></div></div>`;
   }
@@ -186,7 +186,8 @@ function loginContact(model){let values=[model.brand.phone&&'☎ '+model.brand.p
 
 function vcardEscape(value){return String(value??'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,')}
 function vcardPhone(value){return String(value||'').replace(/[^0-9+]/g,'')}
-function guardianWhatsApp(value){const digits=String(value||'').replace(/\D/g,'');return /^07\d{9}$/.test(digits)?'https://wa.me/964'+digits.slice(1):''}
+function guardianWhatsApp(value){const digits=String(value||'').replace(/\D/g,''),local=/^07\d{9}$/.test(digits)?digits:/^9647\d{9}$/.test(digits)?'0'+digits.slice(3):'';return local?'https://wa.me/964'+local.slice(1):''}
+function emergencyDial(value){const raw=String(value||'').trim(),digits=raw.replace(/\D/g,'');return /^07\d{9}$/.test(digits)?digits:/^9647\d{9}$/.test(digits)?'+'+digits:/^\+[1-9]\d{7,14}$/.test(raw)?raw:''}
 function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,b.address,b.email,b.website].filter(Boolean).join(' | ');
   if(model.type==='personal'){
     const rows=['BEGIN:VCARD','VERSION:3.0','FN:'+vcardEscape(d.name)];
@@ -205,7 +206,7 @@ function payloadFor(model){let d=model.data,b=model.brand,brand=[b.name,b.phone,
     if(d.address)rows.push('ADR:;;'+vcardEscape(d.address)+';;;;');
     const whatsapp=guardianWhatsApp(d.guardianPhone);
     if(whatsapp)rows.push('URL:'+whatsapp);
-    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand),'END:VCARD');
+    rows.push('NOTE:'+vcardEscape('خط النقل '+(d.line||'')+' | '+(d.notes||'')+' | '+brand+(d.age?' | العمر: '+String(d.age):'')),'END:VCARD');
     return rows.join('\n');
   }
   if(model.type==='login')return 'الخدمة: '+serviceName(d)+'\nالحساب: '+(d.account||'')+'\nكلمة السر: '+(d.password||'')+'\nملاحظات: '+(d.notes||'')+'\nالمصدر: '+brand;
@@ -229,6 +230,29 @@ function code128Svg(text){
 }
 function symbolSvg(model){return model.type==='qr'&&model.data.symbology==='code128'?code128Svg(payloadFor(model)):qrSvg(payloadFor(model))}
 
+function assertModelBarcodes(model){
+  if(!model||model.type==='reader')return true;
+  const code=model.type==='qr'&&model.data?.symbology==='code128';
+  const encoded=code?code128Svg(payloadFor(model)):qrSvg(payloadFor(model));
+  if(!encoded.startsWith('<svg'))throw new Error(code?
+    'تعذر إنشاء Code 128 لهذه البيانات. استخدم QR أو اختصر النص.':
+    'تعذر إنشاء QR بجميع البيانات. راجع الحقول الطويلة قبل الطباعة أو الحفظ.');
+  if(model.type==='child'){
+    const emergency=emergencyDial(model.data?.guardianPhone)||emergencyDial(model.data?.driverPhone);
+    if(emergency&&!qrSvg('tel:'+emergency).startsWith('<svg'))throw new Error('تعذر إنشاء QR الاتصال الطارئ')
+  }
+  return true
+}
+function validatePrintBarcodes(jobs){
+  const signatures=new Set();
+  for(const model of jobs){
+    const key=model.type+'|'+JSON.stringify(model.data||{})+'|'+JSON.stringify(model.brand||{});
+    if(signatures.has(key))continue;
+    assertModelBarcodes(model);
+    signatures.add(key)
+  }
+  return true
+}
 function modelNow(){let type=state.type==='reader'?'qr':state.type;return {type,data:clone(state.forms[type]),brand:clone(state.brand),photo:state.photo,photoTransform:clone(state.photoTransform),textStyles:clone(state.textStyles[type]||{}),orientation:state.orientation,width:Number(state.width),height:Number(state.height),watermark:state.watermark,watermarkText:state.watermarkText,watermarkOpacity:state.watermarkOpacity}}
 function cardHtml(model,side){let d=model.data,portrait=model.orientation==='portrait'?' portrait':'',wm=watermark(model),safe='<div class="cs-card-safe"></div>',geo='<div class="cs-geo"></div>';
   if(model.type==='personal'){
@@ -238,8 +262,8 @@ function cardHtml(model,side){let d=model.data,portrait=model.orientation==='por
   if(model.type==='child'){
     let institution=childInstitution(d),badgeTitle=d.institutionType==='school'?'باج المدرسة':'باج الروضة';
     if(side==='front')return `<div class="cs-print-card cs-child cs-child-front${portrait}" data-type="child"><div class="cs-child-sun">☀️</div>${referenceBrand(model,'cs-child-brand')}<div class="cs-photo-frame cs-photo-stage">${photoMarkup(model)}</div><div class="cs-child-school cs-editable-text" ${textAttrs(model,'institution','اسم الروضة أو المدرسة')}>${esc(institution)}${d.name?` • ${esc(d.name)}`:''}</div><div class="cs-child-ribbon cs-editable-text" ${textAttrs(model,'title','عنوان الباج')}>${badgeTitle}</div>${wm}${safe}</div>`;
-    let emergency=d.guardianPhone||d.driverPhone;
-    return `<div class="cs-print-card cs-child cs-child-back cs-back${portrait}" data-type="child"><div class="cs-qr-box">${qrSvg(payloadFor(model))}</div><div class="cs-info cs-editable-text" ${textAttrs(model,'info','بيانات الطفل وولي الأمر')}>${row('اسم الطفل',d.name)}${row('السكن',d.address)}${row('رقم هاتف ولي الأمر',d.guardianPhone)}</div>${emergency?`<div class="cs-call-qr">${qrSvg('tel:'+emergency)}</div><div class="cs-call-label cs-editable-text" ${textAttrs(model,'secondary','اتصال طارئ')}>اتصال طارئ</div>`:''}${footer(model)}${wm}${safe}</div>`
+    let emergency=emergencyDial(d.guardianPhone)||emergencyDial(d.driverPhone);
+    return `<div class="cs-print-card cs-child cs-child-back cs-back${portrait}" data-type="child"><div class="cs-qr-box">${qrSvg(payloadFor(model))}</div><div class="cs-info cs-editable-text" ${textAttrs(model,'info','بيانات الطفل وولي الأمر')}>${row('اسم الطفل',d.name)}${d.age?row('العمر',d.age+' سنوات'):''}${row('السكن',d.address)}${row('رقم هاتف ولي الأمر',d.guardianPhone)}${row('رقم سائق الخط',d.driverPhone)}</div>${emergency?`<div class="cs-call-qr">${qrSvg('tel:'+emergency)}</div><div class="cs-call-label cs-editable-text" ${textAttrs(model,'secondary','اتصال طارئ')}>اتصال طارئ</div>`:''}${footer(model)}${wm}${safe}</div>`
   }
   if(model.type==='login'){
     let service=serviceName(d);
@@ -256,7 +280,7 @@ function cardHtml(model,side){let d=model.data,portrait=model.orientation==='por
 }
 
 function renderPreview(){
-  if(!$('csCardPair'))return;let model=modelNow(),payload=payloadFor(model),symbol=model.type==='qr'&&model.data.symbology==='code128'?'Code 128':'QR';$('csCardPair').innerHTML=`<div class="cs-card-host">${cardHtml(model,'front')}</div><div class="cs-card-host">${cardHtml(model,'back')}</div>`;$('csCardPair').querySelectorAll('.cs-print-card').forEach(card=>{card.style.aspectRatio=`${model.width} / ${model.height}`});$('csQrStatus').textContent=`${symbol} شامل • ${payload.length} حرف`;$('csCopyBadge').textContent=state.copies;bindPhotoGestures();if(window.AbuBassamTypography)setTimeout(()=>AbuBassamTypography.applyAutoFit($('csCardPair')),0);
+  if(!$('csCardPair'))return;let model=modelNow(),payload=payloadFor(model),symbol=model.type==='qr'&&model.data.symbology==='code128'?'Code 128':'QR';$('csCardPair').innerHTML=`<div class="cs-card-host">${cardHtml(model,'front')}</div><div class="cs-card-host">${cardHtml(model,'back')}</div>`;$('csCardPair').querySelectorAll('.cs-print-card').forEach(card=>{card.style.aspectRatio=`${model.width} / ${model.height}`});try{assertModelBarcodes(model);$('csQrStatus').textContent=`${symbol} صالح • ${payload.length} حرف`}catch(error){$('csQrStatus').textContent='⚠ '+error.message;}$('csCopyBadge').textContent=state.copies;bindPhotoGestures();if(window.AbuBassamTypography)setTimeout(()=>AbuBassamTypography.applyAutoFit($('csCardPair')),0);
 ;document.dispatchEvent(new CustomEvent('abu-cards-rendered',{detail:{type:state.type}}))}
 function renderPrintSettings(){let el=$('csPrintSettings');if(!el)return;el.innerHTML=`<label class="cs-field">طريقة الطباعة<select id="csOutput"><option value="a4-pairs">A4 — الوجه بجانب الظهر</option><option value="a4-duplex">A4 — وجه/ظهر متطابق</option><option value="cr80">كارت CR80 مباشر</option></select></label><label class="cs-field">الأوجه<select id="csSides"><option value="both">الأمامي والخلفي</option><option value="front">الوجه الأمامي فقط</option><option value="back">الوجه الخلفي فقط</option></select></label><label class="cs-field">الاتجاه<select id="csOrientation"><option value="landscape">أفقي</option><option value="portrait">عمودي</option></select></label><label class="cs-field">عدد النسخ<input id="csCopies" type="number" min="1" max="25" value="${state.copies}"></label><label class="cs-field">العرض ملم<input id="csWidth" type="number" min="20" max="190" step=".01" value="${state.width}"></label><label class="cs-field">الارتفاع ملم<input id="csHeight" type="number" min="20" max="280" step=".01" value="${state.height}"></label><label class="cs-field">الفاصل ملم<input id="csGap" type="number" min="0" max="20" step=".1" value="${state.gap}"></label><label class="cs-field">هامش أفقي ملم<input id="csMarginX" type="number" min="0" max="30" step=".1" value="${state.marginX}"></label><label class="cs-field">هامش عمودي ملم<input id="csMarginY" type="number" min="0" max="30" step=".1" value="${state.marginY}"></label><label class="cs-field">نزف القص ملم<input id="csBleed" type="number" min="0" max="3" step=".1" value="${state.bleed}"></label><label class="cs-field">تقليب الظهر<select id="csFlip"><option value="horizontal">أفقي</option><option value="vertical">عمودي</option></select></label><label class="cs-field">العلامة المائية<select id="csWatermark"><option value="none">بدون</option><option value="text">نسخة طبق الأصل</option><option value="logo">شعار المكتبة</option></select></label><label class="cs-field">شفافية العلامة %<input id="csWatermarkOpacity" type="number" min="3" max="45" value="${state.watermarkOpacity}"></label><label class="cs-field full">نص العلامة المائية<input id="csWatermarkText" value="${esc(state.watermarkText)}"></label>`;
   $('csOutput').value=state.output;$('csSides').value=state.sides;$('csOrientation').value=state.orientation;$('csFlip').value=state.flip;$('csWatermark').value=state.watermark;
@@ -308,7 +332,7 @@ function printCss(){return `*{box-sizing:border-box}html,body{margin:0;padding:0
 function fullPrintCss(){return printCss()+(window.AbuBassamTypography?AbuBassamTypography.printCss():'')+referenceCardCss(true)}
 function freeLayoutCss(){let data={};try{data=JSON.parse(localStorage.getItem(LAYOUT_KEY)||'{}')||{}}catch(e){}let out='';for(const [key,o] of Object.entries(data)){const [type,side,role]=key.split(':'),sel=ROLE_SELECTORS[role];if(!sel||!o)continue;const targets=sel.split(',').map(s=>`.cs-print-card[data-type="${type}"]${side==='back'?'.cs-back':':not(.cs-back)'} ${s.trim()}`).join(',');out+=`${targets}{left:${Number(o.x)||0}%!important;top:${Number(o.y)||0}%!important;right:auto!important;bottom:auto!important;width:${Number(o.w)||10}%!important;height:${Number(o.h)||10}%!important;transform:rotate(${Number(o.r)||0}deg)!important;transform-origin:center!important}`}return out}
 function printDocument(){
-  const jobs=expandedJobs();if(!jobs.length)throw new Error('لا توجد كروت للطباعة');
+  const jobs=expandedJobs();if(!jobs.length)throw new Error('لا توجد كروت للطباعة');validatePrintBarcodes(jobs);
   let css=fullPrintCss()+freeLayoutCss(),pages='',mode=state.output,w=Number(state.width),h=Number(state.height),
     gap=Number(state.gap),mx=Number(state.marginX),my=Number(state.marginY),bleed=cap(state.bleed,0,3),
     wantFront=state.sides!=='back',wantBack=state.sides!=='front';
@@ -360,8 +384,27 @@ function saveBase64(name,mime,data){if(window.Android&&Android.saveBase64)return
 function saveImage(name,mime,data){if(window.Android&&Android.saveToGallery)return Android.saveToGallery(name,mime,data);saveBase64(name,mime,data)}
 function logOperation(type,title,details=''){if(window.AbuBassamOps&&AbuBassamOps.add)AbuBassamOps.add({type,title,details})}
 
-async function decodeBarcodeImage(file){if(!file)return;try{let data=await fileData(file),image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=data});if(!('BarcodeDetector'in window))throw new Error('استخدم الكاميرا الأصلية داخل تطبيق Android');let detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});let result=await detector.detect(image);if(!result.length)throw new Error('لم يتم العثور على باركود');onBarcode({data:result[0].rawValue,barcodeType:result[0].format})}catch(e){alert(e.message||'تعذرت قراءة الباركود')}finally{$('csBarcodeImageInput').value=''}}
-function onBarcode(result){let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
+async function decodeBarcodeImage(file){
+  if(!file||!requireCard('cardsBarcode'))return false;
+  try{
+    if(file.size>7.5*1024*1024)throw new Error('الصورة أكبر من الحد الآمن للمسح (7.5MB). قصّها أو صغّرها');
+    const data=await fileData(file);
+    if(window.ReactNativeWebView?.postMessage&&window.__ABU_BASSAM_NATIVE_CAMERA__===true){
+      window.ReactNativeWebView.postMessage(JSON.stringify({type:'scanBarcodeImage',dataUrl:data}));
+      return true
+    }
+    if(!('BarcodeDetector'in window))throw new Error('قارئ الصور يحتاج تطبيق Android أو متصفحاً يدعم BarcodeDetector');
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر فتح صورة الباركود'));image.src=data});
+    const detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','aztec']});
+    const result=await detector.detect(image);
+    if(!result.length)throw new Error('لم يتم العثور على باركود');
+    onBarcode({data:result[0].rawValue,barcodeType:result[0].format});
+    return true
+  }catch(e){alert(e.message||'تعذرت قراءة الباركود');return false}
+  finally{$('csBarcodeImageInput').value=''}
+}
+function onBarcode(result){if(!canCard('cardsBarcode'))return false;let value=String(result&&result.data||'');state.lastBarcode=value;state.forms.reader.result=value;state.forms.reader.format=String(result&&result.barcodeType||'');saveDraft();if(state.type!=='reader')selectType('reader');else renderForm();alert('تمت قراءة الباركود بنجاح ✓')}
 function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;let blob=fetch(dataUrl).then(r=>r.blob()).then(blob=>loadPhoto(new File([blob],'camera.jpg',{type:'image/jpeg'}))).catch(()=>{state.photo=dataUrl;renderForm();renderPreview()});return blob}
 
 const previousNativeResult=window.AbuBassamNativeCameraResult;
@@ -386,14 +429,14 @@ function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPho
 function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];renderPrintSettings();renderPreview();renderStatus()}
 function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();renderAll()}
 function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);if($('csCopies'))$('csCopies').value=state.copies;renderPreview();renderStatus()}
-function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
+function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');try{assertModelBarcodes(modelNow())}catch(e){return alert(e.message)}let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
 function previewPrint(){if(!requireCard('cardsPrint')||!requireOutputPermission())return;try{state.activePrintHtml=printDocument();$('csPrintFrame').srcdoc=state.activePrintHtml;openModal('csPrintModal')}catch(e){alert(e.message)} }
 function printNow(){if(!requireCards(['cardsPrint','printCards','printGeneral'])||!requireOutputPermission())return;try{let html=printDocument();recordHistory('طباعة');logOperation('print','طباعة الكروت',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPrint)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPrint(html)}if(window.Android&&Android.printHtml)return Android.printHtml(html);let frame=$('csPrintFrame');frame.srcdoc=html;openModal('csPrintModal');setTimeout(()=>frame.contentWindow&&frame.contentWindow.print(),700)}catch(e){alert(e.message)}}
 function savePdf(){if(!requireCards(['cardsExportPdf','pdfCreate','pdfSave'])||!requireOutputPermission())return;try{let html=printDocument(),name='Abu_Bassam_Cards_'+Date.now()+'.pdf';recordHistory('حفظ PDF');logOperation('pdf','حفظ الكروت PDF',expandedJobs().length+' كارت • '+state.output);if(state.output!=='cr80'){const editor=window.AbuA4CardSheetEditorV2;if(!editor?.openPdf)throw new Error('محرر ترتيب A4 غير جاهز. أعد فتح التطبيق.');return editor.openPdf(name,html)}if(window.Android&&Android.savePdfHtml)return Android.savePdfHtml(name,html);previewPrint();alert('حفظ PDF المباشر متاح داخل تطبيق Android')}catch(e){alert(e.message)}}
-async function exportPng(){if(!requireCards(['cardsExportImage','imageExport','exportOutsideApp']))return;try{let pages=[],labels=[],stamp=Date.now();if(state.sides!=='back'){pages.push(await domCardPng('front'));labels.push('الأمامي')}if(state.sides!=='front'){pages.push(await domCardPng('back'));labels.push('الخلفي')}recordHistory('حفظ '+labels.join(' و')+' في المعرض');if(window.Android&&Android.savePagesToGallery)Android.savePagesToGallery('Abu_Bassam_Card_'+labels.join('_'),JSON.stringify(pages),'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage('Abu_Bassam_Card_'+labels[index]+'_'+stamp+'.png','image/png',data),index*250));logOperation('gallery','حفظ أوجه الكارت كصور مستقلة',TYPE_LABELS[state.type]+' • '+labels.join(' و'))}catch(e){alert('تعذر إنشاء صور الكارت على هذا الجهاز. استخدم PDF عالي الجودة.')}}
-function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative('barcode'))$('csBarcodeImageInput').click()}
-function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.click()}
+async function exportPng(){if(!requireCards(['cardsExportImage','imageExport','exportOutsideApp']))return;try{assertModelBarcodes(modelNow());let pages=[],labels=[],stamp=Date.now();if(state.sides!=='back'){pages.push(await domCardPng('front'));labels.push('الأمامي')}if(state.sides!=='front'){pages.push(await domCardPng('back'));labels.push('الخلفي')}recordHistory('حفظ '+labels.join(' و')+' في المعرض');if(window.Android&&Android.savePagesToGallery)Android.savePagesToGallery('Abu_Bassam_Card_'+labels.join('_'),JSON.stringify(pages),'image/png');else pages.forEach((data,index)=>setTimeout(()=>saveImage('Abu_Bassam_Card_'+labels[index]+'_'+stamp+'.png','image/png',data),index*250));logOperation('gallery','حفظ أوجه الكارت كصور مستقلة',TYPE_LABELS[state.type]+' • '+labels.join(' و'))}catch(e){alert('تعذر إنشاء صور الكارت: '+String(e?.message||e))}}
+function scanBarcode(){if(!requireCard('cardsBarcode'))return;if(!requestNative('barcode')){const input=$('csBarcodeImageInput');input.setAttribute('capture','environment');input.value='';input.click()}}
+function scanBarcodeGallery(){if(!requireCard('cardsBarcode'))return;const input=$('csBarcodeImageInput');if(!input)return;input.removeAttribute('capture');input.value='';input.click()}
 function openStandalone(title,src){if(!requireCard('cardsView'))return;if(window.AbuFeatureRecovery?.openTool)return AbuFeatureRecovery.openTool(title,src);alert('أداة الكروت المستقلة غير جاهزة بعد.')}
 
 function useBarcode(){if(!requireCard('cardsQr'))return;let value=state.forms.reader.result;if(!value)return alert('اقرأ باركود أولاً');state.forms.qr.content=value;state.forms.qr.title='نسخة الباركود';selectType('qr')}
