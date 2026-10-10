@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=path.join(__dirname,'..'),read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const commands=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
 assert.ok(commands.length>=82,'Preserve 79 previous and add 3 regression checks');
-assert.equal(new Set(commands).size,82,'No duplicate checks');
+assert.equal(new Set(commands).size,commands.length,'No duplicate checks');
 for(const c of commands){assert.match(c,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(root,c.slice(5))),'Missing '+c)}
 for(const name of [
  'check_stage61_auth_merge_regression.js','check_stage62_archive_merge_regression.js',
