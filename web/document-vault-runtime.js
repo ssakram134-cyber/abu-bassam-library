@@ -17,6 +17,7 @@ function syncScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.
 function syncKey(key){return key+':'+syncScope()}
 function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
+let vaultSessionEpoch=0;
 const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
@@ -36,6 +37,19 @@ function vaultOwner(){return window.AbuBassamSecurity?.role?.()==='owner'}
 function vaultScopeOk(show=true){const branch=window.AbuBassamBranchVault;if(!branch?.localScopeOk){if(show)alert('بوابة حماية الأرشيف غير جاهزة. أعد فتح التطبيق.');return false}return branch.localScopeOk(show)!==false}
 function vaultAllowed(key){if(vaultOwner())return true;const branch=window.AbuBassamBranchVault;if(branch?.allowed)return branch.allowed(key)===true;return window.AbuBassamPermissions?.can?.(key)===true}
 function requireVault(key){if(!vaultScopeOk(true))return false;if(vaultAllowed(key))return true;alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+key);return false}
+function clearVaultPrivateView(){
+ vaultSessionEpoch++;state.items=[];state.editor=null;state.ocrImage='';state.activePrintHtml='';
+ cleanupUrls();
+ const grid=$('vGrid');if(grid)grid.textContent='';
+ for(const id of ['vViewModal','vEditModal','vOcrModal'])$(''+id)?.classList.remove('show');
+ const view=$('vView');if(view)view.textContent='';
+ const ocrText=$('vOcrText');if(ocrText)ocrText.value='';
+ const ocrImage=$('vOcrImage');if(ocrImage)ocrImage.removeAttribute('src');
+}
+function handleVaultAuthChanged(){
+ clearVaultPrivateView();
+ if(updateVaultAccessUi())void refresh();
+}
 function updateVaultAccessUi(){
   const center=$('vaultCenter');if(!center)return;
   const shell=center.querySelector('.v-shell');let denied=$('abuVaultViewDenied');
@@ -112,7 +126,7 @@ async function build(){
   window.addEventListener('online',()=>{setSyncStatus('عاد الإنترنت • فحص جدول المزامنة');if(automaticDue())syncNow(false)});
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   setTimeout(()=>{if(automaticDue())syncNow(false)},5000);
-  setInterval(()=>{if(automaticDue())syncNow(false)},900000);document.addEventListener('abu-bassam-auth-changed',updateVaultAccessUi);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  setInterval(()=>{if(automaticDue())syncNow(false)},900000);document.addEventListener('abu-bassam-auth-changed',handleVaultAuthChanged);document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
@@ -124,9 +138,13 @@ function hasPending(){return state.items.some(item=>item.syncState==='pending')}
 function logOperation(type,title,details='',fileName=''){if(window.AbuBassamOps&&AbuBassamOps.add)AbuBassamOps.add({type,title,details,fileName,section:'الحفظ والمستندات'})}
 
 async function refresh(){
+  const epoch=vaultSessionEpoch,scope=syncScope();
+  if(!vaultScopeOk(false)||!vaultAllowed('vaultView')){state.items=[];cleanupUrls();return false}
   await purgeExpiredTrash();
-  state.items=(await dbAll()).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  render()
+  const items=await dbAll();
+  if(epoch!==vaultSessionEpoch||scope!==syncScope()||!vaultScopeOk(false)||!vaultAllowed('vaultView'))return false;
+  state.items=items.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  render();return true
 }
 function cleanupUrls(){state.urls.forEach(url=>{try{URL.revokeObjectURL(url)}catch(e){}});state.urls=[]}
 function objectUrl(blob){let url=URL.createObjectURL(blob);state.urls.push(url);return url}
