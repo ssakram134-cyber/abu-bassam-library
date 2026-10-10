@@ -58,7 +58,7 @@ assert.match(rendered,/رقم هاتف ولي الأمر: 07829667521/);
 assert.match(rendered,/رقم سائق الخط: 07829664889/);
 assert.match(rendered,/tel:07829667521/);
 const withDriver={...child,data:{...child.data,guardianPhone:'invalid',driverPhone:'07829664889'}};
-assert.match(card(withDriver,'back'),/tel:07829664889/,'Emergency QR must fall back to valid driver's phone');
+assert.match(card(withDriver,'back'),/tel:07829664889/,'Emergency QR must fall back to valid driver phone');
 const withoutEmergency={...child,data:{...child.data,guardianPhone:'abc',driverPhone:'xyz'}};
 assert.doesNotMatch(card(withoutEmergency,'back'),/cs-call-qr/,'Never render an invalid emergency dialing QR');
 assert.match(card(child,'front'),/روضة أطفال القادسية/);
