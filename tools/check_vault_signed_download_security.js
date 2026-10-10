@@ -111,7 +111,7 @@ const invoke=u=>run(u,{method:'GET'},context,validItemId,json,isItemRevision,'ab
  const vaultItemId=p=>p.split('/').length===5?p.split('/')[3]:'';
  const edgeFn=async(name,options)=>{
   assert.equal(name,'download-url');
-  const u=new URL('https://example.invalid/'+options.query);
+  const u=new URL('https://example.invalid/?action=download-url'+options.query);
   assert.equal(u.searchParams.get('item_id'),'item-1');
   assert.equal(u.searchParams.get('expected_path'),origItem);
   assert.equal(u.searchParams.get('expected_updated_at'),'2026-10-10T06:00:00.111111+00:00');
