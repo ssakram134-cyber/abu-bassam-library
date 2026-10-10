@@ -1,0 +1,52 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const source=fs.readFileSync(path.join(__dirname,'..','web/document-vault-runtime.js'),'utf8');
+const hard=fs.readFileSync(path.join(__dirname,'..','web/document-vault-hardening-runtime.js'),'utf8');
+new vm.Script(source);new vm.Script(hard);
+const section=(s,a,b)=>{const i=s.indexOf(a),j=s.indexOf(b,i+a.length);assert.ok(i>=0&&j>i);return s.slice(i,j)};
+const code=section(source,'const pendingTrashOperations=new Set();','\nfunction syncSnapshot(');
+function harness(config={}){
+ const events=[],alerts=[],pendingTrashOperations=new Set(),state={filter:'trash'};let call=0;
+ const env={pendingTrashOperations,requireVault:()=>true,
+ restoreTrashRecord:async id=>{events.push('restore:'+id);call++;if(config.restore)return config.restore()},
+ permanentlyDeleteTrash:async id=>{events.push('delete:'+id);if(config.remove)return config.remove()},
+ state,refresh:async()=>{events.push('refresh');if(config.refresh)throw Error('UI_CRASH')},
+ autoSync:()=>false,navigator:{onLine:false},scheduleAutoSync:()=>{},
+ logOperation:type=>events.push('log:'+type),alert:msg=>alerts.push(msg),confirm:()=>true};
+ return {...new Function(...Object.keys(env),code+';return{restoreTrash,eraseTrash}')(...Object.values(env)),
+ events,alerts,pendingTrashOperations,get calls(){return call}};
+}
+(async()=>{
+ let unblock;let x=harness({restore:()=>new Promise(resolve=>{unblock=resolve})});
+ const first=x.restoreTrash('a');
+ assert.equal(await x.restoreTrash('a'),false,'Duplicate tap must be blocked');
+ assert.equal(await x.eraseTrash('a'),false,'Erase cannot race with restore of same item');
+ assert.equal(x.calls,1);unblock();
+ assert.equal(await first,true);
+ assert.equal(x.pendingTrashOperations.size,0);
+ x=harness({restore:async()=>{throw Error('QuotaExceededError')}});
+ assert.equal(await x.restoreTrash('b'),false);
+ assert.deepEqual(x.events,['restore:b'],'Quota rejection must not perform post-commit UI actions');
+ x=harness({refresh:true});
+ assert.equal(await x.restoreTrash('c'),true,'Committed restore is successful even if UI fails');
+ assert.ok(x.alerts.some(m=>m.includes('تمت استعادة الملف')));
+ assert.equal(x.calls,1);
+ x=harness({refresh:true});
+ assert.equal(await x.eraseTrash('d'),true,'Committed permanent delete is successful despite UI');
+ assert.ok(x.alerts.some(m=>m.includes('اكتمل الحذف النهائي')));
+ x=harness({remove:async()=>{throw Error('QuotaExceededError')}});
+ assert.equal(await x.eraseTrash('e'),false);
+ assert.deepEqual(x.events,['delete:e']);
+ const fn=section(hard,'async function safeRestore(file,options={}){','\nwindow.AbuDocumentVaultHardening=');
+ let resolveBytes;
+ const file={size:1,arrayBuffer:()=>new Promise(resolve=>{resolveBytes=resolve})};
+ const restore=new Function('allowed','MAX_ZIP','Date','alert','window','isEncrypted','$',
+ 'let restoreLockedUntil=0,restoreInFlight=false;\n'+fn+';return safeRestore')(
+ ()=>true,1024,Date,()=>{},{JSZip:null},()=>false,()=>null);
+ const firstZip=restore(file,{silentError:true});
+ assert.equal(await restore(file,{silentError:true}),false,'ZIP restore must be single-flight');
+ resolveBytes(new ArrayBuffer(1));
+ assert.equal(await firstZip,false);
+ assert.equal(await restore({size:0,arrayBuffer:async()=>new ArrayBuffer(0)},{silentError:true}),false,'ZIP lock must release on failure');
+ console.log('Stage80 trash restore/delete locks, quota failures, committed receipts and ZIP single-flight passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});
