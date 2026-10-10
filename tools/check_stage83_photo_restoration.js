@@ -5,7 +5,7 @@ const script=fs.readFileSync(path.join(root,'web/photo-restoration-runtime.js'),
 const html=fs.readFileSync(path.join(root,'web/image-compressor.html'),'utf8');
 new vm.Script(script);
 assert.match(html,/id="restoreOpenBtn"/);
-assert.match(html,/src="photo-restoration-runtime\.js"/);
+assert.match(html,/restorationScript\.src='photo-restoration-runtime\.js'/);
 assert.match(html,/AbuBassamCompressorRestoreBridge=Object\.freeze/);
 assert.match(html,/blobUrlData\(blob\)/);
 assert.match(script,/LIMIT=4000000,STEPS=3/);
