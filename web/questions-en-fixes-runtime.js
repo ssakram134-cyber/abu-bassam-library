@@ -9,7 +9,7 @@ const DB_NAME='AbuBassamQuestionDraftV2',STORE='drafts',ROW_ID='en';
 const PAPER_KEY='abuQuestionPaperEnglishV2';
 const ANSWER_KEY='abuQuestionAnswersVisibleEnV1';
 const PRESETS={A4P:[210,297],A4L:[297,210],A5P:[148,210],A5L:[210,148]};
-let paper={preset:'A4P',w:210,h:297},saveTimer=0,answersVisible=localStorage.getItem(ANSWER_KEY)==='1';
+let paper={preset:'A4P',w:210,h:297},saveTimer=0,draftResetting=false,draftQueue=Promise.resolve(),answersVisible=localStorage.getItem(ANSWER_KEY)==='1';
 function clamp(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback}
 try{const old=JSON.parse(localStorage.getItem(PAPER_KEY)||'null');if(old?.preset==='custom')paper={preset:'custom',w:clamp(old.w,80,500,210),h:clamp(old.h,80,500,297)};else if(PRESETS[old?.preset])paper={preset:old.preset,w:PRESETS[old.preset][0],h:PRESETS[old.preset][1]};else{const legacy=localStorage.getItem('abuQuestionPaperEnglishV1');if(PRESETS[legacy])paper={preset:legacy,w:PRESETS[legacy][0],h:PRESETS[legacy][1]}}}catch(e){}
 const dims=()=>({w:paper.w,h:paper.h});
@@ -17,9 +17,32 @@ const mmToPx=mm=>Math.round(mm*96/25.4);
 function dbOpen(){return new Promise((resolve,reject)=>{try{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)}catch(e){reject(e)}})}
 async function dbPut(html){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({id:ROW_ID,html,updatedAt:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
 async function dbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(ROW_ID);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function durableSave(show=false){const c=$('pages-container');if(!c)return false;let localOk=false;try{localStorage.setItem(DRAFT_KEY,c.innerHTML);localOk=true}catch(e){}const idbOk=await dbPut(c.innerHTML);if(show)alert(localOk||idbOk?'English question draft saved ✓':'Draft storage is unavailable.');return localOk||idbOk}
-function schedule(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>durableSave(false),650)}
-async function reset(){if(!confirm('Start a new form? The current English draft and backup will be removed.'))return;clearTimeout(saveTimer);try{localStorage.removeItem(DRAFT_KEY)}catch(e){}await dbDelete();location.reload()}
+function queueDraftWrite(work){const job=draftQueue.catch(()=>{}).then(work);draftQueue=job.catch(()=>{});return job}
+async function durableSave(show=false){
+  if(draftResetting)return false;
+  const c=$('pages-container');if(!c)return false;
+  const html=c.innerHTML;
+  return queueDraftWrite(async()=>{
+    if(draftResetting)return false;
+    // The fallback and IndexedDB must always describe the same captured document.
+    let localOk=false;
+    try{localStorage.setItem(DRAFT_KEY,html);localOk=true}catch(e){}
+    const idbOk=await dbPut(html);
+    if(show)alert(localOk||idbOk?'English question draft saved ✓':'Draft storage is unavailable; the previous draft was retained.');
+    return localOk||idbOk
+  })
+}
+function schedule(){if(draftResetting)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void durableSave(false)},650)}
+async function reset(){
+  if(draftResetting||!confirm('Start a new form? The current English draft and backup will be removed.'))return false;
+  draftResetting=true;clearTimeout(saveTimer);
+  try{
+    await draftQueue.catch(()=>{});
+    if(!await dbDelete()){alert('Unable to delete the stored draft. It has been kept and the page will not reload.');return false}
+    try{localStorage.removeItem(DRAFT_KEY)}catch(e){alert('Draft storage cleanup failed; do not reset this page yet.');return false}
+    location.reload();return true
+  }finally{draftResetting=false}
+}
 function addCss(){if($('abuEnFixStyle'))return;const s=document.createElement('style');s.id='abuEnFixStyle';s.textContent='.abu-en-a4{background:#1565c0!important}.abu-en-answer-btn{background:#7c3aed!important}.abu-answer-box{display:none;margin-top:9px;padding:9px;border:1px dashed #0f766e;border-radius:10px;background:#ecfdf5;color:#134e4a;font-size:12px}.abu-show-answers .abu-answer-box{display:block}.abu-en-paper{position:fixed;inset:0;z-index:12600;background:#000b;display:none;align-items:flex-end}.abu-en-paper.show{display:flex}.abu-en-paper>div{width:100%;background:#fff;padding:14px;border-radius:20px 20px 0 0;color:#1f2937}.abu-en-paper select,.abu-en-paper input,.abu-en-paper button{min-height:42px;border-radius:9px;padding:7px;font-weight:700}.abu-en-paper select,.abu-en-paper input{width:100%;border:1px solid #cbd5e1;background:#fff}.abu-en-custom{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.abu-en-custom.show{display:grid}.abu-en-paper-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.abu-en-paper-actions button{border:0;background:#0f766e;color:#fff}@media print{.abu-en-paper{display:none!important}.abu-answer-box{display:none!important}.abu-show-answers .abu-answer-box{display:block!important}}';document.head.appendChild(s)}
 function syncPaperUi(){const sel=$('abuEnPaperPreset');if(sel)sel.value=paper.preset;if($('abuEnPaperW'))$('abuEnPaperW').value=String(paper.w);if($('abuEnPaperH'))$('abuEnPaperH').value=String(paper.h);$('abuEnCustom')?.classList.toggle('show',paper.preset==='custom');const b=$('abuEnPaperBtn');if(b)b.textContent=`📄 ${paper.preset==='custom'?'Custom':paper.preset.replace('P',' Portrait').replace('L',' Landscape')}`}
 function installPaperUi(){addCss();const bar=$('controls');if(bar&&!$('abuEnPaperBtn')){const b=document.createElement('button');b.id='abuEnPaperBtn';b.className='btn abu-en-a4';b.onclick=()=>{syncPaperUi();$('abuEnPaperModal')?.classList.add('show')};bar.appendChild(b)}if(!$('abuEnPaperModal'))document.body.insertAdjacentHTML('beforeend','<div id="abuEnPaperModal" class="abu-en-paper"><div><b>Question paper settings</b><div style="font-size:9px;margin:5px 0 9px">A4, A5 or a custom size in millimetres</div><select id="abuEnPaperPreset" onchange="AbuQuestionsEnFixes.paperPreset()"><option value="A4P">A4 Portrait — 210 × 297 mm</option><option value="A4L">A4 Landscape — 297 × 210 mm</option><option value="A5P">A5 Portrait — 148 × 210 mm</option><option value="A5L">A5 Landscape — 210 × 148 mm</option><option value="custom">Custom size</option></select><div id="abuEnCustom" class="abu-en-custom"><label>Width (mm)<input id="abuEnPaperW" type="number" min="80" max="500" step="1"></label><label>Height (mm)<input id="abuEnPaperH" type="number" min="80" max="500" step="1"></label></div><div class="abu-en-paper-actions"><button onclick="AbuQuestionsEnFixes.applyPaper()">Apply</button><button onclick="document.getElementById(\'abuEnPaperModal\').classList.remove(\'show\')">Close</button></div></div></div>');syncPaperUi()}
