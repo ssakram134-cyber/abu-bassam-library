@@ -39,10 +39,11 @@ assert.ok(reset.indexOf("await rpc('abu_bassam_vault_remove_all'")>=0);
 assert.ok(reset.indexOf("await rpc('abu_bassam_vault_remove_all'")<reset.indexOf('await removeVault(path)'),
  'Never delete active Storage before metadata');
 for(const p of [
- 'index.js','web/device-name-runtime.js','web/cards-studio-runtime.js',
+ 'web/device-name-runtime.js','web/cards-studio-runtime.js',
  'web/document-vault-runtime.js','web/document-vault-hardening-runtime.js',
  'web/productivity-tools-runtime.js','web/backup-center-runtime.js'
 ])new vm.Script(read(p),{filename:p});
+assert.match(read('index.js'),/CameraView/,'Keep Expo native entrypoint unchanged in parsing assumptions');
 assert.match(read('web/index.html'),/<!doctype html/i);
 const action=read('.github/workflows/android.yml');
 assert.match(action,/if:\s*\$\{\{\s*false\s*\}\}/,'Android Actions build must stay disabled');
