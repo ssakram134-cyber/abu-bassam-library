@@ -386,8 +386,9 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const blob=await service.downloadVault(data.storagePath);
       await dbPut(remoteItem(data,blob,remoteVersion))
     }
-    syncSet(LAST_SYNC_KEY,String(Date.now()));
-    await refresh();setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
+    await refresh();const remaining=state.items.filter(item=>item.syncState==='pending').length;
+     if(remaining){setSyncStatus('مزامنة جزئية • '+remaining+' سجل بانتظار إعادة المحاولة؛ لم تُفقد البيانات');if(manual)alert('تم حفظ تعارضات المزامنة بأمان، ولا تزال '+remaining+' تغييرات بانتظار المزامنة. أعد المحاولة لإكمالها.');return false}
+     syncSet(LAST_SYNC_KEY,String(Date.now()));setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
   }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
