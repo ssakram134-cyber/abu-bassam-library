@@ -10,9 +10,10 @@ function between(src,a,b){
  return src.slice(i,j)
 }
 function storage(){
- const map=new Map();
+ const map=new Map();let denyRemove=false;
  return {getItem:k=>map.get(k)??null,setItem:(k,v)=>{map.set(k,String(v))},
- removeItem:k=>map.delete(k),map}
+ removeItem:k=>{if(denyRemove)throw Error('LOCAL_STORAGE_REMOVE_DENIED');return map.delete(k)},
+ setRemoveFailure:value=>{denyRemove=!!value},map}
 }
 const deferred=()=>{
  let resolve,reject;
@@ -107,6 +108,25 @@ function fixture(language){
   assert.equal(t.localStorage.getItem(key),null);
   t.setConfirm(false);assert.equal(await t.api.reset(),false);
   assert.equal(t.reloads,1);
+
+  // A prior reset deleted IndexedDB first; if localStorage cleanup threw,
+  // it returned without restoring the deleted active draft.
+  const recover=fixture(lang);
+  recover.localStorage.setItem(key,'legacy');
+  recover.localStorage.setRemoveFailure(true);
+  recover.view.innerHTML='important-current-form';
+  assert.equal(await recover.api.reset(),false,'Failed local cleanup must stop reset');
+  assert.equal(recover.reloads,0,'Must not reload after rollback');
+  assert.equal(recover.puts.at(-1).html,'important-current-form','Restore the draft after a partial reset');
+  assert.ok(recover.alerts.some(x=>/أُعيد حفظ|saved back to IndexedDB/.test(x)),'Confirm recoverability only after IDB put succeeded');
+
+  const unable=fixture(lang);
+  unable.localStorage.setRemoveFailure(true);
+  unable.setMode('failed');
+  unable.view.innerHTML='unsaved-current-form';
+  assert.equal(await unable.api.reset(),false);
+  assert.equal(unable.reloads,0);
+  assert.ok(unable.alerts.some(x=>/احفظ المحتوى خارج التطبيق|Export your questions/.test(x)),'Never claim recovery if IDB restoration also failed');
  }
  for(const [lang,source,start,end,func,invalid] of [
   ['ar',ar,'async function optimizedImage(file){','\nfunction refreshOverflowFlags(','optimizedImage','الملف المختار ليس صورة'],

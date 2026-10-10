@@ -104,9 +104,14 @@ async function resetDurableDraft(){
   draftResetting=true;clearTimeout(saveTimer);
   try{
     await draftQueue.catch(()=>{});
+    const previousHtml=$('pages-container')?.innerHTML||'';
     const deleted=await idbDelete();
     if(!deleted){alert('تعذر حذف المسودة من التخزين. بقيت محفوظة ولم تبدأ صفحة جديدة.');return false}
-    try{localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.removeItem(META_KEY);localStorage.removeItem(LOCAL_TS_KEY)}catch(e){alert('تعذر تنظيف بيانات المسودة القديمة، ولن تُغلق الصفحة قبل معالجة المشكلة.');return false}
+    try{localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.removeItem(META_KEY);localStorage.removeItem(LOCAL_TS_KEY)}catch(e){
+      const restored=previousHtml?await idbPut(previousHtml,Date.now()):false;
+      alert(restored?'تعذر تنظيف بيانات المسودة القديمة، فأُعيد حفظ المسودة تلقائياً ولم تبدأ صفحة جديدة.':'تعذر تنظيف المسودة واستعادتها تلقائياً. احفظ المحتوى خارج التطبيق قبل إغلاق الصفحة.');
+      return false
+    }
     location.reload();return true
   }finally{draftResetting=false}
 }
