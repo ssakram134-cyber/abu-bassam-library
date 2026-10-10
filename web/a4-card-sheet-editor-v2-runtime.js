@@ -7,7 +7,7 @@ function isA4(html){const s=String(html||'');return /A4|210mm/i.test(s)&&/pair-p
 function direct(type,payload){try{if(window.ReactNativeWebView?.postMessage){window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({type},payload||{})));return true}}catch(e){}return false}
 function modal(){if(document.getElementById('abuA4EditorV2'))return;const d=document.createElement('div');d.id='abuA4EditorV2';d.innerHTML=`<div class="a4v2-sheet"><div class="a4v2-head"><div><b>ترتيب الكروت على A4</b><small>سحب • تغيير المقاس • دوران • نسخ | الطباعة المزدوجة تتطلب محاذاة متناظرة للوجهين</small></div><button data-close>×</button></div><div class="a4v2-tools"><button data-run>متابعة</button><button data-reset>استعادة البداية</button><span>أسفل كل كارت: ▼ عدد النسخ ▲</span></div><iframe id="abuA4EditorV2Frame"></iframe></div>`;document.body.appendChild(d);const s=document.createElement('style');s.textContent=`#abuA4EditorV2{position:fixed;z-index:36500;inset:0;background:#000d;display:none;padding:8px}#abuA4EditorV2.show{display:block}.a4v2-sheet{height:100%;width:min(1100px,100%);margin:auto;border-radius:16px;overflow:hidden;background:#ddd;display:grid;grid-template-rows:auto auto 1fr}.a4v2-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#075b4d;color:#fff}.a4v2-head b{display:block}.a4v2-head small{display:block;font-size:9px;margin-top:3px}.a4v2-head button{width:36px;height:36px;border:0;border-radius:50%;font-size:22px}.a4v2-tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:8px;background:#fff}.a4v2-tools button{min-height:38px;border:0;border-radius:9px;padding:0 12px;background:#087f72;color:#fff;font-weight:900}.a4v2-tools button:nth-child(2){background:#6b5a4e}.a4v2-tools span{font-size:9px;font-weight:900}#abuA4EditorV2Frame{width:100%;height:100%;border:0;background:#777}`;document.head.appendChild(s);d.querySelector('[data-close]').onclick=close;d.querySelector('[data-run]').onclick=run;d.querySelector('[data-reset]').onclick=()=>job&&load(job.html)}
 function close(){document.getElementById('abuA4EditorV2')?.classList.remove('show');job=null}
-function open(kind,name,html){modal();job={kind,name,html:String(html)};const d=document.getElementById('abuA4EditorV2');d.classList.add('show');d.querySelector('[data-run]').textContent=kind==='pdf'?'حفظ PDF':'متابعة للطباعة';load(html)}
+function open(kind,name,html,onDispatched){modal();job={kind,name,html:String(html),onDispatched:typeof onDispatched==='function'?onDispatched:null};const d=document.getElementById('abuA4EditorV2');d.classList.add('show');d.querySelector('[data-run]').textContent=kind==='pdf'?'حفظ PDF':'متابعة للطباعة';load(html)}
 function load(html){const f=document.getElementById('abuA4EditorV2Frame');f.onload=()=>setTimeout(()=>prepare(f),90);f.srcdoc=String(html)}
 function allPages(doc){return [...doc.querySelectorAll('.pair-page,.duplex-page,.abu-a4-card-page,.a4-page')]}
 function items(page){if(page.classList.contains('pair-page'))return [...page.querySelectorAll('.pair-card')];if(page.classList.contains('duplex-page'))return [...page.querySelectorAll(':scope > .pair-card')];if(page.classList.contains('abu-a4-card-page'))return [...page.querySelectorAll(':scope > .abu-a4-card-item')];if(page.classList.contains('a4-page'))return [...page.querySelectorAll(':scope > .print-card')];return[]}
@@ -67,9 +67,33 @@ function canFinalize(kind){
   const need=kind==='pdf'?['cardsExportPdf','pdfCreate','pdfSave']:['cardsPrint','printCards','printGeneral'];
   return can('cardsA4Layout')&&can('printA4')&&need.every(can)
 }
-function run(){if(!job)return false;if(!canFinalize(job.kind)){alert('تم تعطيل صلاحية الطباعة أو التصدير لهذا الفرع');return false}const doc=document.getElementById('abuA4EditorV2Frame')?.contentDocument;if(!doc)return false;try{checkDuplexAlignment(doc)}catch(e){alert(String(e?.message||e));return false}const html=clean(doc),j=job;document.getElementById('abuA4EditorV2').classList.remove('show');job=null;if(j.kind==='pdf'){if(direct('savePdfHtml',{name:j.name,html}))return true;if(window.Android?.savePdfHtml)return Android.savePdfHtml(j.name,html);throw new Error('PDF_BRIDGE_UNAVAILABLE')}if(direct('printHtml',{html}))return true;if(window.Android?.printHtml)return Android.printHtml(html);document.open();document.write(html);document.close();window.print();return true}
-function openPrint(html){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('print','',html);return true}
-function openPdf(name,html){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('pdf',name,html);return true}
+function markDispatched(j){
+  document.getElementById('abuA4EditorV2')?.classList.remove('show');
+  job=null;
+  try{j.onDispatched?.()}catch(error){console.error('Card print dispatch history failed:',error)}
+  return true
+}
+function run(){
+  if(!job)return false;
+  if(!canFinalize(job.kind)){alert('تم تعطيل صلاحية الطباعة أو التصدير لهذا الفرع');return false}
+  const doc=document.getElementById('abuA4EditorV2Frame')?.contentDocument;
+  if(!doc)return false;
+  try{checkDuplexAlignment(doc)}catch(e){alert(String(e?.message||e));return false}
+  const html=clean(doc),j=job;
+  if(j.kind==='pdf'){
+    if(direct('savePdfHtml',{name:j.name,html}))return markDispatched(j);
+    if(window.Android?.savePdfHtml){Android.savePdfHtml(j.name,html);return markDispatched(j)}
+    alert('حفظ PDF غير متاح على هذا الجهاز. بقي محرر A4 مفتوحاً دون تسجيل نجاح زائف.');
+    return false
+  }
+  if(direct('printHtml',{html}))return markDispatched(j);
+  if(window.Android?.printHtml){Android.printHtml(html);return markDispatched(j)}
+  // The browser fallback requests a print dialog; it does not prove the job printed.
+  document.open();document.write(html);document.close();window.print();
+  return markDispatched(j)
+}
+function openPrint(html,onDispatched){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('print','',html,onDispatched);return true}
+function openPdf(name,html,onDispatched){if(!isA4(html))throw new Error('A4_CARD_HTML_REQUIRED');open('pdf',name,html,onDispatched);return true}
 function boot(){modal()}
 window.AbuA4CardSheetEditorV2={openPrint,openPdf,close,isA4};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
