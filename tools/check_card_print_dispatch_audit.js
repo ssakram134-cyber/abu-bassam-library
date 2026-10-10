@@ -12,6 +12,31 @@ function cut(source,start,end){
  assert.ok(a>=0&&b>a,'Source extraction missing '+start);
  return source.slice(a,b)
 }
+
+// Preparing a printable copy must never strip handles or CSS from the live iframe.
+const cleanSection=cut(editor,'function clean(doc){','function duplexCells(');
+const deletedControls={count:0},livePage={style:{overflow:'visible',boxShadow:'current'}};
+const duplicatePage={style:{overflow:'visible',boxShadow:'current'}};
+const a4EditorItem={classList:{remove(){}},dataset:{a4bound:'1',a4group:'g1'}};
+const cleanedRoot={
+ outerHTML:'<html>cloned output</html>',
+ querySelectorAll(selector){return selector==='.a4v2-item'?[a4EditorItem]:[{remove(){deletedControls.count++}}]}
+};
+let copied=0;
+const originalRoot={cloneNode(deep){assert.equal(deep,true);copied++;return cleanedRoot}};
+const originalDocument={
+ documentElement:originalRoot,
+ querySelectorAll(){throw Error('Do not mutate the live editor document')}
+};
+const cleaner=new Function('allPages',cleanSection+';return clean;')(()=>[duplicatePage]);
+assert.match(cleaner(originalDocument),/cloned output/);
+assert.equal(copied,1);
+assert.equal(deletedControls.count,1);
+assert.equal(duplicatePage.style.overflow,'hidden','Clone must strip editing presentation');
+assert.equal(livePage.style.overflow,'visible','Original editor must remain editable');
+assert.equal(livePage.style.boxShadow,'current');
+assert.equal(a4EditorItem.dataset.a4bound,undefined);
+assert.equal(a4EditorItem.dataset.a4group,undefined);
 const openFunctions=cut(editor,'function close(){','function load(html){');
 const dispatchFunctions=cut(editor,'function markDispatched(j){','function boot(){');
 let accepted=true,allowed=true,alerts=[],requests=[],externalJobs=[],runs=0;
@@ -45,6 +70,14 @@ allowed=true;accepted=false;
 assert.equal(editorApi.run(),false,'Unavailable Android PDF bridge must fail');
 assert.equal(callbacks,0,'Unavailable PDF bridge must not log');
 assert.ok(editorApi.active(),'Editor must remain open after a failed PDF send');
+const rejected=editorApi.active();
+native.savePdfHtml=()=>{throw Error('NATIVE_STORAGE_UNAVAILABLE')};
+assert.equal(editorApi.run(),false,'Native bridge throwing should keep editor and avoid false audit');
+assert.equal(callbacks,0);
+assert.equal(editorApi.active(),rejected);
+assert.ok(alerts.some(x=>x.includes('NATIVE_STORAGE_UNAVAILABLE')));
+delete native.savePdfHtml;
+
 accepted=true;
 assert.equal(editorApi.run(),true,'Accepted PDF dispatch should complete');
 assert.equal(callbacks,1,'Accepted PDF sends one event');
