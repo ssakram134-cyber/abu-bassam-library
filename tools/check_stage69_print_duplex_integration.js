@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 const commands=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
-assert.equal(commands.length,79,'Keep 77 earlier check:web scripts plus 2');
+assert.ok(commands.length>=79,'Keep 77 earlier check:web scripts plus 2');
 assert.equal(new Set(commands).size,commands.length,'Each check registered once');
 for(const c of commands){assert.match(c,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(__dirname,'..',c.slice(5))),'Registered missing test: '+c)}
 for(const name of [

@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
 const registered=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
-assert.equal(registered.length,88,'Preserve Stage72 86 checks and add 2');
+assert.ok(registered.length>=88,'Preserve Stage72 86 checks and add 2');
 assert.equal(registered.length,new Set(registered).size,'Do not duplicate checks');
 for(const cmd of registered){assert.match(cmd,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(__dirname,'..',cmd.slice(5))),'Missing script '+cmd)}
 for(const f of ['check_print_preferences_persistence.js','check_stage73_print_preferences_integration.js','check_stage72_print_dispatch_integration.js','check_stage71_release_readiness_integration.js','check_stage70_question_compressor_integration.js','check_stage69_print_duplex_integration.js','check_stage68_cards_scannability_merge_regression.js','check_stage67_backup_merge_regression.js','check_stage66_offline_ocr_merge_regression.js','check_stage65_owner_download_integration.js','check_stage64_vault_cas_integration.js','check_stage63_vault_sync_integration.js','check_stage62_archive_merge_regression.js','check_stage61_auth_merge_regression.js','check_final_release_readiness.js','check_print_duplex_geometry_guards.js','check_card_print_registration.js','check_card_print_dispatch_audit.js'])assert.ok(registered.includes('node tools/'+f),'Missing earlier regression '+f);

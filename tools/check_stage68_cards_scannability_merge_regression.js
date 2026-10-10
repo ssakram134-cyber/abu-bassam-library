@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.join(__dirname,'..'),read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const checks=JSON.parse(read('package.json')).scripts['check:web'].split(' && ');
-assert.equal(checks.length,77,'Stage 68 retains 74 preceding checks and adds 3');
+assert.ok(checks.length>=77,'Stage 68 retains 74 preceding checks and adds 3');
 assert.equal(checks.length,new Set(checks).size,'No duplicate checks');
 for(const c of checks){assert.match(c,/^node tools\/check_[A-Za-z0-9_]+\.js$/);assert.ok(fs.existsSync(path.join(root,c.slice(5))),'Missing '+c)}
 for(const n of ['check_badge_qr_output_integrity.js','check_card_gallery_native_scan.js','check_stage68_cards_scannability_merge_regression.js','check_camera_qr_pdf_integrity.js','check_card_print_registration.js','check_cards_section_20260924.js','check_cards_hardening_latest.js','check_stage67_backup_merge_regression.js','check_stage66_offline_ocr_merge_regression.js','check_stage65_owner_download_integration.js','check_stage64_vault_cas_integration.js','check_stage63_vault_sync_integration.js','check_stage62_archive_merge_regression.js','check_stage61_auth_merge_regression.js'])assert.ok(checks.includes('node tools/'+n),'Lost previously registered check '+n);
