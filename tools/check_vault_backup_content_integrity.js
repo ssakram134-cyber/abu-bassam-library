@@ -47,6 +47,10 @@ const makePackage=new Function('window','dev','JSZip','backupItems','MAX_TOTAL',
  {JSZip},()=>({device_id:'branch1',device_name:'فرع 1'}),JSZip,()=>Promise.resolve(files),
  500*1024*1024,120*1024*1024,'4.3.2',()=>options,{randomUUID:()=> 'generated'},Date,5*1024*1024);
 (async()=>{
+ const checks=section('async function backupItems(){','\nfunction safeSettings(){');
+ const backupValidate=new Function('all','MAX_ITEMS',checks+';return backupItems')(
+  async()=>[{id:'huge',name:'huge.pdf',size:1,blob:{size:100*1024*1024+1}}],1000);
+ await assert.rejects(backupValidate(),/100MB/,'Real blob size must enforce per-file quota');
  const original=await fingerprint();
  const same=await fingerprint();
  assert.equal(same,original,'Same file and settings must keep backup checkpoint stable');
