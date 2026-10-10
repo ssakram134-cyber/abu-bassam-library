@@ -7,6 +7,7 @@ assert.match(native,/import \{ Camera, CameraView, useCameraPermissions \} from 
 assert.match(native,/message\.type === 'scanBarcodeImage'\) return scanBarcodeImage\(message\)/);
 assert.match(native,/shareBase64, scanBarcodeImage\]/);
 assert.match(studio,/ReactNativeWebView\.postMessage\(JSON\.stringify\(\{type:'scanBarcodeImage',dataUrl:data\}\)\)/);
+assert.match(studio,/function onBarcode\(result\)\{if\(!canCard\('cardsBarcode'\)\)return false;/,'Delayed native responses must honor current permission');
 function cut(s,a,b){const i=s.indexOf(a),j=s.indexOf(b,i+a.length);assert.ok(i>=0&&j>i,'missing section '+a);return s.slice(i,j)}
 const code=cut(native,'  const scanBarcodeImage = useCallback(', '  const onBarcodeScanned = useCallback(');
 const splitSource=cut(native,'function splitDataUrl(dataUrl) {','\nfunction printDimensions(');
