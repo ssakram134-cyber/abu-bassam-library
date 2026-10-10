@@ -34,6 +34,7 @@ for(const marker of [
 const presetRuntime=read('print-presets-runtime.js');
 for(const marker of ['Array.isArray(stored)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
 const posterRuntime=read('photo-print-advanced-runtime.js');
-need(posterRuntime,"Android.printBase64('Abu_Bassam_Poster.pdf'",'large poster PDF print fallback');
+need(posterRuntime,"if(typeof printDirectly==='function')return printDirectly()",'poster must use the single shared print path');
+need(home,"Android.printBase64('Abu_Bassam_Print.pdf'",'large poster PDF print fallback');
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Advanced photo/print checks passed: local enhancement, undo/redo/flip, poster tiling with portrait/landscape and strict size caps, assembled preview/project reopen, direct crop/perspective, ruler preview, 8-handle transforms, card free layout, snap/grid, layers/hide, print-bound warning, and named print presets.\n');
