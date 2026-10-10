@@ -57,7 +57,23 @@ function vaultItemId(path){
   if(parts.length!==5||parts[1]!=='branch-vault'||!parts[3]||!parts[4])return '';
   return pathToId.get(raw)||parts[3]
 }
-async function downloadVault(path){if(!allowed('vaultView')||!allowed('vaultSync'))throw new Error('VAULT_VIEW_NOT_ALLOWED');const id=vaultItemId(path);if(!id)throw new Error('VAULT_ID_REQUIRED');const plan=await edge('download-url',{query:'&item_id='+encodeURIComponent(id)}),res=await fetch(plan.url,{cache:'no-store'});if(!res.ok)throw new Error('تعذر تنزيل ملف الفرع');return res.blob()}
+async function downloadVault(path,expectedUpdatedAt){
+  if(!allowed('vaultView')||!allowed('vaultSync')||!localScopeOk(false))throw new Error('VAULT_VIEW_NOT_ALLOWED');
+  const id=vaultItemId(path),version=String(expectedUpdatedAt||'');
+  if(!id||!path||!version)throw new Error('VAULT_ITEM_PATH_VERSION_REQUIRED');
+  const before=String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id;
+  const query='&item_id='+encodeURIComponent(id)+'&expected_path='+encodeURIComponent(path)+'&expected_updated_at='+encodeURIComponent(version);
+  const plan=await edge('download-url',{query});
+  if(plan.path!==path)throw new Error('VAULT_VERSION_CONFLICT');
+  const stillAllowed=()=>allowed('vaultView')&&allowed('vaultSync')&&localScopeOk(false)&&
+    String(window.AbuBassamCloud?.session?.()?.user?.id||'')+':'+device().id===before;
+  if(!stillAllowed())throw new Error('VAULT_SCOPE_CHANGED');
+  const response=await fetch(plan.url,{cache:'no-store'});
+  if(!response.ok)throw new Error('VAULT_DOWNLOAD_FAILED');
+  const blob=await response.blob();
+  if(!stillAllowed())throw new Error('VAULT_SCOPE_CHANGED');
+  return blob
+}
 async function removeVault(path,orphanOnly=false){if(!allowed('vaultSync')||(!orphanOnly&&!allowed('vaultDelete'))||(orphanOnly&&!allowed('vaultAdd')&&!allowed('vaultEdit')))throw new Error('VAULT_DELETE_NOT_ALLOWED');const id=vaultItemId(path);if(!id)throw new Error('VAULT_ID_REQUIRED');await edge(orphanOnly?'discard-upload':'delete',{method:'DELETE',body:{item_id:id,path:String(path||'')}});pathToId.delete(String(path||''))}
 async function removeAllVault(){if(!allowed('vaultDelete')||!allowed('vaultSync'))throw new Error('VAULT_DELETE_NOT_ALLOWED');const rows=await vaultList(20000),c=await credentials();const removed=await rpc('abu_bassam_vault_remove_all',{p_device_id:c.deviceId,p_device_secret:c.secret});for(const row of rows){const path=String(row?.data?.storagePath||'');if(path)await removeVault(path).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف تخزين الأرشيف مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}})}return removed}
 function registerCloudAdapter(){
