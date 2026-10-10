@@ -106,4 +106,14 @@ forbid(hard,"typeof Android.security==='function'",'direct native security bridg
 forbid(hard,"__dev_secure_",'customer hardening must not read device secrets from localStorage');
 forbid(hard,".from('abu_bassam_devices')",'direct device table read in hardening runtime');
 forbid(workflow,'سلة محذوفات','recycle bin');
+// Verified fail-closed cleanup and event-driven customer-document integration.
+need(ui,"document.addEventListener('abu-vault-ready',inject)",'customer entry waits for vault without polling');
+need(ui,"S.cs=[];S.ds=[];S.c=null;S.sel.clear();render();",'re-authentication clears prior customer list');
+need(ui,"AbuCustomerWorkflow?.clearPrivateState?.()",'customer modal clears protected workflow caches');
+need(workflow,'function clearPrivateState()','workflow cache reset');
+need(workflow,"document.addEventListener('abu-bassam-auth-changed',clearPrivateState)",'account changes invalidate customer private caches');
+const vault=read('web/document-vault-runtime.js');
+need(vault,"new CustomEvent('abu-vault-ready')",'vault readiness signal');
+forbid(ui,'setInterval(()=>{inject();','no repeated customer injection loop');
+forbid(ui,'new MutationObserver(inject).observe(document.documentElement','no page-wide customer observer');
 console.log('customer documents checks passed: explicit non-owner permissions without implicit grants, SecureStore-only device secrets, deletion, atomic revisions, server redaction and branch isolation');
