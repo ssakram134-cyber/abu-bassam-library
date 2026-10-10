@@ -79,7 +79,29 @@ function printMerge(){if(!window.Android?.printPages)return alert('الطباع�
 function loadScript(src,test){return new Promise((res,rej)=>{if(test())return res();let s=document.createElement('script');s.src=src;s.onload=()=>test()?res():rej(new Error('لم تبدأ مكتبة عرض المستند بعد تحميلها: '+src));s.onerror=()=>rej(new Error('مكتبة عرض المستند غير مضمنة في نسخة Android: '+src));document.head.appendChild(s)})}
 function docs(){$('natDocInput').value='';$('natDocInput').click()}
 async function openDoc(f){if(!f)return;S.doc=f;S.docReady=false;let n=(f.name||'').toLowerCase();$('natDocTitle').textContent='📄 '+f.name;$('natDocView').innerHTML='جاري فتح الملف...';open('natDocModal');recent('فتح مستند',f.name,'');logOperation('open','فتح مستند: '+f.name);if(f.size>30*1024*1024){$('natDocView').textContent='حجم الملف أكبر من 30MB؛ العرض الداخلي محدود لحماية ذاكرة الهاتف. يمكنك حفظ الملف الأصلي وفتحه بتطبيق مختص.';return}try{if(n.endsWith('.pdf'))return renderPdf(f);if(n.endsWith('.docx'))return renderDocx(f);if(n.endsWith('.xlsx')||n.endsWith('.xls')||n.endsWith('.csv'))return renderSheet(f);if(n.endsWith('.txt')){let text=await f.text();if(S.doc===f){$('natDocView').textContent=text;S.docReady=true}return}if(String(f.type||'').startsWith('image/')){let d=await fileData(f);if(S.doc===f){$('natDocView').innerHTML=`<img src="${d}" style="max-width:100%">`;S.docReady=true}return}$('natDocView').innerHTML='<p>تم اختيار الملف. العرض الداخلي المباشر متاح لـ PDF وWord DOCX وExcel والصور والنصوص. يمكن حفظ/فتح الأنواع الأخرى من خلال تطبيقاتها.</p><p>'+escapeHtml(f.name)+'</p>'}catch(e){if(S.doc===f)$('natDocView').textContent='تعذر عرض الملف داخليًا: '+(e.message||e)}}
-async function renderPdf(f){await loadScript('vendor/documents/pdf.min.js',()=>!!window.pdfjsLib);pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/documents/pdf.worker.min.js';let ab=await f.arrayBuffer(),pdf=await pdfjsLib.getDocument({data:ab,isEvalSupported:false}).promise,wrap=$('natDocView');if(S.doc!==f)return;wrap.innerHTML='';for(let i=1;i<=Math.min(pdf.numPages,20);i++){if(S.doc!==f)return;let p=await pdf.getPage(i),first=p.getViewport({scale:1.25}),scale=1.25*Math.min(1,Math.sqrt(4_000_000/Math.max(1,first.width*first.height))),vp=p.getViewport({scale}),c=document.createElement('canvas');c.width=Math.max(1,Math.floor(vp.width));c.height=Math.max(1,Math.floor(vp.height));await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;if(S.doc!==f)return;wrap.appendChild(c)}if(pdf.numPages>20&&S.doc===f){let note=document.createElement('p');note.textContent='المعاينة تعرض أول 20 صفحة لتقليل استخدام الذاكرة؛ ملف PDF الأصلي محفوظ بكامل صفحاته ويمكن طباعته بالكامل.';wrap.appendChild(note)}if(S.doc===f)S.docReady=true}
+async function renderPdf(f){
+ await loadScript('vendor/documents/pdf.min.js',()=>!!window.pdfjsLib);
+ pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/documents/pdf.worker.min.js';
+ let pdf;
+ try{
+  const ab=await f.arrayBuffer();if(S.doc!==f)return;
+  pdf=await pdfjsLib.getDocument({data:ab,isEvalSupported:false}).promise;
+  if(S.doc!==f)return;
+  const wrap=$('natDocView'),pageCount=Math.min(pdf.numPages,20),maxPixels=Math.min(4_000_000,Math.floor(24_000_000/Math.max(1,pageCount)));
+  wrap.innerHTML='';
+  for(let i=1;i<=pageCount;i++){
+   if(S.doc!==f)return;
+   const page=await pdf.getPage(i),first=page.getViewport({scale:1.25}),scale=1.25*Math.min(1,Math.sqrt(maxPixels/Math.max(1,first.width*first.height))),vp=page.getViewport({scale}),canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.floor(vp.width));canvas.height=Math.max(1,Math.floor(vp.height));
+   const ctx=canvas.getContext('2d');if(!ctx)throw new Error('ذاكرة عرض PDF غير متاحة');
+   await page.render({canvasContext:ctx,viewport:vp}).promise;
+   if(S.doc!==f)return;
+   wrap.appendChild(canvas);page.cleanup?.()
+  }
+  if(pdf.numPages>20&&S.doc===f){const note=document.createElement('p');note.textContent='المعاينة تعرض أول 20 صفحة لتقليل استخدام الذاكرة؛ ملف PDF الأصلي محفوظ بكامل صفحاته ويمكن طباعته بالكامل.';wrap.appendChild(note)}
+  if(S.doc===f)S.docReady=true
+ }finally{if(pdf)await pdf.destroy?.()}
+}
 function safeDocumentHtml(html){
   const parsed=new DOMParser().parseFromString(String(html||''),'text/html'),out=document.createElement('div');
   const allow=new Set(['P','DIV','BR','SPAN','STRONG','EM','B','I','U','S','DEL','SUB','SUP','H1','H2','H3','H4','H5','H6','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','UL','OL','LI','BLOCKQUOTE','PRE','CODE','A','IMG','HR']);
