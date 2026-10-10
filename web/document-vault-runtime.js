@@ -99,7 +99,7 @@ function modalHtml(){return `
 async function build(){
   if($('vaultCenter'))return;
   addCss();let app=document.querySelector('.app'),preview=document.querySelector('.app .preview');if(!app)return;
-  let section=document.createElement('section');section.id='vaultCenter';section.innerHTML=mainHtml();app.insertBefore(section,preview||null);document.body.insertAdjacentHTML('beforeend',modalHtml());
+  let section=document.createElement('section');section.id='vaultCenter';section.innerHTML=mainHtml();app.insertBefore(section,preview||null);document.body.insertAdjacentHTML('beforeend',modalHtml());document.dispatchEvent(new CustomEvent('abu-vault-ready'));
   $('vSearch').oninput=event=>{state.query=event.target.value;render()};
   $('vSort').value=state.sort;
   $('vAutoSync').checked=autoSync();
