@@ -23,7 +23,7 @@ const DEFAULT_FORMS={
 };
 
 function clone(value){return JSON.parse(JSON.stringify(value))}
-function loadJson(key,fallback){try{let value=JSON.parse(localStorage.getItem(key)||'null');return value||clone(fallback)}catch(e){return clone(fallback)}}
+function loadJson(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');if(Array.isArray(fallback))return Array.isArray(value)?value:clone(fallback);if(fallback&&typeof fallback==='object')return value&&typeof value==='object'&&!Array.isArray(value)?value:clone(fallback);return value??clone(fallback)}catch(e){return clone(fallback)}}
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function cap(value,min,max){return Math.max(min,Math.min(max,Number(value)||0))}
 function fileData(file){return new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)})}
@@ -63,6 +63,8 @@ const state={
 Object.keys(DEFAULT_FORMS).forEach(key=>state.forms[key]=Object.assign({},DEFAULT_FORMS[key],state.forms[key]||{}));
 // Secrets are intentionally ephemeral: purge any legacy passwords loaded from persisted drafts.
 state.forms.login.password='';state.forms.wifi.password='';
+state.history=state.history.filter(entry=>entry&&typeof entry==='object'&&Array.isArray(entry.models)).slice(0,12);
+state.history.forEach(entry=>{entry.models=entry.models.filter(model=>model&&typeof model==='object'&&model.data&&typeof model.data==='object');entry.models.forEach(model=>{if(model.type==='login'||model.type==='wifi')model.data.password=''})});
 state.brand=Object.assign({},DEFAULT_BRAND,state.brand||{});
 const PRINT_FIELDS=['output','sides','orientation','copies','width','height','gap','marginX','marginY','bleed','flip','watermark','watermarkOpacity','watermarkText'];
 function restorePrintSettings(){
