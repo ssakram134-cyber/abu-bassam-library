@@ -44,6 +44,8 @@ reader.result='data:image/jpeg;base64,QQ==';reader.onload();
  win.Nat.scan();const second=requests.at(-1);
  win.AbuBassamNativeCameraResult({mode:'scan',requestId:first.requestId,dataUrl:'bad'});
  assert.equal(warnings.length,warningsBefore,'Mismatched request ID must be ignored');
+ win.AbuBassamNativeCameraResult({mode:'scan',dataUrl:'bad'});
+ assert.equal(warnings.length,warningsBefore,'Camera results without a request ID must be rejected');
  win.AbuBassamNativeCameraResult({mode:'scan',requestId:second.requestId,dataUrl:'bad'});
  assert.equal(warnings.length,warningsBefore+1,'Current request must be handled');
  win.AbuBassamNativeCameraResult({mode:'scan',requestId:second.requestId,dataUrl:'bad'});
