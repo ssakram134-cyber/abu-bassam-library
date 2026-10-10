@@ -73,8 +73,25 @@ function loadScript(src,test){return new Promise((res,rej)=>{if(test())return re
 function docs(){$('natDocInput').value='';$('natDocInput').click()}
 async function openDoc(f){if(!f)return;S.doc=f;let n=(f.name||'').toLowerCase();$('natDocTitle').textContent='📄 '+f.name;$('natDocView').innerHTML='جاري فتح الملف...';open('natDocModal');recent('فتح مستند',f.name,'');logOperation('open','فتح مستند: '+f.name);try{if(n.endsWith('.pdf'))return renderPdf(f);if(n.endsWith('.docx'))return renderDocx(f);if(n.endsWith('.xlsx')||n.endsWith('.xls')||n.endsWith('.csv'))return renderSheet(f);if(n.endsWith('.txt')||n.endsWith('.csv')){$('natDocView').textContent=await f.text();return}if(f.type.startsWith('image/')){let d=await fileData(f);$('natDocView').innerHTML=`<img src="${d}" style="max-width:100%">`;return}$('natDocView').innerHTML='<p>تم اختيار الملف. العرض الداخلي المباشر متاح لـ PDF وWord DOCX وExcel والصور والنصوص. يمكن حفظ/فتح الأنواع الأخرى من خلال تطبيقاتها.</p><p>'+escapeHtml(f.name)+'</p>'}catch(e){$('natDocView').textContent='تعذر عرض الملف داخليًا: '+(e.message||e)}}
 async function renderPdf(f){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',()=>!!window.pdfjsLib);pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';let ab=await f.arrayBuffer(),pdf=await pdfjsLib.getDocument({data:ab}).promise,wrap=$('natDocView');wrap.innerHTML='';for(let i=1;i<=Math.min(pdf.numPages,20);i++){let p=await pdf.getPage(i),vp=p.getViewport({scale:1.25}),c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;wrap.appendChild(c)}}
-async function renderDocx(f){await loadScript('https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js',()=>!!window.mammoth);let r=await mammoth.convertToHtml({arrayBuffer:await f.arrayBuffer()});$('natDocView').innerHTML=r.value}
-async function renderSheet(f){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>!!window.XLSX);let wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),name=wb.SheetNames[0],html=XLSX.utils.sheet_to_html(wb.Sheets[name]);$('natDocView').innerHTML=html}
+function safeDocumentHtml(html){
+  const parsed=new DOMParser().parseFromString(String(html||''),'text/html'),out=document.createElement('div');
+  const allow=new Set(['P','DIV','BR','SPAN','STRONG','EM','B','I','U','S','DEL','SUB','SUP','H1','H2','H3','H4','H5','H6','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','UL','OL','LI','BLOCKQUOTE','PRE','CODE','A','IMG','HR']);
+  const block=new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','SVG','MATH','FORM','META','BASE','LINK','INPUT','BUTTON','TEMPLATE','VIDEO','AUDIO']);
+  function copy(node,parent){
+    if(node.nodeType===3){parent.appendChild(document.createTextNode(node.textContent||''));return}
+    if(node.nodeType!==1||block.has(node.tagName))return;
+    let tag=allow.has(node.tagName)?node.tagName.toLowerCase():'span',child=document.createElement(tag);
+    if(tag==='a'){let href=String(node.getAttribute('href')||'').trim();if(/^(https?:\/\/|mailto:|tel:|#)/i.test(href)){child.setAttribute('href',href);child.setAttribute('rel','noopener noreferrer')}}
+    if(tag==='img'){let src=String(node.getAttribute('src')||'');if(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/i.test(src)&&src.length<8000000)child.setAttribute('src',src);else return}
+    if(tag==='td'||tag==='th'){for(const a of ['colspan','rowspan']){let v=Number(node.getAttribute(a));if(Number.isInteger(v)&&v>=1&&v<=20)child.setAttribute(a,String(v))}}
+    for(const n of [...node.childNodes])copy(n,child);
+    parent.appendChild(child)
+  }
+  for(const node of [...parsed.body.childNodes])copy(node,out);
+  return out.innerHTML
+}
+async function renderDocx(f){await loadScript('https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js',()=>!!window.mammoth);let r=await mammoth.convertToHtml({arrayBuffer:await f.arrayBuffer()});$('natDocView').innerHTML=safeDocumentHtml(r.value)}
+async function renderSheet(f){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>!!window.XLSX);let wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),name=wb.SheetNames[0],html=XLSX.utils.sheet_to_html(wb.Sheets[name]);$('natDocView').innerHTML=safeDocumentHtml(html)}
 function escapeHtml(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
 function htmlForOpenDoc(){return `<!doctype html><html dir="auto"><head><meta charset="utf-8"><style>@page{size:A4;margin:12mm}body{font-family:Tahoma,Arial;line-height:1.7}table{border-collapse:collapse;width:100%}td,th{border:1px solid #777;padding:4px}img,canvas{max-width:100%}</style></head><body>${$('natDocView').innerHTML}</body></html>`}
 async function saveOpenDoc(){let f=S.doc;if(!f)return alert('افتح مستنداً أولاً');saveData(f.name,f.type||'application/octet-stream',await fileData(f));logOperation('save','حفظ الأصل: '+f.name)}
