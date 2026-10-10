@@ -48,17 +48,19 @@ assert.throws(()=>funcs.validatePrintBarcodes([child,long]),/تعذر إنشاء
 const nonAsciiCode={type:'qr',brand,data:{kind:'text',symbology:'code128',content:'مرحبا'}};
 assert.throws(()=>funcs.assertModelBarcodes(nonAsciiCode),/Code 128/,'Code 128 cannot encode Arabic data');
 const cardSource=cut('function cardHtml(model,side){','\nfunction renderPreview(){');
+const dialQrPayloads=[];
+const qrCapture=text=>{dialQrPayloads.push(String(text));return funcs.qrSvg(text)};
 const card=new Function('esc','watermark','childInstitution','referenceBrand','photoMarkup','textAttrs','row','qrSvg','payloadFor','footer','emergencyDial',
  cardSource+';return cardHtml;')(
  s=>String(s),()=>'',d=>d.institutionType==='school'?d.school:'روضة أطفال القادسية',
- ()=>'',()=>'',()=>'',(a,b)=>b?'<p>'+a+': '+b+'</p>':'',funcs.qrSvg,funcs.payloadFor,()=>'<footer>مكتبة أبو بسام للتصوير والقرطاسية</footer>',funcs.emergencyDial);
+ ()=>'',()=>'',()=>'',(a,b)=>b?'<p>'+a+': '+b+'</p>':'',qrCapture,funcs.payloadFor,()=>'<footer>مكتبة أبو بسام للتصوير والقرطاسية</footer>',funcs.emergencyDial);
 const rendered=card(child,'back');
 assert.match(rendered,/العمر: 4 سنوات/);
 assert.match(rendered,/رقم هاتف ولي الأمر: 07829667521/);
 assert.match(rendered,/رقم سائق الخط: 07829664889/);
-assert.match(rendered,/tel:07829667521/);
+assert.ok(dialQrPayloads.includes('tel:07829667521'));
 const withDriver={...child,data:{...child.data,guardianPhone:'invalid',driverPhone:'07829664889'}};
-assert.match(card(withDriver,'back'),/tel:07829664889/,'Emergency QR must fall back to valid driver phone');
+card(withDriver,'back');assert.ok(dialQrPayloads.includes('tel:07829664889'),'Emergency QR must fall back to valid driver phone');
 const withoutEmergency={...child,data:{...child.data,guardianPhone:'abc',driverPhone:'xyz'}};
 assert.doesNotMatch(card(withoutEmergency,'back'),/cs-call-qr/,'Never render an invalid emergency dialing QR');
 assert.match(card(child,'front'),/روضة أطفال القادسية/);
