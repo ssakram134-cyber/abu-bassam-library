@@ -42,9 +42,9 @@ function fixture(language){
  const confirm=()=>confirmResult;
  const setTimeout=(fn,delay)=>{timers.set(++nextTimer,fn);return nextTimer};
  const clearTimeout=id=>timers.delete(id);
- const common=['$', 'idbPut','idbDelete','idbGet','localStorage','alert','location','confirm','setTimeout','clearTimeout',
+ const common=['$', 'idbPut','idbDelete','idbGet','dbPut','dbDelete','localStorage','alert','location','confirm','setTimeout','clearTimeout',
   'Date','window','stableRebind','normalizeHeaders','enhanceAnswers','draftQueueInit'];
- const vars=[$,idbPut,idbDelete,idbGet,localStorage,alert,location,confirm,setTimeout,clearTimeout,
+ const vars=[$,idbPut,idbDelete,idbGet,idbPut,idbDelete,localStorage,alert,location,confirm,setTimeout,clearTimeout,
   Date,{fitToScreen:()=>{}},()=>{},()=>{},()=>{},null];
  const arCode="const META_KEY='meta',LOCAL_TS_KEY='localTs',IDB_KEY='ar';let saveTimer=0,draftResetting=false,draftQueue=Promise.resolve();"+
   (queueHelper||'')+draftBlock+
