@@ -1,0 +1,32 @@
+'use strict';
+const fs=require('fs'),vm=require('vm');
+// Exact current physical lines for the first photo/print audit boundary, not a claim of semantic proof.
+const sources=['web/index.html','web/photo-print-advanced-runtime.js','web/photo-geometry-runtime.js','web/design-studio-advanced-runtime.js','web/print-presets-runtime.js','web/card-free-layout-runtime.js','web/poster-project-runtime.js','web/advanced-completion-runtime.js','web/image-compressor.html'];
+let total=0,issues=[],rows=[];
+for(const path of sources){
+ const src=fs.readFileSync(path,'utf8'),lines=src.split(/\r?\n/);total+=lines.length;
+ for(let i=0;i<lines.length;i++){const line=lines[i];if(/[\u0000\uFEFF\uFFFD]/.test(line))issues.push(`${path}:${i+1}: illegal hidden/replacement character`);if(/^\s*(<<<<<<<|=======|>>>>>>>)\s/.test(line))issues.push(`${path}:${i+1}: unmerged conflict marker`)}
+ rows.push(`${path}: ${lines.length} physical lines, ${src.length} UTF-16 characters`);
+ if(path.endsWith('.js')){try{new vm.Script(src,{filename:path})}catch(e){issues.push(`${path}: JS syntax: ${e.message}`)}}
+ else for(const match of src.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)){if(!match[1].trim())continue;try{new vm.Script(match[1],{filename:path+' inline'})}catch(e){issues.push(`${path}: inline JS syntax: ${e.message}`)}}
+}
+const get=p=>fs.readFileSync(p,'utf8');
+const photo=get('web/photo-print-advanced-runtime.js'),geo=get('web/photo-geometry-runtime.js'),complete=get('web/advanced-completion-runtime.js'),adv=get('web/design-studio-advanced-runtime.js'),poster=get('web/poster-project-runtime.js'),compress=get('web/image-compressor.html');
+const required=[
+ [photo,'pagePrintMeta.photoImageRef!==selectedItem()?.img','poster source must match the generated pages'],
+ [photo,'originalSrc','enhancement must not overwrite a changed photo'],
+ [photo,'if(job&&job!==enhanceJob)return;ctx.putImageData','stale enhancement pixel job must stop'],
+ [geo,'Math.sqrt(12_000_000/(ow*oh))','crop output memory bounded'],
+ [geo,'Math.sqrt(8_000_000/(sw*sh))','perspective input memory bounded'],
+ [geo,"it.src!==originalSrc",'delayed crop may not overwrite another image'],
+ [complete,'function htmlEsc(v)','design layer text must be escaped'],
+ [complete,'function trimHistory(stack)','undo history must have memory cap'],
+ [complete,'invalidatePosterPages?.()','source mutation invalidates poster output'],
+ [adv,"attributeFilter:['class']",'design observer must not react to every style change'],
+ [poster,"event.detail?.src==='photo-print-advanced-runtime.js'",'poster controls must load deterministically'],
+ [poster,'uploadedImages.indexOf(rec)','failed import only removes its own record'],
+ [compress,'MAX_OUTPUT_BYTES=24*1024*1024','individual compression output size cap'],
+ [compress,'MAX_TOTAL_OUTPUT_BYTES=96*1024*1024','compression batch output size cap'],
+ [compress,'sw*sh>48_000_000','input decoded image must fit memory'],
+];for(const [src,needle,reason] of required)if(!src.includes(needle))issues.push('Regression guard missing: '+reason);
+if(issues.length){console.error(issues.join('\n'));process.exitCode=1}else console.log('First-section photo/print code audit passed\n'+rows.join('\n')+'\nTotal physical lines examined by static checks: '+total+'; critical regression guards: '+required.length);
