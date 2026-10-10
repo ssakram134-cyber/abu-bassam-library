@@ -1,9 +1,8 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
 const source=fs.readFileSync('web/national-id-runtime.js','utf8');new Function(source);
-const outputs=[],prints=[],messages=[],created=[];
-const ctx={fillRect(){},save(){},translate(){},rotate(){},drawImage(){},restore(){},getImageData(){return{data:new Uint8ClampedArray(16)}},putImageData(){}};
-const canvas=()=>({width:0,height:0,style:{},getContext(){return ctx},toDataURL(){return 'data:image/jpeg;base64,VEVTVA=='},classList:{add(){},remove(){}}});
+const outputs=[],prints=[],messages=[],created=[],canvases=[];
+const canvas=()=>{const result={width:0,height:0,style:{},draws:[],toDataURL(){return 'data:image/jpeg;base64,VEVTVA=='},classList:{add(){},remove(){}}};const ctx={fillRect(){},save(){},translate(){},rotate(){},drawImage(...args){result.draws.push(args)},restore(){},getImageData(){return{data:new Uint8ClampedArray(16)}},putImageData(){}};result.getContext=()=>ctx;canvases.push(result);return result};
 class PDFMock{
  constructor(opts){this.opts=opts;this.pages=[[]];created.push(this)}
  addPage(...options){this.pageOptions=options;this.pages.push([])}
@@ -13,7 +12,7 @@ class PDFMock{
 const native={saveBase64:(...args)=>outputs.push(args),printBase64:(...args)=>prints.push(args)};
 const window={Android:native,jspdf:{jsPDF:PDFMock},addEventListener(){}};
 const document={getElementById:()=>null,querySelector:()=>null,addEventListener(){},createElement:kind=>kind==='canvas'?canvas():null};
-const injected=source.replace('window.Nat={','window.__duplexAudit={S,buildDuplexPdf,duplexPagePlacement};window.Nat={');
+const injected=source.replace('window.Nat={','window.__duplexAudit={S,buildDuplexPdf,duplexFaceCanvas};window.Nat={');
 assert.notEqual(source,injected);
 new Function('window','document','Android','jspdf','alert',injected)(window,document,native,window.jspdf,x=>messages.push(String(x)));
 const audit=window.__duplexAudit;
@@ -25,10 +24,16 @@ assert.equal(created[0].pages.length,2,'Two separate PDF sheets are required');
 for(const page of created[0].pages)assert.equal(page.length,1,'Exactly one face per page');
 for(let i=0;i<2;i++){
  const item=created[0].pages[i][0],ratio=i===0?1800/1200:1200/1800;
- assert.ok(Math.abs(item.width/item.height-ratio)<.003,'Photo face must retain aspect ratio');
- assert.ok(item.width<=85.6+.001&&item.height<=54+.001,'Face must fit physical CR80 box');
+ assert.equal(item.width,85.6,'Both physical card footprints must be CR80 width');
+ assert.equal(item.height,54,'Both physical card footprints must be CR80 height');
  assert.ok(Math.abs((item.x+item.width/2)-105)<.0001,'Centered in A4 width');
  assert.ok(Math.abs((item.y+item.height/2)-148.5)<.0001,'Centered in A4 height');
+ const original=canvases[2*i],card=canvases[2*i+1],draw=card.draws.at(-1);
+ assert.equal(card.width,Math.round(85.6/25.4*300),'Card raster width must use 300 DPI');
+ assert.equal(card.height,Math.round(54/25.4*300),'Card raster height must use 300 DPI');
+ assert.equal(draw.length,5,'Inner source must be fitted in the fixed-size card without crop');
+ assert.ok(Math.abs(draw[3]/draw[4]-original.width/original.height)<.0001,'No source image stretching');
+ assert.ok(draw[1]>=0&&draw[2]>=0&&draw[1]+draw[3]<=card.width+.01&&draw[2]+draw[4]<=card.height+.01,'Content must fit CR80 bounds');
 }
 assert.equal(outputs[0][1],'application/pdf');
 window.Nat.printDuplex();
@@ -39,4 +44,4 @@ audit.S.back=null;
 window.Nat.saveDuplexPdf();
 assert.ok(messages.some(m=>m.includes('يجب التقاط الوجه الأمامي والخلفي')),'Partial card must not produce fake duplex');
 assert.equal(outputs.length,1);
-console.log('Duplex PDF checks passed: independent pages, A4 centering, 85.6x54mm box, aspect ratio, native print and missing-face refusal.');
+console.log('Duplex PDF checks passed: equal 85.6x54mm footprints, 300dpi letterbox, preserved face ratio, A4 centering and native print.');
