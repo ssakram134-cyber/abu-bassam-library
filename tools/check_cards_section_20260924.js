@@ -22,6 +22,17 @@ need(a4,"DIRS=['nw','n','ne','e','se','s','sw','w']",'eight resize handles');
 need(a4,'function rotate','rotation handle');
 need(standalone,'safeTextTarget','standalone text safety');
 need(standalone,'abuBassamStandaloneCardLayoutV2','standalone editor persistence');
+const childTemplates=read('web/child-card-templates-runtime.js'),modelsPlus=read('web/card-models-plus-runtime.js');
+for(const source of [childTemplates,modelsPlus])new Function(source);
+for(const [source,label] of [[childTemplates,'child badge templates'],[modelsPlus,'additional card models']]){
+ if(source.includes('setInterval(')||source.includes('new MutationObserver('))throw new Error('cards check failed: global polling/observer returned in '+label);
+ if(!source.includes("document.addEventListener('abu-runtime-loaded'"))throw new Error('cards check failed: runtime-ready integration missing in '+label);
+}
+need(childTemplates,"document.addEventListener('abu-cards-rendered'",'child template lifecycle listener');
+need(studio,'const PRINT_SETTINGS_KEY=','validated card printer preferences');
+need(studio,'function validateSymbols(jobs)','protect against printing invalid QR');
+need(studio,'let resetArmed=false','confirmation required before destructive reset');
+need(studio,'36_000_000','memory safe image budget');
 // Execute the canonical QR renderer and the exact A4 duplex grid, including incomplete sheets.
 const barcodeFactory=new Function(read('web/qrcode.js')+'\n'+read('web/qrcode_UTF8.js')+'\nreturn qrcode;')();
 const stored=new Map([['abuBassamCardsStudioV4',JSON.stringify({login:{password:'legacy-secret'},wifi:{password:'legacy-wifi'}})],['abuBassamCardsPrintSettingsV1',JSON.stringify({output:'a4-duplex',copies:4,flip:'vertical',width:90,height:55,watermarkText:'اختبار'})]]);
