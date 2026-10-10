@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -44,17 +45,19 @@ function validateSigningConfiguration() {
 
 function findApk(dir) {
   if (!fs.existsSync(dir)) return null;
-  const stack = [dir];
+  const stack = [dir], found = [];
   while (stack.length) {
     const cur = stack.pop();
     for (const name of fs.readdirSync(cur)) {
-      const p = path.join(cur, name);
-      const st = fs.statSync(p);
+      const p = path.join(cur, name), st = fs.statSync(p);
       if (st.isDirectory()) stack.push(p);
-      else if (/\.apk$/i.test(name)) return p;
+      else if (st.isFile() && /\.apk$/i.test(name)) found.push(p);
     }
   }
-  return null;
+  if (found.length > 1) {
+    throw new Error('Multiple release APKs found; cannot safely choose an arbitrary build: ' + found.sort().join(', '));
+  }
+  return found[0] || null;
 }
 
 function ensureReleaseSigningHook(configured) {
@@ -69,10 +72,69 @@ function ensureReleaseSigningHook(configured) {
 }
 
 function verifyBundle(apk) {
-  const buf = fs.readFileSync(apk);
-  if (!buf.includes(Buffer.from('assets/index.android.bundle'))) {
-    throw new Error('APK does not contain assets/index.android.bundle');
+  const zip = fs.readFileSync(apk);
+  const MAX_BUNDLE_BYTES = 64 * 1024 * 1024;
+  function crc32(bytes) {
+    let crc = -1;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let n = 0; n < 8; n++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    return (crc ^ -1) >>> 0;
   }
+  const bad = (reason) => { throw new Error('Embedded JS bundle validation failed: ' + reason); };
+  if (zip.length < 22) bad('APK is not a complete ZIP archive');
+  // ZIP end-of-central-directory can be up to 65,535 bytes behind EOF.
+  let eocd = -1;
+  const minOffset = Math.max(0, zip.length - 22 - 65535);
+  for (let i = zip.length - 22; i >= minOffset; i--) {
+    if (zip.readUInt32LE(i) === 0x06054b50 && i + 22 + zip.readUInt16LE(i + 20) === zip.length) {
+      eocd = i; break;
+    }
+  }
+  if (eocd < 0) bad('ZIP central directory is missing');
+  if (zip.readUInt16LE(eocd + 4) || zip.readUInt16LE(eocd + 6)) bad('Multi-disk APK is unsupported');
+  const entries = zip.readUInt16LE(eocd + 10);
+  const directorySize = zip.readUInt32LE(eocd + 12);
+  const directoryStart = zip.readUInt32LE(eocd + 16);
+  if (entries === 65535 || directorySize === 0xffffffff || directoryStart === 0xffffffff ||
+      directoryStart + directorySize > eocd) bad('ZIP directory bounds are invalid or ZIP64 is unsupported');
+  const target = 'assets/index.android.bundle';
+  let cursor = directoryStart;
+  for (let i = 0; i < entries; i++) {
+    if (cursor + 46 > eocd || zip.readUInt32LE(cursor) !== 0x02014b50) bad('Invalid ZIP directory entry');
+    const flags = zip.readUInt16LE(cursor + 8);
+    const method = zip.readUInt16LE(cursor + 10);
+    const expectedCrc = zip.readUInt32LE(cursor + 16);
+    const compressed = zip.readUInt32LE(cursor + 20);
+    const expanded = zip.readUInt32LE(cursor + 24);
+    const nameLength = zip.readUInt16LE(cursor + 28);
+    const extraLength = zip.readUInt16LE(cursor + 30);
+    const commentLength = zip.readUInt16LE(cursor + 32);
+    const localOffset = zip.readUInt32LE(cursor + 42);
+    const next = cursor + 46 + nameLength + extraLength + commentLength;
+    if (next > eocd) bad('ZIP filename or metadata exceeds directory bounds');
+    const name = zip.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8');
+    if (name === target) {
+      if (expanded < 1000 || compressed === 0 || compressed > MAX_BUNDLE_BYTES ||
+          expanded > MAX_BUNDLE_BYTES || (flags & 1) || (method !== 0 && method !== 8)) {
+        bad('Embedded JS bundle is empty, encrypted, or uses an unsupported encoding');
+      }
+      if (localOffset + 30 > directoryStart || zip.readUInt32LE(localOffset) !== 0x04034b50) bad('JS bundle has no local ZIP file entry');
+      const localNameLength = zip.readUInt16LE(localOffset + 26);
+      const localExtraLength = zip.readUInt16LE(localOffset + 28);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      if (zip.subarray(localOffset + 30, localOffset + 30 + localNameLength).toString('utf8') !== target ||
+          dataStart + compressed > directoryStart) bad('JS bundle local file is missing or incomplete');
+      const bytes = zip.subarray(dataStart, dataStart + compressed);
+      const contents = method === 8 ? inflateRawSync(bytes, { maxOutputLength: MAX_BUNDLE_BYTES }) : bytes;
+      if (contents.length !== expanded || contents.length < 1000) bad('Embedded JS bundle content is incomplete');
+      if (crc32(contents) !== expectedCrc) bad('Embedded JS bundle CRC-32 does not match ZIP directory');
+      return contents.length;
+    }
+    cursor = next;
+  }
+  bad('APK does not contain a real assets/index.android.bundle ZIP entry');
 }
 
 function sdkRoot() {

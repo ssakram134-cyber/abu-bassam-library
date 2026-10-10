@@ -1,6 +1,7 @@
 const fs=require('fs');
 const path=require('path');
 const cp=require('child_process');
+const crypto=require('node:crypto');
 
 const root=path.resolve(process.argv[2]||'.');
 function fail(message){console.error('Source import rejected: '+message);process.exit(1)}
@@ -22,6 +23,21 @@ if(pkg.name!=='abu-bassam-library-native')fail('unexpected package name');
 if(pkg.version!=='4.3.2'||app.version!=='4.3.2')fail('version must remain 4.3.2 for this import workflow');
 if(pkg.main!=='index-auth.js')fail('package main must remain index-auth.js so auth callbacks are captured before the native app entry');
 if(app.slug!=='abu-bassam-library')fail('unexpected Expo slug');
+
+function validateOriginalIcon(expo){
+  if(expo.icon!=='./assets/icon.png'||expo.android?.adaptiveIcon?.foregroundImage!=='./assets/icon.png')
+    fail('original app/adaptive icon paths must be preserved');
+  const iconPath=path.join(root,'assets','icon.png');
+  if(!fs.existsSync(iconPath))fail('original library app icon is missing');
+  const bytes=fs.readFileSync(iconPath);
+  if(bytes.length<32||bytes[0]!==0x89||bytes[1]!==0x50||bytes[2]!==0x4e||bytes[3]!==0x47)
+    fail('app icon is not a PNG image');
+  // Trusted Git blob identity of assets/icon.png as reviewed in the original repository.
+  const gitSha=crypto.createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
+  if(gitSha!=='acf4999f8c52bd921b12f1e9fdf809cc4cca7d6f')fail('original Abu Bassam application icon was replaced');
+}
+validateOriginalIcon(app);
+
 if(app.android?.package!=='com.abubassam.librarycamera3')fail('unexpected Android package');
 if(Number(app.android?.versionCode)!==432)fail('unexpected Android versionCode');
 if(lock.name!==pkg.name||lock.version!==pkg.version)fail('package-lock identity/version does not match package.json');
@@ -33,8 +49,9 @@ if(!checkWeb.startsWith('node tools/check_project.js'))fail('check:web must be r
 if(/scripts\/patch-|repair:source/.test(checkWeb))fail('check:web must not repair or mutate source');
 for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
 for(const name of ['start','android','android:prebuild'])if(/scripts\/patch-/.test(String(pkg.scripts?.[name]||'')))fail(`${name} must not auto-patch canonical source`);
-const repair=String(pkg.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker))fail(`repair:source missing explicit compatibility repair: ${marker}`);
+// A source ZIP must not resurrect source-mutating repair scripts; importing the
+// current canonical package.json (which has no repair:source) must be accepted.
+if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source script is forbidden in source imports');
 const buildScript=read('scripts/build-android-local.mjs');
 for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'",'Production release signing is required.','SIGNING_CERTIFICATE.txt'])if(!buildScript.includes(marker))fail(`local APK signing safeguard missing: ${marker}`);
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);

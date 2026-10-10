@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,12 +45,35 @@ const OCR_ASSETS = [
   ), 500000],
 ];
 
-async function existsEnough(path,minBytes){try{return (await stat(path)).size>=minBytes}catch{return false}}
+function validAssetContent(data,path){
+ if(!data?.length)return false;
+ if(/\.gz$/i.test(path)){
+   if(data[0]!==0x1f||data[1]!==0x8b||data[2]!==8)return false;
+   try{return gunzipSync(data,{maxOutputLength:256*1024*1024}).length>10000}
+   catch(_){return false}
+ }
+ if(/\.js$/i.test(path)){
+   const head=String.fromCharCode(...data.subarray(0,Math.min(4096,data.length)));
+   if(/^\s*(?:<!doctype|<html|<\?xml|\{|\[)/i.test(head)||head.includes('\0'))return false;
+   return /\b(?:function|var|const|let|typeof|importScripts|exports|module|self|window)\b|=>/.test(head)
+ }
+ return false
+}
+async function existsEnough(path,minBytes){
+ try{
+   if((await stat(path)).size<minBytes)return false;
+   return validAssetContent(await readFile(path),path)
+ }catch(_){return false}
+}
 async function fetchWithTimeout(url){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),DOWNLOAD_TIMEOUT_MS);
-  try{return await fetch(url,{redirect:'follow',signal:controller.signal})}
-  finally{clearTimeout(timer)}
+  try{
+    // Keep AbortController live until the BODY is fully read, not just headers.
+    const response=await fetch(url,{redirect:'follow',signal:controller.signal});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }finally{clearTimeout(timer)}
 }
 async function download(urls,path,minBytes){
   if(await existsEnough(path,minBytes))return;
@@ -57,16 +81,19 @@ async function download(urls,path,minBytes){
   let lastError;
   for(const url of urls){
     for(let attempt=1;attempt<=3;attempt+=1){
+      // Never expose an incomplete download as a valid offline OCR asset.
+      const temporary=path+'.partial-'+process.pid;
       try{
-        const response=await fetchWithTimeout(url);
-        if(!response.ok)throw new Error(`HTTP ${response.status}`);
-        const data=Buffer.from(await response.arrayBuffer());
+        const data=await fetchWithTimeout(url);
         if(data.length<minBytes)throw new Error(`asset too small: ${data.length}`);
-        await writeFile(path,data);
+        if(!validAssetContent(data,path))throw new Error('OCR_ASSET_INVALID_CONTENT: '+path);
+        await writeFile(temporary,data);
+        await rename(temporary,path);
         process.stdout.write(`OCR Android asset ready: ${path.replace(projectRoot,'')} (${data.length} bytes) from ${new URL(url).hostname}\n`);
         return;
       }catch(error){
         lastError=error;
+        try{await rm(temporary,{force:true})}catch(_){}
         if(attempt<3)await new Promise(r=>setTimeout(r,1000*attempt));
       }
     }

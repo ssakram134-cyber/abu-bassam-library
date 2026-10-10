@@ -134,7 +134,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet && git diff --cached --quiet; then
+          # Both modified tracked files AND newly imported untracked files
+          # must cause a review PR. git diff alone ignores untracked additions.
+          if [ -z "$(git status --porcelain --untracked-files=all)" ]; then
             echo "No source changes detected."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0

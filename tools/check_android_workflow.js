@@ -53,7 +53,9 @@ if(copyAt<0||downloadAt<0||copyAt>downloadAt)throw new Error('Android assets mus
 
 need(native,"message.type === 'webBootReady'",'native shell must wait for explicit webBootReady');
 need(native,'const STARTUP_WATCHDOG_MS = 12000;','startup watchdog must be 12 seconds and fail closed');
-need(native,'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة','startup timeout must report failure instead of unlocking');
+need(native,'لم تكتمل مكونات التطبيق بأمان. بياناتك المحفوظة لم تُحذف. أعد محاولة التحميل دون الحاجة إلى اتصال بالإنترنت.','startup timeout must present the current safe locked failure message');
+need(native,'setTimeout(() => setStartupFailed(true), STARTUP_WATCHDOG_MS)','startup watchdog must actually enter failed state');
+need(native,'onPress={retryStartup}','failed startup must offer an explicit retry');
 for(const marker of [
   'onLoad={() => setWebReady(true)}',
   'onLoadEnd={() => setWebReady(true)}',

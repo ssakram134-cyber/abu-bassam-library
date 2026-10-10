@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const validator=read('tools/validate_imported_source.js'),wf=read('tools/check_android_workflow.js');
+const config=JSON.parse(read('package.json'));
+assert.equal(Object.prototype.hasOwnProperty.call(config.scripts,'repair:source'),false);
+assert.match(wf,/Object\.prototype\.hasOwnProperty\.call\(pkg\.scripts\|\|\{\},'repair:source'\)/);
+assert.doesNotMatch(validator,/repair:source missing explicit compatibility repair/);
+const clause="if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source script is forbidden in source imports');";
+assert.ok(validator.includes(clause),'Trusted ZIP validator must agree with check:web prohibition');
+const check=new Function('pkg','fail',clause+';return true');
+assert.equal(check(config,msg=>{throw Error(msg)}),true,'Canonical source with no repair script accepted');
+assert.throws(()=>check({scripts:{'repair:source':'node scripts/patch-startup-stability.mjs'}},msg=>{throw Error(msg)}),/obsolete repair:source/);
+assert.match(read('.github/workflows/import-source-zip.yml'),/Capture trusted validator before extraction/);
+assert.match(read('.github/workflows/import-source-zip.yml'),/npm ci --ignore-scripts --no-audit --no-fund/);
+assert.match(read('.github/workflows/import-source-zip.yml'),/gh pr create/);
+assert.doesNotMatch(read('.github/workflows/import-source-zip.yml'),/git push origin main/);
+console.log('Fresh audit A: canonical ZIP import now accepts no-repair source and explicitly rejects source-mutating legacy repair scripts.');
