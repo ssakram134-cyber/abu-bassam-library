@@ -392,7 +392,7 @@ async function build(){
   window.addEventListener('offline',()=>setSyncStatus('لا يوجد إنترنت • الحفظ المحلي يعمل'));
   scheduleAutoSync(5000);
   setInterval(()=>{if(document.visibilityState!=='hidden'&&automaticDue())void syncNow(false)},900000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();closeOtherBranches();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){scheduleAutoSync(100);void purgeExpiredTrash().then(n=>{if(n&&state.filter==='trash')return refresh()}).catch(()=>{})}});document.addEventListener('abu-bassam-auth-changed',()=>{state.clipboard=null;state.selectedIds.clear();clearOcr();closeModal('vOcrModal');closeOtherBranches();updateVaultAccessUi()});document.addEventListener('abu-runtime-loaded',e=>{if(e.detail?.src==='branch-vault-runtime.js'||e.detail?.src==='admin-permissions-runtime.js')updateVaultAccessUi()})
 }
 
 function setBusy(on,text='جاري العمل...'){state.busy=!!on;if($('vBusy'))$('vBusy').classList.toggle('show',!!on);if($('vBusyText'))$('vBusyText').textContent=text}
