@@ -129,12 +129,15 @@ async function restoreCloud(id,{ownerDeviceRecovery=false}={}){
       ownerDeviceRecovery:transferring,recoveryApproved:confirmed,
       recoverySourceDeviceId:transferring?source:'',recoveryUserId:userId});
     if(restored!==true){status('تم إلغاء الاستعادة أو لم تكتمل');return false}
-    if(identity!==stateScope())throw Error('BACKUP_IDENTITY_CHANGED_AFTER_RESTORE');
+    if(identity!==stateScope()){
+      status('حُفظ الأرشيف في الحساب السابق، لكن الجلسة تغيرت بعد الحفظ؛ أعد تسجيل الدخول إلى الحساب الأصلي للتحقق.');
+      return true
+    }
     await api('cleanup','POST',{retention:retention()}).catch(()=>{});
     stateRemove(LASTFP);stateRemove(LAST);
     log('restore',transferring?'استعادة أرشيف على هاتف بديل':'استعادة نسخة سحابية',id);
     status(transferring?'اكتملت استعادة الهاتف البديل داخل الحساب الموثق ✓':'تمت الاستعادة بنجاح ✓');
-    await refreshList();
+    try{await refreshList()}catch(_){status('اكتملت الاستعادة محليًا؛ تعذر تحديث قائمة النسخ السحابية بسبب الاتصال.')}
     return true
   }catch(e){alert('تعذرت الاستعادة: '+String(e?.message||e));status('تعذرت الاستعادة');return false}
   finally{busy=false;paint()}

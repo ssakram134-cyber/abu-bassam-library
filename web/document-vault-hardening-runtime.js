@@ -144,7 +144,32 @@ async function applyAtomicWithTrash(items,trashRows,{replaceAll=false,expectedRo
 }
 async function blobHash(blob){const bytes=await blob.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const MODERN_PRINT_BACKUP_KEYS=new Set(['abuBassamCardsPrintPreferencesV1','abuBassamDpiEnabledV1']);
-function restoreSettings(snap,mode){if(!snap?.settings)return;if(mode==='snapshot'){const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k)&&!MODERN_PRINT_BACKUP_KEYS.has(k))remove.push(k)}remove.forEach(k=>localStorage.removeItem(k))}Object.entries(snap.settings).forEach(([k,v])=>{if(safeSettingKey(k))localStorage.setItem(k,String(v))})}
+function restoreSettings(snap,mode){
+ if(!snap?.settings)return;
+ const changes=new Map();
+ if(mode==='snapshot'){
+  for(let i=0;i<localStorage.length;i++){
+   const k=localStorage.key(i);
+   if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k)&&!MODERN_PRINT_BACKUP_KEYS.has(k))
+     changes.set(k,null)
+  }
+ }
+ for(const [k,v] of Object.entries(snap.settings))
+   if(safeSettingKey(k))changes.set(k,v);
+ const original=new Map();
+ for(const k of changes.keys())original.set(k,localStorage.getItem(k));
+ try{
+  for(const [k,v] of changes){
+   if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)
+  }
+ }catch(e){
+  // A storage exception is recoverable: roll back all keys already modified.
+  for(const [k,v] of [...original].reverse()){
+   try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(_){}
+  }
+  throw new Error('VAULT_SETTINGS_SAVE_FAILED')
+ }
+}
 
 function safeSettingKey(k){return /^(theme$|abuBassam(?:CardsPrintPreferencesV1$|DpiEnabledV1$|PrintSettings|Typography|CustomFonts|PrinterProfiles|DefaultPrinter|ActivePrinter|ProfessionalPrintPresets|QuestionLanguage|CardFreeLayout|Poster|VaultSort|VaultView|SyncPolicy|VaultAutoSync))/i.test(String(k||''))&&!/(auth|secret|password|token|device|security|operation|notification|customer|credential|session)/i.test(String(k||''))}
 function settings(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!safeSettingKey(k))continue;const v=localStorage.getItem(k);if(v!==null&&v.length<500000)out[k]=v}return out}
@@ -208,7 +233,27 @@ function isEncrypted(bytes){return bytes.length>MAGIC.length+28&&MAGIC.every((v,
 async function decryptBackup(bytes,pass){if(!isEncrypted(bytes))return bytes;const salt=bytes.slice(MAGIC.length,MAGIC.length+16),iv=bytes.slice(MAGIC.length+16,MAGIC.length+28),cipher=bytes.slice(MAGIC.length+28),key=await keyFor(pass,salt);return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,cipher))}
 async function plainBackup(mode='save'){if(!allowed('vaultBackup'))return alert('الأدمن عطّل النسخ الاحتياطي لهذا الفرع.');if(!confirm('النسخة ZIP العادية غير مشفرة. استخدم «نسخة مشفرة للفرع» للملفات الحساسة. هل تريد إنشاء ZIP عادي؟'))return;try{const bytes=await backupBytes(),name='Abu_Bassam_Branch_'+new Date().toISOString().slice(0,10)+'.zip',blob=new Blob([bytes],{type:'application/zip'});if(mode==='share'&&window.Android?.shareBase64){const data=await blobDataUrl(blob);Android.shareBase64(name,'application/zip',data)}else await saveBlob(name,'application/zip',blob);window.AbuBassamOps?.add?.({type:'backup',title:'نسخة احتياطية للفرع',details:'ZIP غير مشفر',section:'الحفظ والمستندات'})}catch(e){alert('تعذر إنشاء النسخة: '+String(e?.message||e))}}
 async function encryptedBackup(){if(!allowed('vaultEncryptedBackup'))return alert('الأدمن عطّل النسخ الاحتياطي لهذا الفرع.');let pass=prompt('كلمة مرور النسخة المشفرة: 12 محرفًا على الأقل، حرف + رقم + رمز.');if(pass===null)return;if(!strong(pass))return alert('استخدم كلمة مرور قوية: 12 محرفًا على الأقل وتتضمن حرفًا ورقمًا ورمزًا.');if(prompt('أعد كلمة مرور النسخة المشفرة:')!==pass)return alert('كلمتا المرور غير متطابقتين.');try{const bytes=await backupBytes(),enc=await encryptBackup(bytes,pass);pass='';await saveBlob('Abu_Bassam_Branch_Encrypted_'+Date.now()+'.abuvault','application/octet-stream',new Blob([enc],{type:'application/octet-stream'}));window.AbuBassamOps?.add?.({type:'backup',title:'نسخة مشفرة للفرع',details:'AES-GCM / PBKDF2',section:'الحفظ والمستندات'});alert('تم إنشاء نسخة مشفرة لهذا الفرع ✓')}catch(e){pass='';alert('تعذر إنشاء النسخة المشفرة: '+String(e?.message||e))}}
-async function safeRestore(file,options={}){if(!file)return false;if(!allowed('vaultRestoreBackup')){alert('الأدمن عطّل استعادة النسخ لهذا الفرع.');return false}const mode=options.mode==='merge'?'merge':'snapshot';if(file.size>MAX_ZIP+40*1024*1024){alert('حجم النسخة أكبر من الحد الآمن.');return false}if(Date.now()<restoreLockedUntil){alert('تم إيقاف محاولات فك النسخة مؤقتًا. حاول لاحقًا.');return false}try{let bytes=new Uint8Array(await file.arrayBuffer());if(isEncrypted(bytes)){let pass=prompt('أدخل كلمة مرور النسخة المشفرة:');if(pass===null)return false;try{bytes=await decryptBackup(bytes,pass);restoreFails=0;pass=''}catch(_){pass='';restoreFails++;if(restoreFails>=5){restoreLockedUntil=Date.now()+5*60*1000;restoreFails=0}throw new Error('كلمة مرور النسخة غير صحيحة')}}if(bytes.byteLength>MAX_ZIP)throw new Error('حجم ZIP بعد فك التشفير أكبر من الحد الآمن');if(!window.JSZip)throw new Error('أداة الاستعادة غير جاهزة');const zip=await JSZip.loadAsync(bytes),entry=zip.file('manifest.json');if(!entry)throw new Error('النسخة لا تحتوي manifest صالحًا');const manifest=JSON.parse(await entry.async('string'));if(manifest.format!=='AbuBassamVault'||!Array.isArray(manifest.items))throw new Error('تنسيق النسخة غير معروف');if(manifest.items.length>MAX_ITEMS)throw new Error('النسخة تحتوي أكثر من 1000 عنصر');const d=device(),recovery=authorizeOwnerDeviceRecovery(manifest,options);if(manifest.branchDeviceId&&manifest.branchDeviceId!==d.id&&!recovery)throw new Error('هذه النسخة تخص فرعًا آخر ولا يمكن فتحها في هذا الفرع');if(!manifest.branchDeviceId&&role()!=='owner')throw new Error('نسخة قديمة بلا هوية فرع؛ استعادتها متاحة للأدمن فقط');if(!manifest.branchDeviceId&&!options.silentConfirm&&!confirm('هذه نسخة قديمة قبل عزل الفروع. استعادتها ستصبح حالة فرع الأدمن الحالي. متابعة؟'))return false;let declared=0,seenIds=new Set(),seenPaths=new Set();for(const m of manifest.items){const archiveId=String(m.id||'');if(archiveId){if(seenIds.has(archiveId))throw new Error('معرّف ملف مكرر داخل النسخة');seenIds.add(archiveId)}const size=Math.max(0,Number(m.size)||0);if(size>MAX_FILE)throw new Error('ملف داخل النسخة يتجاوز 100MB');declared+=size;if(declared>MAX_TOTAL)throw new Error('إجمالي الملفات بعد الفك يتجاوز 500MB');const p=String(m.path||'');if(!/^files\/[A-Za-z0-9_.-]+\//.test(p)||p.includes('..'))throw new Error('مسار غير آمن داخل النسخة');if(seenPaths.has(p))throw new Error('مسار ملف مكرر داخل النسخة');seenPaths.add(p)}
+function validatedBackupSettings(snap){
+ if(snap?.format!=='AbuBassamSettings')return null;
+ if(!snap.settings||typeof snap.settings!=='object'||Array.isArray(snap.settings))
+   throw Error('VAULT_SETTINGS_INVALID');
+ for(const [key,value] of Object.entries(snap.settings)){
+  if(safeSettingKey(key)&&(typeof value!=='string'||value.length>=500000))
+   throw Error('VAULT_SETTINGS_INVALID_VALUE')
+ }
+ return snap
+}
+async function finishRestoredArchive(count,recovery,mode,options,preparedSettings){
+ const warnings=[];
+ if(preparedSettings)try{restoreSettings(preparedSettings,mode)}catch(_){warnings.push('تعذر تحديث بعض إعدادات الطباعة والتطبيق')}
+ try{window.AbuBassamOps?.add?.({type:'restore',title:'استعادة نسخة فرع',details:`${count} عنصر • ${recovery?'استعادة هاتف جديد':mode==='snapshot'?'Snapshot':'دمج'}`,section:'الحفظ والمستندات'})}catch(_){}
+ try{await window.DocumentVault?.onShow?.()}catch(_){warnings.push('تعذر تحديث عرض الأرشيف؛ أغلق القسم وافتحه مجددًا')}
+ if(!options.silentSuccess)alert(warnings.length
+  ?`تم حفظ ${count} عنصر في الأرشيف بنجاح، لكن: ${warnings.join('، ')}. الملفات لا تحتاج إلى استعادة ثانية.`
+  :`تمت استعادة ${count} عنصر داخل هذا الفرع ✓`)
+ return true
+}
+async function safeRestore(file,options={}){if(!file)return false;if(!allowed('vaultRestoreBackup')){alert('الأدمن عطّل استعادة النسخ لهذا الفرع.');return false}const mode=options.mode==='merge'?'merge':'snapshot';if(file.size>MAX_ZIP+40*1024*1024){alert('حجم النسخة أكبر من الحد الآمن.');return false}if(Date.now()<restoreLockedUntil){alert('تم إيقاف محاولات فك النسخة مؤقتًا. حاول لاحقًا.');return false}let committed=false;try{let bytes=new Uint8Array(await file.arrayBuffer());if(isEncrypted(bytes)){let pass=prompt('أدخل كلمة مرور النسخة المشفرة:');if(pass===null)return false;try{bytes=await decryptBackup(bytes,pass);restoreFails=0;pass=''}catch(_){pass='';restoreFails++;if(restoreFails>=5){restoreLockedUntil=Date.now()+5*60*1000;restoreFails=0}throw new Error('كلمة مرور النسخة غير صحيحة')}}if(bytes.byteLength>MAX_ZIP)throw new Error('حجم ZIP بعد فك التشفير أكبر من الحد الآمن');if(!window.JSZip)throw new Error('أداة الاستعادة غير جاهزة');const zip=await JSZip.loadAsync(bytes),entry=zip.file('manifest.json');if(!entry)throw new Error('النسخة لا تحتوي manifest صالحًا');const manifest=JSON.parse(await entry.async('string'));if(manifest.format!=='AbuBassamVault'||!Array.isArray(manifest.items))throw new Error('تنسيق النسخة غير معروف');if(manifest.items.length>MAX_ITEMS)throw new Error('النسخة تحتوي أكثر من 1000 عنصر');const d=device(),recovery=authorizeOwnerDeviceRecovery(manifest,options);if(manifest.branchDeviceId&&manifest.branchDeviceId!==d.id&&!recovery)throw new Error('هذه النسخة تخص فرعًا آخر ولا يمكن فتحها في هذا الفرع');if(!manifest.branchDeviceId&&role()!=='owner')throw new Error('نسخة قديمة بلا هوية فرع؛ استعادتها متاحة للأدمن فقط');if(!manifest.branchDeviceId&&!options.silentConfirm&&!confirm('هذه نسخة قديمة قبل عزل الفروع. استعادتها ستصبح حالة فرع الأدمن الحالي. متابعة؟'))return false;let declared=0,seenIds=new Set(),seenPaths=new Set();for(const m of manifest.items){const archiveId=String(m.id||'');if(archiveId){if(seenIds.has(archiveId))throw new Error('معرّف ملف مكرر داخل النسخة');seenIds.add(archiveId)}const size=Math.max(0,Number(m.size)||0);if(size>MAX_FILE)throw new Error('ملف داخل النسخة يتجاوز 100MB');declared+=size;if(declared>MAX_TOTAL)throw new Error('إجمالي الملفات بعد الفك يتجاوز 500MB');const p=String(m.path||'');if(!/^files\/[A-Za-z0-9_.-]+\//.test(p)||p.includes('..'))throw new Error('مسار غير آمن داخل النسخة');if(seenPaths.has(p))throw new Error('مسار ملف مكرر داخل النسخة');seenPaths.add(p)}
 if(manifest.trash!==undefined){
  if(!Array.isArray(manifest.trash)||manifest.trash.length>MAX_ITEMS)throw Error('INVALID_TRASH_MANIFEST');
  if(typeof manifest.trashScope!=='string'||(!recovery&&manifest.trashScope!==trashScope())||(recovery&&manifest.trashScope!==recovery.sourceScope))throw Error('VAULT_TRASH_SCOPE_MISMATCH');
@@ -257,6 +302,10 @@ if(hasTrash){
     })
   }
 }
+let preparedSettings=null;
+const settingsEntry=zip.file('app-settings.json');if(settingsEntry&&!recovery){
+  preparedSettings=validatedBackupSettings(JSON.parse(await settingsEntry.async('string')))
+}
 if(recovery){
   if(mode!=='snapshot'||!scopeOk()||role()!=='owner'||window.AbuBassamCloud?.session?.()?.user?.id!==recovery.uid)
     throw Error('VAULT_RECOVERY_ACCESS_CHANGED');
@@ -266,9 +315,18 @@ if(recovery){
   })
 }else if(hasTrash)await applyAtomicWithTrash(prepared,preparedTrash,{replaceAll:mode==='snapshot',expectedRows:existing,expectedTrash,scope:restoreScope});
 else await applyAtomic(prepared,{replaceAll:mode==='snapshot',expectedRows:existing});
+committed=true; // IndexedDB transaction completed; subsequent UI/settings errors cannot undo it.
 if(recovery&&(!scopeOk()||role()!=='owner'||
   window.AbuBassamCloud?.session?.()?.user?.id!==recovery.uid||
   device().id!==recovery.destination))throw Error('VAULT_RECOVERY_ACCESS_CHANGED');
-const settingsEntry=zip.file('app-settings.json');if(settingsEntry&&!recovery){const snap=JSON.parse(await settingsEntry.async('string'));if(snap?.format==='AbuBassamSettings')restoreSettings(snap,mode)}try{window.AbuBassamOps?.add?.({type:'restore',title:'استعادة نسخة فرع',details:`${prepared.length} عنصر • ${recovery?'استعادة هاتف جديد':mode==='snapshot'?'Snapshot':'دمج'}`,section:'الحفظ والمستندات'})}catch(_){}await window.DocumentVault?.onShow?.();if(!options.silentSuccess)alert(`تمت استعادة ${prepared.length} عنصر داخل هذا الفرع ✓`);return true}catch(error){if(!options.silentError)alert('تعذرت الاستعادة: '+String(error?.message||error));return false}finally{if($('vBackupInput'))$('vBackupInput').value=''}}
+return await finishRestoredArchive(prepared.length,recovery,mode,options,preparedSettings)
+}catch(error){
+ if(committed){
+  if(!options.silentError)alert('تم حفظ ملفات الأرشيف بالفعل، ولكن تعذر إكمال خطوة لاحقة: '+String(error?.message||error)+'. لا تكرر الاستعادة قبل التحقق من الملفات.')
+  return true
+ }
+ if(!options.silentError)alert('تعذرت الاستعادة قبل حفظ الملفات: '+String(error?.message||error))
+ return false
+}finally{try{const input=$('vBackupInput');if(input)input.value=''}catch(_){}}}
 window.AbuDocumentVaultHardening=Object.freeze({backup:plainBackup,encryptedBackup,restore:safeRestore,safeSettingKey});
 })();
