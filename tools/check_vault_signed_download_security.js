@@ -58,12 +58,12 @@ const isItemRevision=(p,u,d,id)=>{
  const prefix=itemPath(id,'',u,d);
  return p.startsWith(prefix)&&p.slice(prefix.length).length>0&&!p.slice(prefix.length).includes('/');
 };
-const run=new Function('url','req','context','validItemId','json','isItemRevision','BUCKET',
+const run=new Function('url','req','context','validItemId','json','isItemRevision','BUCKET','permissionEnabled',
  'return (async()=>{const action=url.searchParams.get("action");'+handler+'})()');
 const makeUrl=(p=origItem,v=row.updated_at,id='item-1')=>new URL(
  'https://example.invalid/functions/v1/branch-vault?action=download-url&item_id='+encodeURIComponent(id)+
  '&expected_path='+encodeURIComponent(p)+'&expected_updated_at='+encodeURIComponent(v));
-const invoke=u=>run(u,{method:'GET'},context,validItemId,json,isItemRevision,'abu-bassam-private');
+const invoke=u=>run(u,{method:'GET'},context,validItemId,json,isItemRevision,'abu-bassam-private',()=>true);
 (async()=>{
  let out=await invoke(makeUrl());
  assert.equal(out.status,200);
