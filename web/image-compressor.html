@@ -31,6 +31,7 @@
 <script>
 const MAX_FILES=20,MAX_TOTAL_BYTES=80*1024*1024,SAFE_MAX_PIXELS=24_000_000;
 const SUPPORTED_IMAGE_TYPES=new Set(['image/jpeg','image/jpg','image/png','image/webp']);
+const MAX_BRIDGE_PAYLOAD=12*1024*1024; // encoded characters in one Android WebView bridge message
 const $=id=>document.getElementById(id);let selected=[],results=[],cancelRequested=false,processing=false;
 const fmt=n=>{n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(2)+' MB'};
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -58,7 +59,7 @@ async function processAll(){if(!selected.length||processing)return;resetResults(
 function setProcessingControls(locked){$('quality').disabled=locked;$('maxDimension').disabled=locked;document.querySelectorAll('.preset').forEach(button=>{button.disabled=locked})}
 function namedDataUrl(dataUrl,name){const s=String(dataUrl||''),marker=';base64,';const at=s.indexOf(marker);if(at<0)return s;return `${s.slice(0,at)};name=${encodeURIComponent(name)}${marker}${s.slice(at+marker.length)}`}
 function browserSave(name,data){const a=document.createElement('a');a.download=name;a.href=data;document.body.appendChild(a);a.click();a.remove()}
-function saveResults(){const good=results.filter(r=>!r.error);if(!good.length)return alert('لا توجد نتائج صالحة للحفظ.');if(window.parent?.Android?.savePagesToGallery){const pages=good.map(r=>namedDataUrl(r.dataUrl,r.name));window.parent.postMessage({type:'abuCompressionReady',pages,originalBytes:good.reduce((s,r)=>s+r.originalBytes,0),compressedBytes:good.reduce((s,r)=>s+r.compressedBytes,0),failedCount:results.length-good.length},'*')}else{good.forEach(r=>browserSave(r.name,r.dataUrl));alert(`تم تجهيز ${good.length} صورة للحفظ.`)}}
+function saveResults(){const good=results.filter(r=>!r.error);if(!good.length)return alert('لا توجد نتائج صالحة للحفظ.');if(window.parent?.Android?.savePagesToGallery){const totalEncoded=good.reduce((sum,r)=>sum+String(r.dataUrl||'').length,0);if(totalEncoded>MAX_BRIDGE_PAYLOAD)return alert('الصور المضغوطة كثيرة أو كبيرة للإرسال دفعة واحدة بأمان. قسّم المجموعة إلى دفعات أصغر ثم احفظها. الأصول لم تتغير.');const pages=good.map(r=>namedDataUrl(r.dataUrl,r.name));window.parent.postMessage({type:'abuCompressionReady',pages,originalBytes:good.reduce((s,r)=>s+r.originalBytes,0),compressedBytes:good.reduce((s,r)=>s+r.compressedBytes,0),failedCount:results.length-good.length},'*')}else{good.forEach(r=>browserSave(r.name,r.dataUrl));alert(`تم تجهيز ${good.length} صورة للحفظ.`)}}
 function clearAll(){if(processing)return;selected.forEach(revoke);selected=[];resetResults();renderSelected()}
 $('uploadArea').onclick=()=>$('fileInput').click();$('uploadArea').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('fileInput').click()}};$('fileInput').onchange=e=>{acceptFiles([...(e.target.files||[])]);e.target.value=''};
 ['dragenter','dragover'].forEach(ev=>$('uploadArea').addEventListener(ev,e=>{e.preventDefault();$('uploadArea').classList.add('drag')}));['dragleave','drop'].forEach(ev=>$('uploadArea').addEventListener(ev,e=>{e.preventDefault();$('uploadArea').classList.remove('drag')}));$('uploadArea').addEventListener('drop',e=>acceptFiles([...(e.dataTransfer?.files||[])]));
