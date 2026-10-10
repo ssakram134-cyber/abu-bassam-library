@@ -239,10 +239,24 @@ function editorChanged(){drawEditor(false)}
 function resetEditor(draw=true){if(!state.editor)return;Object.assign(state.editor,{l:0,r:100,t:0,b:100,rotate:0,brightness:100,contrast:100});[['vCropL',0],['vCropR',100],['vCropT',0],['vCropB',100],['vRotate',0],['vBrightness',100],['vContrast',100]].forEach(([id,value])=>$(id).value=value);if(draw)drawEditor(false)}
 function clarify(){if(!requireVault('vaultEnhance'))return;if(!state.editor)return;$('vBrightness').value=106;$('vContrast').value=128;editorChanged()}
 async function saveEditor(){if(!requireVault('vaultImageEdit'))return;
+  const choice=prompt('طريقة حفظ الصورة المعدلة:\n1 — حفظ نسخة جديدة مع الاحتفاظ بالأصل (موصى به)\n2 — استبدال النسخة الأصلية','1');
+  if(choice===null)return;
+  if(choice!=='1'&&choice!=='2')return alert('اختر 1 لنسخة جديدة، أو 2 لاستبدال الأصل.');
+  if(choice==='1'&&!requireVault('vaultAdd'))return;
+  if(choice==='2'&&!confirm('سيُستبدل محتوى الصورة الأصلية نهائيًا. هل تؤكد الاستبدال؟'))return;
+  if(choice==='1'&&(await dbAll()).filter(item=>!item.deleted).length>=MAX_ITEMS)return alert('الأرشيف ممتلئ (1000 ملف). احذف ملفًا أو اختر الاستبدال.');
   let canvas=drawEditor(true);if(!canvas)return alert('حدود القص صغيرة جداً');setBusy(true,'حفظ الصورة المعدّلة بدون ضغط ضياعي...');
-  try{let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png')),item=findItem(state.editor.id);if(!blob||!item)throw new Error('تعذر إنشاء الصورة');item.blob=blob;item.mime='image/png';item.size=blob.size;item.name=item.name.replace(/\.[^.]+$/, '')+'.png';item.updatedAt=new Date().toISOString();item.syncState='pending';await dbPut(item);closeModal('vEditModal');await refresh();if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)}
-  catch(e){alert(e.message||'تعذر حفظ التعديل')}
-  finally{setBusy(false)}
+  try{
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png')),item=findItem(state.editor?.id);
+    if(!blob||!item||item.deleted)throw new Error('تعذر إنشاء الصورة أو العثور على الأصل');
+    const now=new Date().toISOString(),base=niceName(item.name).replace(/\.[^.]+$/,'');
+    const next=choice==='1'
+      ? {...item,id:uuid(),name:base+' (نسخة معدلة).png',blob,mime:'image/png',size:blob.size,createdAt:now,updatedAt:now,lastOpenedAt:'',deleted:false,deletedAt:'',syncState:'pending',remoteUpdatedAt:''}
+      : {...item,name:base+'.png',blob,mime:'image/png',size:blob.size,updatedAt:now,syncState:'pending'};
+    await dbPut(next);closeModal('vEditModal');await refresh();
+    logOperation('edit',choice==='1'?'حفظ نسخة معدلة مع إبقاء الأصل':'استبدال صورة أصلية بعد التأكيد',next.name);
+    if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
+  }catch(e){alert(e.message||'تعذر حفظ التعديل')}finally{setBusy(false)}
 }
 function editorCanvas(){let canvas=drawEditor(true);if(!canvas)alert('حدود القص صغيرة جداً');return canvas}
 function saveEditorGallery(){if(!requireVault('vaultSaveGallery'))return;let canvas=editorCanvas();if(!canvas)return;let data=canvas.toDataURL('image/png'),name='Abu_Bassam_Edited_'+Date.now()+'.png';if(window.Android&&Android.saveToGallery)Android.saveToGallery(name,'image/png',data);else saveData(name,'image/png',data);logOperation('gallery','حفظ الصورة المعدّلة في المعرض')}
