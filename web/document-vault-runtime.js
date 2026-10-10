@@ -211,7 +211,7 @@ async function purgeExpiredTrash(){
   }
 }
 async function restoreTrash(id){if(!requireVault('vaultDelete'))return;
-  const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);if(!item?.blob)return alert('لا يمكن استعادة ملف بلا محتوى محلي. ربما حُذف قبل تفعيل السلة.');
+  const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);if(!item?.blob)return alert('لا يمكن استعادة ملف بلا محتوى محلي. ربما حُذف قبل تفعيل السلة.');if((await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('الأرشيف ممتلئ (1000 ملف)؛ لا يمكن استعادة هذا الملف قبل إخلاء مكان. سيبقى في السلة دون تغيير.');
   const now=new Date().toISOString();await dbPut({...item,deleted:false,deletedAt:'',updatedAt:now,syncState:'pending'});
   state.filter='all';await refresh();logOperation('restore','استعادة من سلة المحذوفات: '+item.name);
   if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
