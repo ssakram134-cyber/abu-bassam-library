@@ -195,6 +195,8 @@ function field(label,key,type='text',extra=''){
   return `<label class="cs-field ${extra}">${label}<input data-field="${key}" type="${type}" value="${esc(value)}"></label>`
 }
 let pendingContact=null,contactSelectionCounter=0;
+function cancelPendingContact(){if(!pendingContact)return;pendingContact=null;try{window.Android?.cancelContactChoice?.()}catch(e){}}
+
 function contactButton(field,label){return '<div class="cs-photo-actions"><button type="button" onclick="CardsStudio.pickContact(\''+field+'\')">📇 '+esc(label)+'</button></div>'}
 function currentContactIdentity(){return String(window.AbuBassamCloud?.session?.()?.user?.id||window.AbuBassamSecurity?.device?.()?.device_id||'local')}
 function normalizeContactPhone(input){const value=String(input||'').replace(/\D/g,'');if(/^009647\d{9}$/.test(value))return'0'+value.slice(5);if(/^9647\d{9}$/.test(value))return'0'+value.slice(3);return value}
@@ -204,13 +206,13 @@ function pickContact(field){
  if(!((state.type==='personal'&&field==='phone')||(state.type==='child'&&['guardianPhone','driverPhone'].includes(field))))return;
  if(!window.Android?.pickContact)return alert('اختيار جهة اتصال يحتاج إصدار Android الداعم لهذه الميزة.');
  const requestId=String(++contactSelectionCounter);
- pendingContact={field,requestId,type:state.type,identity:currentContactIdentity()};
+ pendingContact={field,requestId,type:state.type,identity:currentContactIdentity(),formRef:state.forms[state.type],formSnapshot:JSON.stringify(state.forms[state.type])};
  window.Android.pickContact(field,requestId)
 }
 window.AbuBassamNativeContactSelected=function(result){
  const pending=pendingContact;if(!pending||String(result?.requestId||'')!==pending.requestId||result?.target!==pending.field)return;
  pendingContact=null;
- if(pending.identity!==currentContactIdentity()||pending.type!==state.type||!canCard('cardsEditText'))return;
+ if(pending.identity!==currentContactIdentity()||pending.type!==state.type||pending.formRef!==state.forms[state.type]||pending.formSnapshot!==JSON.stringify(state.forms[state.type])||!canCard('cardsEditText'))return;
  if(result.cancelled)return;
  if(result.error)return alert(String(result.error));
  const phone=normalizeContactPhone(result.phone);
@@ -219,7 +221,7 @@ window.AbuBassamNativeContactSelected=function(result){
  if(state.type==='personal'&&!state.forms.personal.name&&result.name)state.forms.personal.name=String(result.name).slice(0,150);
  saveDraft();renderForm();renderPreview()
 };
-document.addEventListener('abu-bassam-auth-changed',()=>{pendingContact=null;try{window.Android?.cancelContactChoice?.()}catch(e){}});
+document.addEventListener('abu-bassam-auth-changed',()=>{cancelPendingContact()});
 function photoTools(){let t=state.photoTransform;return `<div class="cs-photo-tools" id="csPhotoTools"><div class="cs-photo-actions"><button onclick="CardsStudio.pickPhoto()">🖼 إضافة صورة</button><button onclick="CardsStudio.cameraPhoto()">📷 تصوير بالكاميرا</button><button class="alt" onclick="CardsStudio.removePhoto()">حذف الصورة</button><button class="alt" onclick="CardsStudio.resetPhoto()">إعادة القص</button></div><div class="cs-sliders"><label>التكبير<input id="csPhotoZoom" type="range" min="1" max="3.5" step=".01" value="${t.zoom}" oninput="CardsStudio.photoControl()"></label><label>أفقي<input id="csPhotoX" type="range" min="-70" max="70" value="${t.x}" oninput="CardsStudio.photoControl()"></label><label>عمودي<input id="csPhotoY" type="range" min="-70" max="70" value="${t.y}" oninput="CardsStudio.photoControl()"></label><label>دوران<input id="csPhotoRotate" type="range" min="-180" max="180" value="${t.rotate}" oninput="CardsStudio.photoControl()"></label></div></div>`}
 
 function renderForm(){
@@ -404,7 +406,7 @@ function onPhoto(dataUrl){if(!dataUrl||!canCard('cardsImportImage'))return;const
 const previousNativeResult=window.AbuBassamNativeCameraResult;
 window.AbuBassamNativeCameraResult=function(result){if(result?.mode==='barcode'){if(!pendingCameraBarcode||String(result.requestId??'')!==pendingCameraBarcode)return;pendingCameraBarcode=null;return onBarcode(result)}if(result?.mode==='cardPhoto'){if(!pendingCardPhoto||String(result.requestId??'')!==pendingCardPhoto)return;pendingCardPhoto=null;return onPhoto(result.dataUrl)}if(typeof previousNativeResult==='function')return previousNativeResult(result)};
 
-function selectType(type){if(!requireCard('cardsView')||!TYPE_LABELS[type])return;if(type==='qr'&&!requireCard('cardsQr'))return;if(type==='reader'&&!requireCard('cardsBarcode'))return;state.type=type;renderAll()}
+function selectType(type){if(!requireCard('cardsView')||!TYPE_LABELS[type])return;if(type==='qr'&&!requireCard('cardsQr'))return;if(type==='reader'&&!requireCard('cardsBarcode'))return;if(type!==state.type)cancelPendingContact();state.type=type;renderAll()}
 function openModal(id){$(id).classList.add('show')}
 function closeModal(id){$(id).classList.remove('show')}
 function openBrand(){if(!requireCard('cardsEdit'))return;$('csBrandName').value=state.brand.name;$('csBrandPhone').value=state.brand.phone;$('csBrandAddress').value=state.brand.address;$('csBrandEmail').value=state.brand.email||'';$('csBrandWebsite').value=state.brand.website||'';$('csBrandLogoPreview').src=state.brand.logo;openModal('csBrandModal')}
@@ -421,7 +423,7 @@ function resetPhoto(){if(!requireCard('cardsEditImage'))return;state.photoTransf
 function photoControl(){if(!canCard('cardsEditImage'))return;state.photoTransform={zoom:Number($('csPhotoZoom').value),x:Number($('csPhotoX').value),y:Number($('csPhotoY').value),rotate:Number($('csPhotoRotate').value)};renderPreview()}
 function focusCrop(){if(!requireCard('cardsEditImage'))return;let tools=$('csPhotoTools');if(!tools)return alert('هذا النوع من الكروت لا يحتاج صورة');tools.scrollIntoView({behavior:'smooth',block:'center'})}
 function rotate(){if(!requireCard('cardsEdit'))return;state.orientation=state.orientation==='landscape'?'portrait':'landscape';[state.width,state.height]=[state.height,state.width];savePrintSettings();renderPrintSettings();renderPreview();renderStatus()}
-function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;photoImportSequence++;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();savePrintSettings();renderAll()}
+function clearCard(){if(!requireCard('cardsEdit'))return;if(!confirm('حذف بيانات الوجه والظهر معاً؟'))return;cancelPendingContact();photoImportSequence++;state.forms[state.type]=clone(DEFAULT_FORMS[state.type]);state.textStyles[state.type]={};state.photo='';state.photoTransform={zoom:1,x:0,y:0,rotate:0};state.copies=1;saveDraft();savePrintSettings();renderAll()}
 function copyCard(){if(!requireCard('cardsDuplicate'))return;state.copies=cap(state.copies+1,1,MAX_CARDS);if($('csCopies'))$('csCopies').value=state.copies;savePrintSettings();renderPreview();renderStatus()}
 function addQueue(){if(!requireCard('cardsCreate'))return;if(state.type==='reader')return alert('اختر نوع كارت أو حوّل نتيجة القراءة إلى QR');let total=queueCount();if(total+state.copies>MAX_CARDS)return alert('الحد الأقصى 25 كارتاً');state.queue.push({model:modelNow(),copies:state.copies});renderQueue();alert('تمت إضافة الوجه والظهر إلى قائمة الطباعة')}
 function removeQueue(index){if(!requireCard('cardsDelete'))return;state.queue.splice(index,1);renderQueue()}
