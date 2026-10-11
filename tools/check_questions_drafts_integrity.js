@@ -61,7 +61,7 @@ async function verifyCustomMigration(){
  const fragment=between(custom,'async function migrate(){','\nfunction subjectKey(){');
  const legacyKey='abuQuestionCustomTemplatesV1',store=new Map([[legacyKey,'present']]);
  const rows=[],inserted=[];let fail=true;
- const factory=new Function('all','put','legacyRows','localStorage','console','Date','let cache=[];'+fragment+';return {migrate,getCache:()=>cache}');
+ const factory=new Function('all','put','legacyRows','localStorage','console','Date','const LEGACY="abuQuestionCustomTemplatesV1";let cache=[];'+fragment+';return {migrate,getCache:()=>cache}');
  const api=factory(async()=>rows.slice(),async row=>{inserted.push(row.id);if(fail&&row.id==='b')throw Error('QuotaExceeded');rows.push(row)},
   ()=>[{id:'a',html:'one'},{id:'b',html:'two'}],{removeItem:key=>store.delete(key)},{warn(){}},Date);
  await api.migrate();
