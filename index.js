@@ -323,7 +323,11 @@ function App() {
   const saveBase64 = useCallback(async ({ name, mime, data, requestId }) => {
     const confirmationId = String(requestId || '');
     const report = (ok, error = '') => {
-      if (confirmationId) inject('AbuBassamSettingsBackupResult', { requestId: confirmationId, ok, error });
+      if (confirmationId) {
+        const result = { requestId: confirmationId, ok, error };
+        inject('AbuBassamSettingsBackupResult', result);
+        inject('AbuBassamNativeFileSaveResult', result);
+      }
     };
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
