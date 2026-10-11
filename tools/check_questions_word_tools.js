@@ -82,6 +82,29 @@ async function test() {
   assert.ok(host.includes("trustedSource(event,'questionsFrame')"), 'host must authenticate question frame');
   assert.ok(host.includes("data.type==='abuSaveQuestionDocx'"), 'host must handle DOCX');
   assert.ok(host.includes('Android.saveBase64(name,mime,payload)'), 'Android save bridge must be wired');
-  console.log('Question Word tests passed: real DOCX ZIP, Arabic content, student privacy, answer key, marks, duplicate detection, source guard.');
+
+  questions.splice(0, questions.length,
+    question('س1/ السؤال الأول', 'نص المسألة الأولى', 'جواب أول', 3),
+    question('س2/ السؤال الثاني', 'نص المسألة الثانية', 'جواب ثاني', 4),
+    question('س3/ السؤال الثالث', 'نص المسألة الثالثة', 'جواب ثالث', 5));
+  await api.exportVariants();
+  assert.equal(messages.length, 3);
+  assert.equal(messages[2].type, 'abuSaveQuestionVariants');
+  assert.ok(messages[2].name.endsWith('.zip'));
+  const pack = await JSZip.loadAsync(messages[2].data.split(',')[1], { base64: true });
+  const xmls = [];
+  for (const label of ['A', 'B', 'C']) {
+    const file = pack.file('Exam_Model_' + label + '.docx');
+    assert.ok(file, 'missing model ' + label);
+    const child = await JSZip.loadAsync(await file.async('uint8array'));
+    xmls.push(await child.file('word/document.xml').async('string'));
+  }
+  assert.ok(xmls[0].indexOf('نص المسألة الأولى') < xmls[0].indexOf('نص المسألة الثانية'), 'A original order');
+  assert.ok(xmls[1].indexOf('نص المسألة الثانية') < xmls[1].indexOf('نص المسألة الثالثة'), 'B rotated order');
+  assert.ok(xmls[2].indexOf('نص المسألة الثالثة') < xmls[2].indexOf('نص المسألة الثانية'), 'C reversed order');
+  assert.ok(xmls.every(x => !x.includes('جواب أول') && !x.includes('جواب ثاني')), 'variants must omit answer text');
+  assert.ok(host.includes("data.type==='abuSaveQuestionVariants'"), 'host must guard variant ZIP messages');
+
+  console.log('Question Word tests passed: real DOCX ZIP, Arabic content, student privacy, answer key, marks, duplicates, three real Word model files, source guard.');
 }
 test().catch(error => { console.error(error); process.exitCode = 1; });
