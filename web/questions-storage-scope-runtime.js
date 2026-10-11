@@ -19,5 +19,5 @@ function required(){
  if(!id)throw Error('تعذر تحديد الحساب والفرع الموثوقين؛ لم تُحفظ المسودة. افتح حسابك المعتمد أولًا.');
  return id
 }
-window.AbuQuestionScope=Object.freeze({identity,scopedKey,draftRow,required,same:id=>!!id&&id===identity()});
+window.AbuQuestionScope=Object.freeze({identity,scopedKey,draftRow,required,same:id=>!!id&&id===identity(),isOwner:()=>{try{const host=window.parent&&window.parent!==window?window.parent:window;return !!identity()&&host.AbuBassamSecurity?.role?.()==='owner'}catch(_){return false}}});
 })();
