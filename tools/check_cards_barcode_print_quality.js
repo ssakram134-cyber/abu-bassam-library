@@ -4,10 +4,16 @@ const src=fs.readFileSync('web/cards-studio-runtime.js','utf8');
 const qrcodeFactory=new Function(fs.readFileSync('web/qrcode.js','utf8')+'\n'+fs.readFileSync('web/qrcode_UTF8.js','utf8')+';return qrcode;')();
 new Function(src);
 const w={addEventListener(){}},storage={getItem(){return null},setItem(){},removeItem(){}},document={getElementById(){return null},addEventListener(){}};
-const injected=src.replace('window.CardsStudio={','window.__barcodeAudit={state,code128Svg,qrSvg,qrModuleSizeMm,validateSymbols,printDocument,payloadFor,CODE128_PATTERNS};window.CardsStudio={');
+const injected=src.replace('window.CardsStudio={','window.__barcodeAudit={state,code128Svg,qrSvg,qrModuleSizeMm,validateSymbols,printDocument,payloadFor,CODE128_PATTERNS,referenceCardCss,fullPrintCss};window.CardsStudio={');
 assert.notEqual(src,injected);
 new Function('window','document','localStorage','qrcode',injected)(w,document,storage,qrcodeFactory);
 const api=w.__barcodeAudit,sym=api.code128Svg(' AB ');
+for(const css of [api.referenceCardCss(false),api.fullPrintCss()]){
+ const qrRule=css.lastIndexOf('.cs-print-card .cs-qr-box,.cs-print-card .cs-call-qr{z-index:16}');
+ assert.ok(qrRule>=0,'QR safety layer must exist in preview and physical print CSS');
+ assert.ok(qrRule>css.lastIndexOf('.cs-login-back-ref .cs-qr-box'),'QR safety layer must override card-specific styling');
+ assert.ok(css.includes('cs-watermark')||css.includes('cs-qr-box'),'Card CSS must still render the full original template');
+}
 assert.ok(sym.startsWith('<svg'),'Valid Code128 symbol must be rendered');
 assert.ok(sym.includes('preserveAspectRatio="xMidYMid meet"'),'Bars must retain module width ratio during layout');
 assert.ok(sym.includes('style="display:block;width:100%;height:100%"'),'Barcode must fit containing card, not default 300px SVG');
