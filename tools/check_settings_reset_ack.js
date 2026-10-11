@@ -4,6 +4,9 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('web/settings-corrections-runtime.js','utf8');
 const native=fs.readFileSync('index.js','utf8');
+const baseSettings=fs.readFileSync('web/app-settings-runtime.js','utf8');
+assert.ok(baseSettings.includes('استعادة الإعدادات غير متاحة حتى يكتمل تحميل طبقة الأمان'),'Reset before the safety wrapper loads must fail closed');
+assert.ok(!baseSettings.includes('saveSettingsBackup()'),'Unsafe fire-and-forget backup implementation must not return');
 for(const marker of [
   "saveBase64: function (name, mime, data, requestId)",
   "if (!permission.granted) { report(false",
