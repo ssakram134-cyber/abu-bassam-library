@@ -49,6 +49,13 @@ async function test() {
   new vm.Script(host, { filename: 'productivity-tools-runtime.js' });
   const api = sandbox.window.AbuQuestionWordTools;
   assert.ok(api && typeof api.exportDocx === 'function');
+  assert.ok(typeof api.importDocx === 'function');
+  const imported = Array.from(api.parseImportedQuestions(['س1/ اذكر تعريف الماء', 'الماء سائل', 'س2/ ما هي مصادره؟', 'الأنهار والأمطار']));
+  assert.equal(imported.length, 2);
+  assert.equal(imported[0].body, 'الماء سائل');
+  assert.equal(imported[1].body, 'الأنهار والأمطار');
+  assert.ok(runtime.includes('docPart._data.uncompressedSize'), 'decompression must be size guarded');
+  assert.ok(runtime.includes("cloneNode(true)"), 'import must not overwrite existing question nodes');
   const report = api.collect(true);
   assert.equal(report.questions.length, 2);
   assert.equal(report.total, 15);
@@ -105,6 +112,6 @@ async function test() {
   assert.ok(xmls.every(x => !x.includes('جواب أول') && !x.includes('جواب ثاني')), 'variants must omit answer text');
   assert.ok(host.includes("data.type==='abuSaveQuestionVariants'"), 'host must guard variant ZIP messages');
 
-  console.log('Question Word tests passed: real DOCX ZIP, Arabic content, student privacy, answer key, marks, duplicates, three real Word model files, source guard.');
+  console.log('Question Word tests passed: real DOCX ZIP, Arabic content, student privacy, answer key, marks, duplicates, three real Word model files, DOCX text import grouping, decompression guard, source guard.');
 }
 test().catch(error => { console.error(error); process.exitCode = 1; });
