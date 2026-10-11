@@ -306,10 +306,17 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         window.addEventListener('resize', fitToScreen);
 
         let undoStack = [];
+        const QUESTION_UNDO_BUDGET = 6 * 1024 * 1024;
         function saveState() {
             const container = document.getElementById('pages-container');
-            undoStack.push(container.innerHTML);
-            if (undoStack.length > 30) undoStack.shift();
+            if (!container) return;
+            const snapshot = container.innerHTML;
+            if (snapshot.length > QUESTION_UNDO_BUDGET) { undoStack = []; return; }
+            undoStack.push(snapshot);
+            let stored = undoStack.reduce((sum, item) => sum + item.length, 0);
+            while (undoStack.length > 20 || stored > QUESTION_UNDO_BUDGET) {
+                stored -= undoStack.shift().length;
+            }
         }
 
         function undoAction() {
