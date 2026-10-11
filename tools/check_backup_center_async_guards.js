@@ -5,6 +5,9 @@ new Function(source);
 const auditSource=source.replace('window.AbuBackupCenter={',
  'paint=()=>{};status=()=>{};refreshList=async()=>{};window.__backupTest={stateGet,stateSet,backupNow,downloadBytes,restoreCloud,readBoundedPart,due};window.AbuBackupCenter={');
 assert.notEqual(auditSource,source,'Unable to expose backup helpers for regression testing');
+assert.ok(source.includes('`files/${manifest.items.length}-${id}/${name}`'),'Each cloud ZIP record must have a collision-resistant unique path');
+assert.ok(source.includes('htmlEscape(b.branch_name||'), 'Cloud backup branch labels must be HTML-escaped');
+assert.ok(source.includes('htmlEscape(b.backup_id)'), 'Cloud backup IDs in button attributes must be escaped');
 const prefs=new Map(),status=new Map(),alerts=[];
 let userId='owner-A',fetchHandler=null,partReads=0;
 const localStorage={
