@@ -27,19 +27,41 @@
     }
     return items;
   }
+  function phone(value) {
+    var digits = normalize(value).replace(/[\s()+-]/g, '');
+    if (/^07\d{9}$/.test(digits)) return digits;
+    if (/^9647\d{9}$/.test(digits)) return '0' + digits.slice(3);
+    if (/^009647\d{9}$/.test(digits)) return '0' + digits.slice(5);
+    return '';
+  }
+  function containsPhone(content, expected) {
+    var re = /(?:\+?9647\d{9}|009647\d{9}|07\d{9})/g;
+    var found;
+    while ((found = re.exec(content))) {
+      var before = content.charAt(found.index - 1), after = content.charAt(re.lastIndex);
+      if (/[0-9]/.test(before) || /[0-9]/.test(after)) continue;
+      if (phone(found[0]) === expected) return true;
+    }
+    return false;
+  }
   function matches(query, target, mode) {
     var tokens = tokenize(query);
     if (!tokens.length) return true;
     var content = normalize(target);
-    if (tokens.some(function (entry) { return entry.exclude && content.includes(entry.term); })) return false;
+    function contains(entry) {
+      var mobile = phone(entry.term);
+      return mobile ? containsPhone(content, mobile) : content.includes(entry.term);
+    }
+    if (tokens.some(function (entry) { return entry.exclude && contains(entry); })) return false;
     var needed = tokens.filter(function (entry) { return !entry.exclude; });
     if (!needed.length) return true;
-    if (mode === 'any') return needed.some(function (entry) { return content.includes(entry.term); });
-    return needed.every(function (entry) { return content.includes(entry.term); });
+    if (mode === 'any') return needed.some(contains);
+    return needed.every(contains);
   }
   window.AbuVaultSearch = Object.freeze({
     normalize: normalize,
     tokenize: tokenize,
-    matches: matches
+    matches: matches,
+    phone: phone
   });
 }());
