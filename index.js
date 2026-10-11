@@ -127,6 +127,7 @@ function App() {
   const [permissionIntroVisible, setPermissionIntroVisible] = useState(false);
   const [contactAccess, setContactAccess] = useState('unknown');
   const [permissionBusy, setPermissionBusy] = useState(false);
+  const [contactChoice, setContactChoice] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -179,6 +180,15 @@ function App() {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     webRef.current?.injectJavaScript(`if (typeof window.${functionName} === 'function') window.${functionName}(${json}); true;`);
   }, []);
+  const choosePhone = useCallback((choice, phone) => {
+    if (!choice) return;
+    setContactChoice(null);
+    inject('AbuBassamNativeContactSelected', {
+      target: choice.target, requestId: choice.requestId,
+      ...(phone ? { name: choice.name, phone } : { cancelled: true }),
+    });
+  }, [inject]);
+
   const pickContact = useCallback(async ({ target, requestId }) => {
     const field = String(target || '');
     const token = String(requestId || '');
@@ -193,9 +203,15 @@ function App() {
       if (!permission?.granted) throw new Error('لم يُمنح إذن قراءة جهات الاتصال');
       const selected = await Contacts.presentContactPickerAsync();
       if (!selected) { inject('AbuBassamNativeContactSelected', { target: field, requestId: token, cancelled: true }); return; }
-      const number = selected.phoneNumbers?.find(item => typeof item?.number === 'string' && item.number.trim())?.number || '';
-      if (!number) throw new Error('جهة الاتصال المختارة لا تحتوي على رقم هاتف');
-      inject('AbuBassamNativeContactSelected', { target: field, requestId: token, name: String(selected.name || ''), phone: String(number).slice(0,40) });
+      const numbers = (selected.phoneNumbers || [])
+        .filter(item => typeof item?.number === 'string' && item.number.trim())
+        .map(item => ({ label: String(item.label || item.type || 'رقم').slice(0,30), phone: item.number.trim().slice(0,40) }));
+      if (!numbers.length) throw new Error('جهة الاتصال المختارة لا تحتوي على رقم هاتف');
+      if (numbers.length === 1) {
+        inject('AbuBassamNativeContactSelected', { target: field, requestId: token, name: String(selected.name || ''), phone: numbers[0].phone });
+        return;
+      }
+      setContactChoice({ target: field, requestId: token, name: String(selected.name || '').slice(0,120), numbers });
     } catch (error) {
       inject('AbuBassamNativeContactSelected', { target: field, requestId: token, error: String(error?.message || 'تعذر اختيار جهة الاتصال') });
     }
@@ -219,6 +235,7 @@ function App() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (contactChoice) { choosePhone(contactChoice, null); return true; }
       if (cameraMode) { closeCamera(); return true; }
       if (permissionIntroVisible) { finishPermissionIntro(); return true; }
       if (!webReady) return false;
@@ -226,7 +243,7 @@ function App() {
       return true;
     });
     return () => subscription.remove();
-  }, [cameraMode, closeCamera, permissionIntroVisible, finishPermissionIntro, inject, webReady]);
+  }, [cameraMode, closeCamera, contactChoice, choosePhone, permissionIntroVisible, finishPermissionIntro, inject, webReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -539,6 +556,22 @@ function App() {
           </ScrollView>
         </View>
       )}
+      {webReady && contactChoice && (
+        <View style={styles.contactChoiceOverlay}>
+          <ScrollView contentContainerStyle={styles.permissionContent}>
+            <Text style={styles.permissionTitle}>اختيار رقم الهاتف</Text>
+            <Text style={styles.permissionDescription}>لجهة الاتصال: {contactChoice.name || 'جهة اتصال'}. اختر الرقم الذي تريد وضعه في الباج.</Text>
+            {contactChoice.numbers.map((item, index) => (
+              <TouchableOpacity key={index} style={styles.contactNumberButton} onPress={() => choosePhone(contactChoice, item.phone)}>
+                <Text style={styles.contactNumberText}>{item.label} — {item.phone}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => choosePhone(contactChoice, null)}>
+              <Text style={styles.permissionSecondaryText}>إلغاء دون تغيير الرقم</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -566,6 +599,9 @@ function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
+  contactChoiceOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 160, elevation: 160, backgroundColor: '#fffaf3' },
+  contactNumberButton: { padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#bfd9d1', backgroundColor: '#fff' },
+  contactNumberText: { fontSize: 15, fontWeight: '700', textAlign: 'right', color: '#075c50' },
   permissionOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 150, elevation: 150, backgroundColor: '#fffaf3' },
   permissionContent: { paddingHorizontal: 18, paddingVertical: 24, gap: 12 },
   permissionTitle: { color: '#06483e', fontSize: 22, fontWeight: '900', textAlign: 'center' },
