@@ -18,6 +18,17 @@ function syncKey(key){return key+':'+syncScope()}
 function syncGet(key){const scoped=syncKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
 function syncSet(key,value){localStorage.setItem(syncKey(key),String(value))}
 let vaultSessionEpoch=0;
+const SEARCH_RECENTS='abuVaultSearchRecentsV1',SEARCH_SAVED='abuVaultSearchShortcutsV1',SEARCH_OPT_IN='abuVaultSearchRememberV1';
+function searchList(key){if(!vaultScopeOk(false)||!vaultAllowed('vaultView'))return[];try{const rows=JSON.parse(localStorage.getItem(syncKey(key))||'[]');return Array.isArray(rows)?rows.filter(v=>typeof v==='string'&&v.length<=200).slice(0,20):[]}catch(_){return[]}}
+function searchRemember(){return vaultScopeOk(false)&&vaultAllowed('vaultView')&&localStorage.getItem(syncKey(SEARCH_OPT_IN))==='1'}
+function writeSearchList(key,rows){if(!vaultScopeOk(false)||!vaultAllowed('vaultView'))return;try{localStorage.setItem(syncKey(key),JSON.stringify(rows.slice(0,20)))}catch(_){}}
+function addSearchList(key,query){const q=String(query||'').trim().slice(0,200);if(!q)return;writeSearchList(key,[q,...searchList(key).filter(x=>x!==q)]);renderSearchMenus()}
+function recordSearch(){if(searchRemember()&&state.query.trim())addSearchList(SEARCH_RECENTS,state.query)}
+function searchMenu(id,rows,placeholder){const menu=$(id);if(!menu)return;menu.replaceChildren();const blank=document.createElement('option');blank.value='';blank.textContent=placeholder;menu.appendChild(blank);rows.forEach(q=>{const option=document.createElement('option');option.value=q;option.textContent=q;menu.appendChild(option)});menu.value=''}
+function renderSearchMenus(){const allowed=vaultScopeOk(false)&&vaultAllowed('vaultView');const remember=$('vRememberSearch');if(remember)remember.checked=allowed&&searchRemember();searchMenu('vSearchRecent',allowed?searchList(SEARCH_RECENTS):[],'عمليات البحث الأخيرة');searchMenu('vSearchShortcuts',allowed?searchList(SEARCH_SAVED):[],'اختصارات البحث المحفوظة')}
+function selectSearch(query){if(!vaultScopeOk(false)||!vaultAllowed('vaultView'))return;state.query=String(query||'').slice(0,200);const box=$('vSearch');if(box)box.value=state.query;render()}
+function clearSearchEntries(key){if(!vaultScopeOk(false)||!vaultAllowed('vaultView'))return;if(!confirm(key===SEARCH_RECENTS?'مسح سجل عمليات بحثك في هذا الجهاز؟':'مسح اختصارات البحث المحفوظة لهذا الحساب؟'))return;try{localStorage.removeItem(syncKey(key))}catch(_){}renderSearchMenus()}
+
 const state={items:[],filter:'all',sort:localStorage.getItem(SORT_KEY)||'date-desc',view:localStorage.getItem(VIEW_KEY)||'grid',query:'',urls:[],editor:null,ocrTarget:'clipboard',ocrImage:'',syncing:false,busy:false,uploadFolder:''};
 
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
@@ -44,10 +55,10 @@ function clearVaultPrivateView(){
  for(const id of ['vViewModal','vEditModal','vOcrModal'])$(''+id)?.classList.remove('show');
  const view=$('vView');if(view)view.textContent='';
  const ocrText=$('vOcrText');if(ocrText)ocrText.value='';
- const ocrImage=$('vOcrImage');if(ocrImage)ocrImage.removeAttribute('src');
+ const ocrImage=$('vOcrImage');if(ocrImage)ocrImage.removeAttribute('src');state.query='';const search=$('vSearch');if(search)search.value='';if($('vSearchMode'))$('vSearchMode').value='all';
 }
 function handleVaultAuthChanged(){
- clearVaultPrivateView();
+ clearVaultPrivateView();renderSearchMenus();
  if(updateVaultAccessUi())void refresh();
 }
 function updateVaultAccessUi(){
@@ -90,7 +101,8 @@ function mainHtml(){return `<div class="v-shell">
   <div class="v-hero">
     <h2>🗄️ الحفظ والمستندات</h2><p>أرشيف محلي منظم • بحث سريع • OCR • نسخ احتياطي • مزامنة بين الأجهزة</p>
     <label class="v-search">🔎<input id="vSearch" placeholder="ابحث بالاسم أو الحافظة، استخدم الاقتباس للعبارة و - للاستبعاد" autocomplete="off"></label><label style="display:flex;align-items:center;gap:8px;margin:5px 0;color:#fff;font-size:10px" for="vSearchMode">مطابقة الكلمات: <select id="vSearchMode" style="min-height:34px;border-radius:8px;padding:3px;background:white;color:#1f2937"><option value="all">كل الكلمات</option><option value="any">أي كلمة</option></select></label>
-    <div class="v-actions"><button onclick="DocumentVault.openOcr()">📷 تحويل صورة إلى نص</button><button onclick="DocumentVault.backup('save')">⬇ نسخة على الجهاز</button><button onclick="DocumentVault.backup('share')">✉ Google / Gmail</button><button onclick="DocumentVault.encryptedBackup()">🔐 نسخة مشفرة</button><button onclick="DocumentVault.syncNow()">↻ مزامنة الآن</button></div>
+    <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:9px"><label><input id="vRememberSearch" type="checkbox"> تذكر بحثي على هذا الجهاز</label><select id="vSearchRecent" aria-label="البحث الأخير" style="max-width:150px"><option value="">عمليات البحث الأخيرة</option></select><button type="button" id="vClearSearchRecent" style="border-radius:8px;padding:6px">مسح السجل</button><select id="vSearchShortcuts" aria-label="اختصارات البحث" style="max-width:145px"><option value="">اختصارات البحث المحفوظة</option></select><button type="button" id="vSaveSearchShortcut" style="border-radius:8px;padding:6px">☆ حفظ اختصار</button><button type="button" id="vClearSearchShortcuts" style="border-radius:8px;padding:6px">مسح الاختصارات</button></div>
+  <div class="v-actions"><button onclick="DocumentVault.openOcr()">📷 تحويل صورة إلى نص</button><button onclick="DocumentVault.backup('save')">⬇ نسخة على الجهاز</button><button onclick="DocumentVault.backup('share')">✉ Google / Gmail</button><button onclick="DocumentVault.encryptedBackup()">🔐 نسخة مشفرة</button><button onclick="DocumentVault.syncNow()">↻ مزامنة الآن</button></div>
     <div class="v-syncline"><span id="vSyncStatus">المزامنة: جاهزة</span><label class="v-auto"><input id="vAutoSync" type="checkbox" onchange="DocumentVault.setAutoSync(this.checked)"> تلقائي يومياً وعند توفر الإنترنت</label></div>
   </div>
   <div class="v-tabs"><button class="v-tab active" data-filter="all" onclick="DocumentVault.setFilter('all')">الكل</button><button class="v-tab" data-filter="image" onclick="DocumentVault.setFilter('image')">الصور</button><button class="v-tab" data-filter="pdf" onclick="DocumentVault.setFilter('pdf')">PDF</button><button class="v-tab" data-filter="text" onclick="DocumentVault.setFilter('text')">النصوص</button><button class="v-tab" data-filter="file" onclick="DocumentVault.setFilter('file')">الملفات</button><button class="v-tab" data-filter="folder:المستمسكات" onclick="DocumentVault.setFilter('folder:المستمسكات')">المستمسكات</button><button class="v-tab" data-filter="folder:المعاملات" onclick="DocumentVault.setFilter('folder:المعاملات')">المعاملات</button><button class="v-tab" data-filter="folder:الباجات" onclick="DocumentVault.setFilter('folder:الباجات')">الباجات</button><button class="v-tab" data-filter="favorite" onclick="DocumentVault.setFilter('favorite')">★ المفضلة</button><button class="v-tab" data-filter="recent" onclick="DocumentVault.setFilter('recent')">🕘 الأخيرة</button><button class="v-tab" data-filter="trash" onclick="DocumentVault.setFilter('trash')">🗑 سلة المحذوفات (30 يومًا)</button></div>
@@ -115,7 +127,7 @@ async function build(){
   if($('vaultCenter'))return;
   addCss();let app=document.querySelector('.app'),preview=document.querySelector('.app .preview');if(!app)return;
   let section=document.createElement('section');section.id='vaultCenter';section.innerHTML=mainHtml();app.insertBefore(section,preview||null);document.body.insertAdjacentHTML('beforeend',modalHtml());document.dispatchEvent(new CustomEvent('abu-vault-ready'));
-  $('vSearch').oninput=event=>{state.query=event.target.value;render()};$('vSearchMode').onchange=()=>render();
+  $('vSearch').oninput=event=>{state.query=event.target.value;render()};$('vSearch').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();recordSearch();render()}};$('vSearch').onblur=recordSearch;$('vSearchMode').onchange=()=>render();$('vRememberSearch').onchange=event=>{if(vaultScopeOk(false)&&vaultAllowed('vaultView')){try{localStorage.setItem(syncKey(SEARCH_OPT_IN),event.target.checked?'1':'0')}catch(_){}}renderSearchMenus()};$('vSearchRecent').onchange=event=>selectSearch(event.target.value);$('vSearchShortcuts').onchange=event=>selectSearch(event.target.value);$('vClearSearchRecent').onclick=()=>clearSearchEntries(SEARCH_RECENTS);$('vClearSearchShortcuts').onclick=()=>clearSearchEntries(SEARCH_SAVED);$('vSaveSearchShortcut').onclick=()=>{if(!state.query.trim())return alert('اكتب عبارة بحث أولاً');addSearchList(SEARCH_SAVED,state.query)};renderSearchMenus();
   $('vSort').value=state.sort;
   $('vAutoSync').checked=autoSync();
   $('vImageInput').onchange=event=>addFiles(event.target.files,'image',event.target);
