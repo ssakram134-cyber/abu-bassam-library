@@ -56,11 +56,7 @@ async function error(p,pattern){await assert.rejects(p,pattern)}
  assert.equal(records.get('en:account-B:device-1').html,'old-English-local');
  assert.ok(saved.has('abuBassamQuestionDraftEnglishV1'));
  user='account-A';
- readHook=id=>{if(id==='ar')user='account-Z'};
- await error(run('ar'),/تغيّر الحساب/);
- readHook=null;user='account-A';
- const before=records.size;await error(run('en'),/المسؤول|توجد مسودة|لم يُعثر/).catch(()=>{});
- // A login change while reading a legacy draft is refused before the insert.
+ // A login change while reading a legacy draft is refused before insertion.
  records.delete('ar:account-A:device-1');
  readHook=id=>{if(id==='ar')user='account-C'};
  await error(run('ar'),/تغيّر الحساب/);
