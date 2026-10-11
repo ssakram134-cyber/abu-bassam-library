@@ -54,5 +54,10 @@ const required=[
  [geo,"const {a,b,c,d,e,f,g,h}=coeff",'perspective warp must use homography coefficients'],
  [geo,"pagePrintMeta?.paper||",'ruler must reflect current generated page size'],
  [photo,"margin:p.margin,photoImageRef:im",'poster margin must be stored with current print pages'],
+
+ [geo,"geoTarget=it;geoSourceAtOpen=it.src",'geometry editor must pin source image when opened'],
+ [geo,"if(geoTarget!==it||it.src!==originalSrc||item()!==it||!uploadedImages.includes(it))",'geometry must reject selection changes after asynchronous work'],
+ [geo,"if(geometryBusy||ev.pointerId!==pointerId)return;",'geometry corners must not move while processing'],
+ [geo,"if((y&63)===63)await new Promise(resolve=>requestAnimationFrame(resolve));",'projective correction must yield for responsive touch'],
 ];for(const [src,needle,reason] of required)if(!src.includes(needle))issues.push('Regression guard missing: '+reason);
 if(issues.length){console.error(issues.join('\n'));process.exitCode=1}else console.log('First-section photo/print code audit passed\n'+rows.join('\n')+'\nTotal physical lines examined by static checks: '+total+'; critical regression guards: '+required.length);
