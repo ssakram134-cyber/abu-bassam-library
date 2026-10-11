@@ -269,7 +269,12 @@ function qrModuleSizeMm(model,svg){
 function validateSymbols(jobs){if(state.sides==='front')return;for(const model of jobs){
  const svg=symbolSvg(model);
  if(!svg.startsWith('<svg'))throw new Error('باركود غير قابل للقراءة ضمن هذا التصميم. قلل المعلومات أو اختر QR بدل Code 128 قبل الطباعة أو الحفظ.');
- if(!(model.type==='qr'&&model.data.symbology==='code128')){
+ if(model.type==='qr'&&model.data.symbology==='code128'){
+  const bounds=svg.match(/viewBox="0 0 ([\d.]+) 70"/),modules=bounds?Number(bounds[1]):0;
+  const printedWidth=(Number(state.width)||85.6)*.82;
+  const mm=modules>0?printedWidth/modules:0;
+  if(mm>0&&mm<.20)throw new Error('أشرطة Code 128 رفيعة جدًا للطباعة بهذا المقاس: '+mm.toFixed(2)+' ملم للوحدة. قلل الأحرف أو استخدم QR.');
+ }else{
   const mm=qrModuleSizeMm(model,svg);
   if(mm>0&&mm<.20)throw new Error('رمز QR كثيف جدًا ضمن مقاس الكارت: '+mm.toFixed(2)+' ملم للوحدة. قلل النص أو كبّر مقاس الطباعة؛ لا يمكن ضمان قراءته بعد الطباعة.');
  }
