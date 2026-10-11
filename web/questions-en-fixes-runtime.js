@@ -49,7 +49,7 @@ async function dbDelete(){
  }catch(e){return false}
 }
 async function durableSave(show=false){
- const c=$('pages-container'),owner=scope();if(!c||resettingDraft||!owner){if(show)alert('Authenticated question storage is unavailable.');return false}
+ const c=$('pages-container'),owner=scope();if(!c||resettingDraft||!owner){window.AbuQuestionScope?.reportSave?.(false);if(show)alert('Authenticated question storage is unavailable.');return false}
  const html=c.innerHTML,gen=draftGeneration;
  const task=saveQueue.catch(()=>{}).then(async()=>{
   if(gen!==draftGeneration||resettingDraft||owner!==scope())return false;
@@ -60,6 +60,7 @@ async function durableSave(show=false){
  });
  saveQueue=task;
  const ok=await task;
+ window.AbuQuestionScope?.reportSave?.(ok);
  if(show)alert(ok?'English question draft saved ✓':'Draft storage is unavailable.');
  return ok
 }
