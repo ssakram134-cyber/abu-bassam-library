@@ -8,6 +8,8 @@ const enHtml=fs.readFileSync('web/questions-en.html','utf8');
 const host=fs.readFileSync('web/productivity-tools-runtime.js','utf8');
 const templates=fs.readFileSync('web/questions-templates-runtime.js','utf8');
 const maintenance=fs.readFileSync('web/questions-maintenance-runtime.js','utf8');
+const questionScope=fs.readFileSync('web/questions-storage-scope-runtime.js','utf8');
+new vm.Script(questionScope,{filename:'question account scope'});
 new vm.Script(host,{filename:'question host'});
 new vm.Script(templates,{filename:'question templates'});
 new vm.Script(maintenance,{filename:'question maintenance'});
@@ -37,16 +39,17 @@ function draftHarness(language,stored=null){
  const block=language==='ar'
   ?between(source,'async function saveDurableDraft(','\nfunction fileToDataUrl(')
   :between(source,'async function durableSave(','\nfunction addCss(');
- const state=language==='ar'
+ const state=(language==='ar'
   ?'let saveTimer=0,hydrating=false,editedDuringHydration=false,resettingDraft=false,draftWrites=Promise.resolve(),draftGeneration=0;'
-  :'let saveTimer=0,hydrating=false,editedDuringHydration=false,resettingDraft=false,draftGeneration=0,saveQueue=Promise.resolve();const DRAFT_KEY="EnglishDraft";';
+  :'let saveTimer=0,hydrating=false,editedDuringHydration=false,resettingDraft=false,draftGeneration=0,saveQueue=Promise.resolve();const DRAFT_KEY="EnglishDraft";')
+  +'const scope=()=>window.AbuQuestionScope.identity();const sk=k=>window.AbuQuestionScope.scopedKey(k);';
  const box={innerHTML:'first'},alerts=[],records=[],values=new Map(),location={reloadCount:0,reload(){this.reloadCount++}};
  let failDelete=false,storedRow=stored,restoreResolve=null;
  const idbPut=async(html)=>{records.push(html);storedRow={html};return true};
  const idbGet=async()=>storedRow;
  const idbDelete=async()=>!failDelete;
  const localStorage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,String(v)),removeItem:k=>values.delete(k)};
- const noop=()=>{},window={fitToScreen:noop};
+ const noop=()=>{},window={fitToScreen:noop,AbuQuestionScope:{identity:()=> 'user-A:device-1',scopedKey:key=>key+':user-A:device-1'}};
  const factory=new Function('$','idbPut','idbGet','idbDelete','dbPut','dbGet','dbDelete','localStorage','window','location','alert','confirm','clearTimeout','setTimeout','stableRebind','normalizeHeaders','enhanceAnswers','rebind','enhanceHeader','fit','META_KEY','LOCAL_TS_KEY','IDB_KEY',
   state+block+';return {save:'+(language==='ar'?'saveDurableDraft':'durableSave')+',reset:'+(language==='ar'?'resetDurableDraft':'reset')+',restore:'+(language==='ar'?'restoreDurableIfNeeded':'restoreDurableEnglish')+'};');
  const api=factory(()=>box,idbPut,idbGet,idbDelete,idbPut,idbGet,idbDelete,localStorage,window,location,
@@ -72,16 +75,26 @@ async function verifyDraft(language){
 async function verifyCustomMigration(){
  const fragment=between(custom,'async function migrate(){','\nfunction subjectKey(){');
  const legacyKey='abuQuestionCustomTemplatesV1',store=new Map([[legacyKey,'present']]);
- const rows=[],inserted=[];let fail=true;
- const factory=new Function('all','put','legacyRows','localStorage','console','Date','const LEGACY="abuQuestionCustomTemplatesV1";let cache=[];'+fragment+';return {migrate,getCache:()=>cache}');
- const api=factory(async()=>rows.slice(),async row=>{inserted.push(row.id);if(fail&&row.id==='b')throw Error('QuotaExceeded');rows.push(row)},
-  ()=>[{id:'a',html:'one'},{id:'b',html:'two'}],{removeItem:key=>store.delete(key)},{warn(){}},Date);
+ const rows=[],inserted=[];let fail=true,confirmed=false;
+ const factory=new Function('all','put','legacyRows','localStorage','console','Date','confirm','window','inject',
+  'const LEGACY="abuQuestionCustomTemplatesV1";let cache=[];const scope=()=>window.AbuQuestionScope.identity();const scopedId=id=>scope()+"|"+id;'
+  +fragment+';return {migrate,importLegacy,getCache:()=>cache}');
+ const win={AbuQuestionScope:{identity:()=> 'user-A:device-1'},parent:{AbuBassamSecurity:{role:()=> 'owner'}}};
+ const api=factory(async()=>rows.slice(),async row=>{inserted.push(row.id);if(fail&&row.id==='user-A:device-1|legacy-b')throw Error('QuotaExceeded');rows.push(row)},
+  ()=>[{id:'a',html:'one'},{id:'b',html:'two'}],{removeItem:key=>store.delete(key)},{warn(){}},Date,()=>confirmed,win,async()=>{});
  await api.migrate();
- assert.equal(store.has(legacyKey),true,'Partial migration must not delete original custom templates');
- assert.deepEqual(rows.map(x=>x.id),['a']);
- fail=false;await api.migrate();
- assert.deepEqual(rows.map(x=>x.id),['a','b'],'Retry should resume without duplicating completed items');
- assert.equal(store.has(legacyKey),false,'After verified migration old storage may be cleared');
+ assert.equal(rows.length,0,'Legacy templates must never auto-transfer to an unrelated user');
+ assert.equal(store.has(legacyKey),true,'Global templates must remain quarantined');
+ assert.equal(await api.importLegacy(),false,'Explicit confirmation is required for legacy import');
+ confirmed=true;
+ await assert.rejects(api.importLegacy(),/QuotaExceeded/);
+ assert.equal(store.has(legacyKey),true,'Failed manual import must not delete global templates');
+ assert.equal(rows.length,1);
+ fail=false;await api.importLegacy();
+ assert.deepEqual(rows.map(x=>x.id),['user-A:device-1|legacy-a','user-A:device-1|legacy-b']);
+ await api.importLegacy();
+ assert.equal(rows.length,2,'Retrying manual import must not duplicate already imported templates');
+ assert.equal(store.has(legacyKey),true,'Successful manual import still preserves original for recovery');
  return true
 }
 (async()=>{
