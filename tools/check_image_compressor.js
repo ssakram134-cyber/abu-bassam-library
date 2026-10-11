@@ -13,7 +13,7 @@ for(const m of [
   'MAX_FILES=20','MAX_TOTAL_BYTES=80*1024*1024','SAFE_MAX_PIXELS=24_000_000',
   "addEventListener('drop'",'moveItem','removeItem','beforeImg','afterImg','maxDimension',
   'cancelRequested','if(cancelRequested)break','catch(e){results.push','image/png','image/webp',
-  'namedDataUrl','encodeURIComponent(name)','_compressed_','ممتازة للطباعة','ضعيفة للطباعة الكبيرة',
+  'namedDataUrl','encodeURIComponent(name)',"'upscaled':'compressed'",'ممتازة للطباعة','ضعيفة للطباعة الكبيرة',
   'blob.size>=file.size','imageSmoothingQuality','overflow-y:auto','currentBytes()+incomingBytes',
   'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
 ])need(html,m,'image compressor');
