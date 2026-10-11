@@ -24,7 +24,10 @@ const api=new Function('URL','Buffer','gunzipSync','stat','readFile','fetch','se
      return {ok:true,headers:{get:()=>null},body:{getReader(){let sent=false;return {read(){downloadReads++;if(sent)return Promise.resolve({done:true});sent=true;return new Promise(done=>responses.push(()=>done({done:false,value:validJs})))},releaseLock(){}}}}};
    }
    const buf=url.includes('bad')?Buffer.from('<html>'+('ERROR '.repeat(300))+'</html>'):validJs;
-   return {ok:true,headers:{get:()=>String(buf.length)},body:{getReader(){let read=false;return {read:async()=>{if(read)return {done:true};read=true;return {done:false,value:buf}},releaseLock(){}}}}};
+   const length=url.includes('short-body')?buf.length+37:url.includes('encoded')?buf.length-37:buf.length;
+   const headers={get:name=>name==='content-length'?String(length):name==='content-encoding'&&url.includes('encoded')?'gzip':null};
+   if(url.includes('nonstream'))return {ok:true,headers,arrayBuffer:async()=>buf};
+   return {ok:true,headers,body:{getReader(){let read=false;return {read:async()=>{if(read)return {done:true};read=true;return {done:false,value:buf}},releaseLock(){}}}}};
  },
  (fn,ms)=>{const id={ms};if(ms===45000)timers.add(id);else queueMicrotask(fn);return id},
  id=>timers.delete(id),
@@ -62,6 +65,10 @@ assert.equal(api.validAssetContent(Buffer.from([0x1f,0x8b,8,0,1,2,3]),'ara.train
  assert.equal(result.length,validJs.length);
  assert.equal(timers.size,0,'Timer must be cleared after body completion');
  await assert.rejects(api.fetchWithTimeout('https://example.org/good',16),/exceeds maximum download size/);
+ await assert.rejects(api.fetchWithTimeout('https://example.org/short-body',4*1024*1024),/response length mismatch/,'Reject truncated streaming downloads');
+ await assert.rejects(api.fetchWithTimeout('https://example.org/short-body-nonstream',4*1024*1024),/response length mismatch/,'Reject truncated non-streaming downloads');
+ const decoded=await api.fetchWithTimeout('https://example.org/encoded',4*1024*1024);
+ assert.equal(decoded.length,validJs.length,'Do not compare decompressed bytes with compressed Content-Length');
  assert.equal(timers.size,0);
- console.log('Offline asset checks passed: reject HTML/corrupt GZIP, keep timeout through body, bound size, atomic replacement and cleanup.');
+ console.log('Offline asset checks passed: reject truncated body/HTML/corrupt GZIP, handle decompression, keep timeout through body, bound size, atomic replacement and cleanup.');
 })().catch(e=>{console.error(e);process.exitCode=1});
