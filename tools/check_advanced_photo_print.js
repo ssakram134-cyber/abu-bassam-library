@@ -33,7 +33,7 @@ for(const marker of [
   "if(pageCanvases.length>20){let pdf=makePdfData()"
 ])need(home,marker,'main photo/print regression');
 const presetRuntime=read('print-presets-runtime.js');
-for(const marker of ['Array.isArray(stored)','presets=presets.slice(0,30)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
+for(const marker of ['Array.isArray(stored)','if(!save(next))return false','presets=next.slice(0,30)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
 // A poster has one authoritative layout/assembly engine; preview delegates to it.
 for(const forbidden of ['function buildPosterOriented()','function posterPlanStrict()','function installPosterOverrides()']){
  if(read('advanced-completion-runtime.js').includes(forbidden))errors.push('Obsolete duplicate poster engine: '+forbidden);
