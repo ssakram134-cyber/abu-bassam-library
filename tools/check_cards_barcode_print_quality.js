@@ -19,6 +19,10 @@ for(const code of codes){let dark=true;for(const digit of api.CODE128_PATTERNS[c
 assert.equal(JSON.stringify(entries),JSON.stringify(expected),'Start B, exact data including spaces, weighted checksum and stop must match pattern');
 assert.ok(sym.includes('viewBox="0 0 '+(x+10)+' 70"'),'Code128 must retain 10X quiet zone on both sides');
 assert.ok(!api.code128Svg('ملاك').startsWith('<svg'),'Arabic should require QR');
+api.state.type='qr';api.state.output='cr80';api.state.sides='both';api.state.width=85.6;api.state.height=53.98;
+const codeModel=content=>({type:'qr',data:{symbology:'code128',kind:'text',content},brand:{name:'Library'},width:85.6});
+api.validateSymbols([codeModel('07829781753')]);
+assert.throws(()=>api.validateSymbols([codeModel('A'.repeat(48))]),/Code 128 رفيعة جدًا|Code 128 رفيعة|أشرطة Code 128/,'Overly narrow Code128 must be blocked at CR80 size');
 const short={type:'qr',data:{symbology:'qr',kind:'text',content:'07829781753'},brand:{name:'Library'},width:85.6};
 api.state.type='qr';api.state.forms.qr={...short.data};api.state.sides='both';api.state.output='cr80';api.state.width=85.6;api.state.height=53.98;api.state.queue=[];
 const low=api.qrModuleSizeMm(short,api.qrSvg('07829781753'));
@@ -30,4 +34,4 @@ assert.ok(denseMm<.20,'Test needs genuinely dense QR');
 assert.throws(()=>api.validateSymbols([dense]),/كثيف جدًا/,'Unreadably dense QR must not be presented as printable');
 api.state.queue=[{model:dense,copies:1}];
 assert.throws(()=>api.printDocument(),/كثيف جدًا/,'Printing cannot silently bypass density check');
-console.log('Cards barcode print checks passed: exact Code128 data/checksum/quiet zones and non-stretched sizing, dense QR print rejected and valid QR accepted.');
+console.log('Cards barcode print checks passed: exact Code128 data/checksum/quiet zones and non-stretched sizing, dense QR/Code128 prints rejected and valid symbols accepted.');
