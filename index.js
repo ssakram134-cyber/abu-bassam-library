@@ -7,6 +7,7 @@ import {
   Linking,
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { registerRootComponent } from 'expo';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
+import * as Contacts from 'expo-contacts';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
@@ -28,6 +30,7 @@ const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
+const PERMISSION_INTRO_KEY = 'abu_bassam_first_run_permissions_v1';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
@@ -52,6 +55,9 @@ const ANDROID_BRIDGE = `
     shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
     openExternal: function (url) { send('openExternal', { url: url }); },
     openAppSettings: function () { send('openAppSettings'); },
+    showPermissionGuide: function () { send('showPermissionGuide'); },
+    pickContact: function (target, requestId) { send('pickContact', { target: target, requestId: requestId }); },
+    cancelContactChoice: function () { send('cancelContactChoice'); },
     getDeviceInfo: function () { send('getDeviceInfo'); },
     cleanCache: function () { send('cleanCache'); },
     security: function (action, requestId, payload) { send('security', { action: action, requestId: requestId, payload: payload || {} }); },
@@ -84,7 +90,7 @@ function printDimensions(paper) {
   }
   return { width: 210, height: 297 };
 }
-function nativeDeviceInfo(cameraPermission) {
+function nativeDeviceInfo(cameraPermission, contactAccess) {
   const constants = Platform.constants || {};
   const model = String(constants.Model || constants.model || 'Android');
   const manufacturer = String(constants.Manufacturer || constants.manufacturer || '').trim();
@@ -101,6 +107,8 @@ function nativeDeviceInfo(cameraPermission) {
       : cameraPermission?.canAskAgain === false
         ? 'مرفوض — افتح إعدادات النظام'
         : 'يُطلب عند الاستخدام',
+    contactsPermission: contactAccess === 'granted' ? 'مسموح' : contactAccess === 'blocked' ? 'مرفوض — افتح الإعدادات' : 'اختياري عند استخدام الباج',
+    batteryPermission: 'إعداد اختياري من معلومات تطبيق Android',
     connection: 'هذا الجهاز',
   };
 }
@@ -108,7 +116,7 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission, refreshCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraBusy, setCameraBusy] = useState(false);
@@ -117,11 +125,104 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [permissionIntroVisible, setPermissionIntroVisible] = useState(false);
+  const [contactAccess, setContactAccess] = useState('unknown');
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [contactChoice, setContactChoice] = useState(null);
+  const contactPickerEpochRef = useRef(0);
+
+  useEffect(() => {
+    let mounted = true;
+    SecureStore.getItemAsync(PERMISSION_INTRO_KEY).then((done) => {
+      if (mounted && done !== '1') setPermissionIntroVisible(true);
+    }).catch(() => { if (mounted) setPermissionIntroVisible(true); });
+    Contacts.getPermissionsAsync().then((result) => {
+      if (mounted) setContactAccess(result?.granted ? 'granted' : result?.canAskAgain === false ? 'blocked' : 'ask');
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  const finishPermissionIntro = useCallback(() => {
+    setPermissionIntroVisible(false);
+    SecureStore.setItemAsync(PERMISSION_INTRO_KEY, '1').catch(() => {});
+  }, []);
+
+  const allowCameraFromIntro = useCallback(async () => {
+    if (permissionBusy) return;
+    setPermissionBusy(true);
+    try {
+      const status = await refreshCameraPermission();
+      if (!status?.granted && status?.canAskAgain === false) {
+        await Linking.openSettings();
+        return;
+      }
+      const granted = status?.granted ? status : await requestCameraPermission();
+      if (!granted?.granted && granted?.canAskAgain === false) {
+        Alert.alert('إذن الكاميرا', 'تم منع طلب الإذن. يمكنك تفعيله لاحقًا من إعدادات تطبيق Android.');
+      }
+    } catch (_) {
+      Alert.alert('إذن الكاميرا', 'تعذر طلب الكاميرا. افتح إعدادات التطبيق للسماح بها.');
+    } finally { setPermissionBusy(false); }
+  }, [permissionBusy, refreshCameraPermission, requestCameraPermission]);
+
+  const allowContactsFromIntro = useCallback(async () => {
+    if (permissionBusy) return;
+    setPermissionBusy(true);
+    try {
+      const result = await Contacts.requestPermissionsAsync();
+      setContactAccess(result?.granted ? 'granted' : result?.canAskAgain === false ? 'blocked' : 'ask');
+      if (!result?.granted && result?.canAskAgain === false) {
+        Alert.alert('جهات الاتصال', 'يمكنك تفعيل إذن قراءة الأرقام من إعدادات Android لاحقًا.');
+      }
+    } catch (_) { Alert.alert('جهات الاتصال', 'تعذر طلب إذن جهات الاتصال على هذا الجهاز.'); }
+    finally { setPermissionBusy(false); }
+  }, [permissionBusy]);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     webRef.current?.injectJavaScript(`if (typeof window.${functionName} === 'function') window.${functionName}(${json}); true;`);
   }, []);
+  const choosePhone = useCallback((choice, phone) => {
+    if (!choice) return;
+    setContactChoice(null);
+    inject('AbuBassamNativeContactSelected', {
+      target: choice.target, requestId: choice.requestId,
+      ...(phone ? { name: choice.name, phone } : { cancelled: true }),
+    });
+  }, [inject]);
+
+  const pickContact = useCallback(async ({ target, requestId }) => {
+    const field = String(target || '');
+    const token = String(requestId || '');
+    if (!['phone', 'guardianPhone', 'driverPhone'].includes(field) || !/^[1-9][0-9]{0,9}$/.test(token)) return;
+    const pickerEpoch = ++contactPickerEpochRef.current;
+    try {
+      let permission = await Contacts.getPermissionsAsync();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        throw new Error('إذن جهات الاتصال مرفوض. افتح إعدادات Android لتفعيله عند الحاجة.');
+      }
+      if (!permission?.granted) permission = await Contacts.requestPermissionsAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask');
+      if (!permission?.granted) throw new Error('لم يُمنح إذن قراءة جهات الاتصال');
+      const selected = await Contacts.presentContactPickerAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      if (!selected) { inject('AbuBassamNativeContactSelected', { target: field, requestId: token, cancelled: true }); return; }
+      const numbers = (selected.phoneNumbers || [])
+        .filter(item => typeof item?.number === 'string' && item.number.trim())
+        .map(item => ({ label: String(item.label || item.type || 'رقم').slice(0,30), phone: item.number.trim().slice(0,40) }));
+      if (!numbers.length) throw new Error('جهة الاتصال المختارة لا تحتوي على رقم هاتف');
+      if (numbers.length === 1) {
+        inject('AbuBassamNativeContactSelected', { target: field, requestId: token, name: String(selected.name || ''), phone: numbers[0].phone });
+        return;
+      }
+      setContactChoice({ target: field, requestId: token, name: String(selected.name || '').slice(0,120), numbers });
+    } catch (error) {
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      inject('AbuBassamNativeContactSelected', { target: field, requestId: token, error: String(error?.message || 'تعذر اختيار جهة الاتصال') });
+    }
+  }, [inject]);
+
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
@@ -140,31 +241,43 @@ function App() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (contactChoice) { choosePhone(contactChoice, null); return true; }
       if (cameraMode) { closeCamera(); return true; }
+      if (permissionIntroVisible) { finishPermissionIntro(); return true; }
       if (!webReady) return false;
       inject('AbuBassamNativeBackPress', { source: 'hardware', at: Date.now() });
       return true;
     });
     return () => subscription.remove();
-  }, [cameraMode, closeCamera, inject, webReady]);
+  }, [cameraMode, closeCamera, contactChoice, choosePhone, permissionIntroVisible, finishPermissionIntro, inject, webReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshCameraPermission().catch(() => {});
+        Contacts.getPermissionsAsync().then(permission =>
+          setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask')
+        ).catch(() => {});
+      }
       if (webReady) inject('AbuBassamNativeAppState', { state, at: Date.now() });
     });
     return () => subscription.remove();
-  }, [inject, webReady]);
+  }, [inject, refreshCameraPermission, webReady]);
 
   const openCamera = useCallback(async (mode, frameKind = 'paper') => {
     try {
-      let permission = cameraPermission;
+      let permission = await refreshCameraPermission();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        cameraError('تم منع إذن الكاميرا. افتح إعدادات Android ← التطبيقات ← مكتبة أبو بسام ← الكاميرا.');
+        return;
+      }
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
     } catch (_) { cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.'); }
-  }, [cameraError, cameraPermission, requestCameraPermission]);
+  }, [cameraError, refreshCameraPermission, requestCameraPermission]);
 
   const captureDocument = useCallback(async () => {
     if (!cameraReady || cameraBusy || !cameraRef.current) return;
@@ -321,7 +434,7 @@ function App() {
     try { await Linking.openSettings(); }
     catch (_) { Alert.alert('تعذر فتح الإعدادات', 'افتح إعدادات Android ثم اختر تطبيق مكتبة أبو بسام.'); }
   }, []);
-  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission)), [cameraPermission, inject]);
+  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission, contactAccess)), [cameraPermission, contactAccess, inject]);
   const cleanCache = useCallback(async () => {
     try {
       const root = FileSystem.cacheDirectory;
@@ -339,7 +452,7 @@ function App() {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
       if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
       if (action === 'secureDelete') { await SecureStore.deleteItemAsync(safeKey()); return replySecurity(requestId, true, true); }
-      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission));
+      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission, contactAccess));
       if (action === 'biometricStatus') {
         const [available, enrolled, types] = await Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync(), LocalAuthentication.supportedAuthenticationTypesAsync()]);
         return replySecurity(requestId, true, { available, enrolled, types });
@@ -358,7 +471,7 @@ function App() {
       }
       throw new Error('عملية الأمان غير معروفة');
     } catch (error) { replySecurity(requestId, false, null, error?.message || error); }
-  }, [cameraPermission, replySecurity]);
+  }, [cameraPermission, contactAccess, replySecurity]);
 
   const scanBarcodeImage = useCallback(async ({ data }) => {
     let uri = null;
@@ -383,6 +496,9 @@ function App() {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
+    if (message.type === 'showPermissionGuide') { Contacts.getPermissionsAsync().then(p => setContactAccess(p?.granted ? 'granted' : p?.canAskAgain === false ? 'blocked' : 'ask')).catch(() => {}); setPermissionIntroVisible(true); return; }
+    if (message.type === 'pickContact') return pickContact(message);
+    if (message.type === 'cancelContactChoice') { contactPickerEpochRef.current += 1; setContactChoice(null); return; }
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -398,7 +514,7 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, pickContact, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
@@ -418,6 +534,51 @@ function App() {
         onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {webReady && permissionIntroVisible && !cameraMode && (
+        <View style={styles.permissionOverlay}>
+          <ScrollView contentContainerStyle={styles.permissionContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.permissionTitle}>أذونات مكتبة أبو بسام</Text>
+            <Text style={styles.permissionDescription}>مرحبًا بك. اختر ما تسمح به للتطبيق. يمكنك المتابعة حتى لو رفضت أي إذن، ولا نطلب الوصول إلى الصور أو الملفات كلها.</Text>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>📷 الكاميرا</Text>
+              <Text style={styles.permissionDescription}>لتصوير المستمسكات والهوية وقراءة الباركود. {cameraPermission?.granted ? 'مسموح ✓' : 'تُطلب أيضًا عند فتح الكاميرا.'}</Text>
+              <TouchableOpacity disabled={permissionBusy || cameraPermission?.granted} style={styles.permissionButton} onPress={allowCameraFromIntro}><Text style={styles.permissionButtonText}>{cameraPermission?.granted ? 'مسموح ✓' : cameraPermission?.canAskAgain === false ? 'فتح إعدادات الكاميرا' : 'السماح للكاميرا'}</Text></TouchableOpacity>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>👥 جهات الاتصال — اختياري</Text>
+              <Text style={styles.permissionDescription}>لاختيار رقم هاتف ولي الأمر أو سائق الخط أو الباج التعريفي. نستخدم جهة الاتصال التي تختارها فقط، ولا نعدّل دفتر الهاتف.</Text>
+              <TouchableOpacity disabled={permissionBusy || contactAccess === 'granted'} style={styles.permissionButton} onPress={() => contactAccess === 'blocked' ? Linking.openSettings().catch(() => {}) : allowContactsFromIntro()}><Text style={styles.permissionButtonText}>{contactAccess === 'granted' ? 'مسموح ✓' : contactAccess === 'blocked' ? 'فعّل من الإعدادات' : 'السماح بقراءة الأرقام'}</Text></TouchableOpacity>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>🗂 الصور والملفات</Text>
+              <Text style={styles.permissionDescription}>يتم اختيارها من نافذة ملفات Android فقط؛ لا نطلب صلاحية الوصول الشامل إلى التخزين.</Text>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>🔋 البطارية — اختياري</Text>
+              <Text style={styles.permissionDescription}>لا يحتاج التطبيق لاستثناء من توفير البطارية عند تشغيله عادةً. لتغيير إعداداته افتح معلومات التطبيق ثم البطارية، ولا يعني ذلك ضمان مزامنة مستمرة بالخلفية.</Text>
+              <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => Linking.openSettings().catch(() => Alert.alert('إعدادات Android', 'افتح معلومات التطبيق ← البطارية.'))}><Text style={styles.permissionSecondaryText}>فتح إعدادات التطبيق والبطارية</Text></TouchableOpacity>
+            </View>
+            <Text style={styles.permissionDescription}>إشعارات التطبيق الداخلية متاحة دون طلب إذن إشعارات Android؛ وسيُطلب الإذن عند تفعيل إشعارات النظام مستقبلًا إذا كانت مستخدمة. الإنترنت لا يُظهر نافذة سماح.</Text>
+            <TouchableOpacity style={styles.permissionContinue} disabled={permissionBusy} onPress={finishPermissionIntro}><Text style={styles.permissionContinueText}>متابعة إلى تطبيق المكتبة</Text></TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+      {webReady && contactChoice && (
+        <View style={styles.contactChoiceOverlay}>
+          <ScrollView contentContainerStyle={styles.permissionContent}>
+            <Text style={styles.permissionTitle}>اختيار رقم الهاتف</Text>
+            <Text style={styles.permissionDescription}>لجهة الاتصال: {contactChoice.name || 'جهة اتصال'}. اختر الرقم الذي تريد وضعه في الباج.</Text>
+            {contactChoice.numbers.map((item, index) => (
+              <TouchableOpacity key={index} style={styles.contactNumberButton} onPress={() => choosePhone(contactChoice, item.phone)}>
+                <Text style={styles.contactNumberText}>{item.label} — {item.phone}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => choosePhone(contactChoice, null)}>
+              <Text style={styles.permissionSecondaryText}>إلغاء دون تغيير الرقم</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -445,6 +606,21 @@ function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
+  contactChoiceOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 160, elevation: 160, backgroundColor: '#fffaf3' },
+  contactNumberButton: { padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#bfd9d1', backgroundColor: '#fff' },
+  contactNumberText: { fontSize: 15, fontWeight: '700', textAlign: 'right', color: '#075c50' },
+  permissionOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 150, elevation: 150, backgroundColor: '#fffaf3' },
+  permissionContent: { paddingHorizontal: 18, paddingVertical: 24, gap: 12 },
+  permissionTitle: { color: '#06483e', fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  permissionDescription: { color: '#554b43', fontSize: 13, lineHeight: 21, textAlign: 'right' },
+  permissionRow: { borderWidth: 1, borderColor: '#d7d1c8', borderRadius: 14, padding: 13, backgroundColor: '#fff', gap: 7 },
+  permissionLabel: { color: '#06483e', fontSize: 16, fontWeight: '900', textAlign: 'right' },
+  permissionButton: { backgroundColor: '#087f72', alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 11, borderRadius: 9 },
+  permissionButtonText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  permissionSecondaryButton: { paddingVertical: 9, alignSelf: 'flex-start' },
+  permissionSecondaryText: { color: '#085eae', fontSize: 13, fontWeight: '800' },
+  permissionContinue: { marginTop: 5, paddingVertical: 16, backgroundColor: '#06483e', borderRadius: 13, alignItems: 'center' },
+  permissionContinueText: { color: '#fff', fontWeight: '900', fontSize: 15 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
   loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },
