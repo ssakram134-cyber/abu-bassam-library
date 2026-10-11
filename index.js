@@ -89,7 +89,7 @@ function printDimensions(paper) {
   }
   return { width: 210, height: 297 };
 }
-function nativeDeviceInfo(cameraPermission) {
+function nativeDeviceInfo(cameraPermission, contactAccess) {
   const constants = Platform.constants || {};
   const model = String(constants.Model || constants.model || 'Android');
   const manufacturer = String(constants.Manufacturer || constants.manufacturer || '').trim();
@@ -106,6 +106,8 @@ function nativeDeviceInfo(cameraPermission) {
       : cameraPermission?.canAskAgain === false
         ? 'مرفوض — افتح إعدادات النظام'
         : 'يُطلب عند الاستخدام',
+    contactsPermission: contactAccess === 'granted' ? 'مسموح' : contactAccess === 'blocked' ? 'مرفوض — افتح الإعدادات' : 'اختياري عند استخدام الباج',
+    batteryPermission: 'إعداد اختياري من معلومات تطبيق Android',
     connection: 'هذا الجهاز',
   };
 }
@@ -390,7 +392,7 @@ function App() {
     try { await Linking.openSettings(); }
     catch (_) { Alert.alert('تعذر فتح الإعدادات', 'افتح إعدادات Android ثم اختر تطبيق مكتبة أبو بسام.'); }
   }, []);
-  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission)), [cameraPermission, inject]);
+  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission, contactAccess)), [cameraPermission, contactAccess, inject]);
   const cleanCache = useCallback(async () => {
     try {
       const root = FileSystem.cacheDirectory;
@@ -408,7 +410,7 @@ function App() {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
       if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
       if (action === 'secureDelete') { await SecureStore.deleteItemAsync(safeKey()); return replySecurity(requestId, true, true); }
-      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission));
+      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission, contactAccess));
       if (action === 'biometricStatus') {
         const [available, enrolled, types] = await Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync(), LocalAuthentication.supportedAuthenticationTypesAsync()]);
         return replySecurity(requestId, true, { available, enrolled, types });
@@ -427,7 +429,7 @@ function App() {
       }
       throw new Error('عملية الأمان غير معروفة');
     } catch (error) { replySecurity(requestId, false, null, error?.message || error); }
-  }, [cameraPermission, replySecurity]);
+  }, [cameraPermission, contactAccess, replySecurity]);
 
   const scanBarcodeImage = useCallback(async ({ data }) => {
     let uri = null;
