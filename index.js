@@ -411,19 +411,28 @@ function App() {
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
+    let tempPdfUri = '';
     try {
-      if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
+      if (!String(html || '').trim()) throw new Error('لا توجد صفحات لحفظها');
       const result = await Print.printToFileAsync({ html: String(html), base64: true });
-      const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
+      tempPdfUri = String(result?.uri || '');
+      const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`);
+      const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
       if (!permission.granted) return;
+      const base64 = result.base64 || await FileSystem.readAsStringAsync(tempPdfUri, { encoding: FileSystem.EncodingType.Base64 });
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+    } catch (error) {
+      Alert.alert('تعذر حفظ PDF', String(error?.message || error));
+    } finally {
+      // The print-to-file cache must be cleared even if the user cancels folder selection.
+      if (tempPdfUri && FileSystem.cacheDirectory && tempPdfUri.startsWith(FileSystem.cacheDirectory)) {
+        await FileSystem.deleteAsync(tempPdfUri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
