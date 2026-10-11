@@ -454,7 +454,7 @@ function App() {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
-    if (message.type === 'showPermissionGuide') { setPermissionIntroVisible(true); return; }
+    if (message.type === 'showPermissionGuide') { Contacts.getPermissionsAsync().then(p => setContactAccess(p?.granted ? 'granted' : p?.canAskAgain === false ? 'blocked' : 'ask')).catch(() => {}); setPermissionIntroVisible(true); return; }
     if (message.type === 'pickContact') return pickContact(message);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
