@@ -51,7 +51,7 @@ assert.equal(typeof original,'function');
 const delegated=[];
 win.AbuBassamNativeCameraResult=result=>delegated.push(result);
 const exposed=cards.replace('window.CardsStudio={',
- 'renderForm=()=>{};renderPreview=()=>{};window.__integratedCardsState=state;window.CardsStudio={');
+ 'renderForm=()=>{};renderPreview=()=>{};renderAll=()=>{};window.__integratedCardsState=state;window.CardsStudio={');
 assert.notEqual(exposed,cards,'Card source must expose test state');
 new Function('window','document','localStorage','alert',exposed)(win,document,storage,()=>{});
 const mergedHandler=win.AbuBassamNativeCameraResult;
