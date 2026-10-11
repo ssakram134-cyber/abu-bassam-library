@@ -676,6 +676,7 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         }
 
         function resetQuestionDraft() {
+            if (!window.__ABU_QUESTIONS_EN_FIXES_V2__) return alert('Wait until the secure draft editor has loaded before clearing a draft.');
             if (!confirm('Start a new form? The current English draft will be removed.')) return;
             const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
             if(!scopedKey)return alert('Authenticated storage unavailable; the draft was not reset.');
