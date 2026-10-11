@@ -112,10 +112,21 @@ function modalHtml(){return `<div id="abuQTemplateModal" class="abu-qmodal"><div
 function addControls(){let bar=$('controls');if(!bar)return;if(!$('abuTemplatesBtn')){let b=document.createElement('button');b.id='abuTemplatesBtn';b.className='btn abu-qbtn';b.textContent='📚 القوالب';b.onclick=openTemplates;bar.appendChild(b)}if(!$('abuFormatBtn')){let b=document.createElement('button');b.id='abuFormatBtn';b.className='btn abu-format-btn';b.textContent='✍️ تنسيق';b.onclick=openFormat;bar.appendChild(b)}if(!$('abuUndo2')){let u=document.createElement('button');u.id='abuUndo2';u.className='btn btn-undo';u.textContent='↶ تراجع';u.onclick=undo2;bar.appendChild(u);let r=document.createElement('button');r.id='abuRedo2';r.className='btn btn-undo';r.textContent='↷ إعادة';r.onclick=redo2;bar.appendChild(r)}}
 
 function currentHtml(){return $('pages-container')?.innerHTML||''}
-function pushHistory(force=false){let now=currentHtml();if(!now||(!force&&now===lastSnapshot))return;if(lastSnapshot)history.push(lastSnapshot);if(history.length>40)history.shift();lastSnapshot=now;redoStack=[]}
+const QUESTION_HISTORY_BUDGET=6*1024*1024;
+function boundQuestionHistory(stack){
+ let total=stack.reduce((sum,entry)=>sum+entry.length,0);
+ while(stack.length&&(stack.length>20||total>QUESTION_HISTORY_BUDGET))
+  total-=stack.shift().length;
+}
+function pushHistory(force=false){
+ let now=currentHtml();
+ if(!now||(!force&&now===lastSnapshot))return;
+ if(lastSnapshot){history.push(lastSnapshot);boundQuestionHistory(history)}
+ lastSnapshot=now;redoStack=[]
+}
 function scheduleHistory(){clearTimeout(historyTimer);historyTimer=setTimeout(()=>pushHistory(false),700)}
-function undo2(){if(!history.length)return;let now=currentHtml();let prev=history.pop();redoStack.push(now);$('pages-container').innerHTML=prev;lastSnapshot=prev;afterDomRestore()}
-function redo2(){if(!redoStack.length)return;let now=currentHtml();history.push(now);let next=redoStack.pop();$('pages-container').innerHTML=next;lastSnapshot=next;afterDomRestore()}
+function undo2(){if(!history.length)return;let now=currentHtml();let prev=history.pop();redoStack.push(now);boundQuestionHistory(redoStack);$('pages-container').innerHTML=prev;lastSnapshot=prev;afterDomRestore()}
+function redo2(){if(!redoStack.length)return;let now=currentHtml();history.push(now);boundQuestionHistory(history);let next=redoStack.pop();$('pages-container').innerHTML=next;lastSnapshot=next;afterDomRestore()}
 function afterDomRestore(){try{if(typeof rebindAllDraggables==='function')rebindAllDraggables();if(typeof scheduleQuestionDraft==='function')scheduleQuestionDraft()}catch(e){}enhanceImages()}
 
 function renderSubjects(){let box=$('abuSubjects');if(!box)return;box.innerHTML='';['math1','science3','science4','islamic'].forEach(k=>{let b=document.createElement('button');b.textContent=subjectMeta[k].label;b.classList.toggle('on',currentSubject===k);b.onclick=()=>{currentSubject=k;document.dispatchEvent(new CustomEvent('abuQuestionSubjectChanged',{detail:{subject:k}}));renderSubjects();renderTemplates()};box.appendChild(b)})}
