@@ -6,27 +6,57 @@ window.__ABU_QUESTIONS_EN_FIXES_V2__=true;
 const $=id=>document.getElementById(id);
 const DRAFT_KEY='abuBassamQuestionDraftEnglishV1';
 const DB_NAME='AbuBassamQuestionDraftV2',STORE='drafts',ROW_ID='en';
+const scope=()=>window.AbuQuestionScope?.identity()||null;
+const rowId=()=>window.AbuQuestionScope?.draftRow(ROW_ID)||null;
+const sk=key=>window.AbuQuestionScope?.scopedKey(key)||null;
 const PAPER_KEY='abuQuestionPaperEnglishV2';
 const ANSWER_KEY='abuQuestionAnswersVisibleEnV1';
 const PRESETS={A4P:[210,297],A4L:[297,210],A5P:[148,210],A5L:[210,148]};
-let paper={preset:'A4P',w:210,h:297},saveTimer=0,hydrating=true,editedDuringHydration=false,resettingDraft=false,draftGeneration=0,saveQueue=Promise.resolve(),answersVisible=localStorage.getItem(ANSWER_KEY)==='1';
+let paper={preset:'A4P',w:210,h:297},saveTimer=0,hydrating=true,editedDuringHydration=false,resettingDraft=false,draftGeneration=0,saveQueue=Promise.resolve(),answersVisible=!!sk(ANSWER_KEY)&&localStorage.getItem(sk(ANSWER_KEY))==='1';
 function clamp(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback}
-try{const old=JSON.parse(localStorage.getItem(PAPER_KEY)||'null');if(old?.preset==='custom')paper={preset:'custom',w:clamp(old.w,80,500,210),h:clamp(old.h,80,500,297)};else if(PRESETS[old?.preset])paper={preset:old.preset,w:PRESETS[old.preset][0],h:PRESETS[old.preset][1]};else{const legacy=localStorage.getItem('abuQuestionPaperEnglishV1');if(PRESETS[legacy])paper={preset:legacy,w:PRESETS[legacy][0],h:PRESETS[legacy][1]}}}catch(e){}
+try{const old=JSON.parse((sk(PAPER_KEY)&&localStorage.getItem(sk(PAPER_KEY)))||'null');if(old?.preset==='custom')paper={preset:'custom',w:clamp(old.w,80,500,210),h:clamp(old.h,80,500,297)};else if(PRESETS[old?.preset])paper={preset:old.preset,w:PRESETS[old.preset][0],h:PRESETS[old.preset][1]};else{const legacy=(sk('abuQuestionPaperEnglishV1')&&localStorage.getItem(sk('abuQuestionPaperEnglishV1')));if(PRESETS[legacy])paper={preset:legacy,w:PRESETS[legacy][0],h:PRESETS[legacy][1]}}}catch(e){}
 const dims=()=>({w:paper.w,h:paper.h});
 const mmToPx=mm=>Math.round(mm*96/25.4);
 function dbOpen(){return new Promise((resolve,reject)=>{try{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)}catch(e){reject(e)}})}
-async function dbPut(html){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({id:ROW_ID,html,updatedAt:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function dbGet(){try{const db=await dbOpen();try{return await new Promise((resolve,reject)=>{const req=db.transaction(STORE,'readonly').objectStore(STORE).get(ROW_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}finally{db.close?.()}}catch(e){return null}}
-async function dbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(ROW_ID);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
+async function dbPut(html){
+ const id=rowId(),owner=scope();if(!id||!owner)return false;
+ try{
+  const db=await dbOpen();if(scope()!==owner){db.close?.();return false}
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({id,html,updatedAt:Date.now()});
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)
+  });db.close?.();return scope()===owner
+ }catch(e){return false}
+}
+async function dbGet(){
+ const id=rowId(),owner=scope();if(!id||!owner)return null;
+ try{
+  const db=await dbOpen();if(scope()!==owner){db.close?.();return null}
+  const row=await new Promise((resolve,reject)=>{
+   const req=db.transaction(STORE,'readonly').objectStore(STORE).get(id);
+   req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)
+  });db.close?.();return scope()===owner?row:null
+ }catch(e){return null}
+}
+async function dbDelete(){
+ const id=rowId(),owner=scope();if(!id||!owner)return false;
+ try{
+  const db=await dbOpen();if(scope()!==owner){db.close?.();return false}
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)
+  });db.close?.();return scope()===owner
+ }catch(e){return false}
+}
 async function durableSave(show=false){
- const c=$('pages-container');if(!c||resettingDraft)return false;
+ const c=$('pages-container'),owner=scope();if(!c||resettingDraft||!owner){if(show)alert('Authenticated question storage is unavailable.');return false}
  const html=c.innerHTML,gen=draftGeneration;
  const task=saveQueue.catch(()=>{}).then(async()=>{
-  if(gen!==draftGeneration||resettingDraft)return false;
+  if(gen!==draftGeneration||resettingDraft||owner!==scope())return false;
   let localOk=false;
-  try{localStorage.setItem(DRAFT_KEY,html);localOk=true}catch(e){}
+  try{localStorage.setItem(sk(DRAFT_KEY),html);localOk=true}catch(e){}
   const idbOk=await dbPut(html);
-  return localOk||idbOk;
+  return owner===scope()&&(localOk||idbOk);
  });
  saveQueue=task;
  const ok=await task;
@@ -39,9 +69,10 @@ async function restoreDurableEnglish(){
  const c=$('pages-container');if(!c){hydrating=false;return false}
  const before=c.innerHTML;
  try{
-  let legacy='';try{legacy=localStorage.getItem(DRAFT_KEY)||''}catch(e){}
+  const owner=scope();if(!owner)return false;
+  let legacy='';try{legacy=localStorage.getItem(sk(DRAFT_KEY))||''}catch(e){}
   const row=await dbGet();
-  if(editedDuringHydration||before!==c.innerHTML)return false;
+  if(owner!==scope()||editedDuringHydration||before!==c.innerHTML)return false;
   const saved=legacy||String(row?.html||'');
   if(!saved)return false;
   c.innerHTML=saved;
@@ -50,12 +81,12 @@ async function restoreDurableEnglish(){
  }finally{hydrating=false;if(editedDuringHydration)schedule()}
 }
 async function reset(){
- if(resettingDraft||!confirm('Start a new form? The current English draft and backup will be removed.'))return false;
- resettingDraft=true;draftGeneration++;clearTimeout(saveTimer);
+ if(resettingDraft||!scope()||!confirm('Start a new form? The current English draft and backup will be removed.'))return false;
+ const owner=scope();resettingDraft=true;draftGeneration++;clearTimeout(saveTimer);
  try{
   await saveQueue.catch(()=>{});
-  if(!(await dbDelete()))throw Error('Unable to clear the saved draft. The editor was not reset.');
-  localStorage.removeItem(DRAFT_KEY);
+  if(scope()!==owner||!(await dbDelete()))throw Error('Unable to clear the saved draft or session changed. The editor was not reset.');
+  localStorage.removeItem(sk(DRAFT_KEY));
   location.reload();return true
  }catch(e){alert('Draft reset cancelled: '+String(e?.message||e));return false}
  finally{resettingDraft=false}
@@ -66,10 +97,10 @@ function installPaperUi(){addCss();const bar=$('controls');if(bar&&!$('abuEnPape
 function paperPreset(){const v=$('abuEnPaperPreset')?.value||'A4P';if(v==='custom'){paper.preset='custom';syncPaperUi();return}if(PRESETS[v]){paper={preset:v,w:PRESETS[v][0],h:PRESETS[v][1]};syncPaperUi();applyPaper(false)}}
 function enhanceHeader(){document.querySelectorAll('.a4-page .header').forEach(h=>{const boxes=h.querySelectorAll('.header-box'),right=boxes[boxes.length-1];if(right&&!/\bDay\s*\//i.test(right.textContent||''))right.insertAdjacentHTML('beforeend','<br><span class="abu-header-day">Day / .................</span>')})}
 function enhanceAnswers(){document.querySelectorAll('.question-container').forEach(q=>{if(q.querySelector(':scope > .abu-answer-box'))return;const box=document.createElement('div');box.className='abu-answer-box';box.innerHTML='<b>Model answer / notes</b><div contenteditable="true">Write the answer or note here...</div>';q.appendChild(box)});document.body.classList.toggle('abu-show-answers',answersVisible);const b=$('abuEnAnswerBtn');if(b)b.textContent=answersVisible?'📝 Answers: shown':'📝 Answers: hidden'}
-function toggleAnswers(){answersVisible=!answersVisible;localStorage.setItem(ANSWER_KEY,answersVisible?'1':'0');enhanceAnswers();schedule()}
+function toggleAnswers(){answersVisible=!answersVisible;if(sk(ANSWER_KEY))localStorage.setItem(sk(ANSWER_KEY),answersVisible?'1':'0');enhanceAnswers();schedule()}
 function installAnswerButton(){const bar=$('controls');if(bar&&!$('abuEnAnswerBtn')){const b=document.createElement('button');b.id='abuEnAnswerBtn';b.className='btn abu-en-answer-btn';b.onclick=toggleAnswers;bar.appendChild(b)}enhanceAnswers()}
 function fit(){const c=$('pages-container'),w=$('workspace'),bar=$('controls');if(!c||!w)return;const page=c.querySelector('.a4-page'),available=Math.max(280,innerWidth-20),pw=page?.offsetWidth||mmToPx(dims().w),scale=Math.min(1,available/pw);window.currentScale=scale;w.style.marginTop=((bar?.offsetHeight||0)+15)+'px';c.style.transformOrigin='top center';c.style.transform=`scale(${scale})`;const natural=c.offsetHeight;c.style.marginBottom=((natural*scale)-natural)+'px'}
-function applyPaper(closeAfter=true){const sel=$('abuEnPaperPreset');if(sel&&sel.value==='custom'){paper.preset='custom';paper.w=clamp($('abuEnPaperW')?.value,80,500,paper.w||210);paper.h=clamp($('abuEnPaperH')?.value,80,500,paper.h||297)}else if(sel&&PRESETS[sel.value])paper={preset:sel.value,w:PRESETS[sel.value][0],h:PRESETS[sel.value][1]};localStorage.setItem(PAPER_KEY,JSON.stringify(paper));const d=dims(),wpx=mmToPx(d.w),hpx=mmToPx(d.h);$('abuEnPaperOverride')?.remove();const s=document.createElement('style');s.id='abuEnPaperOverride';s.textContent=`.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}@media print{@page{size:${d.w}mm ${d.h}mm!important;margin:0}.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}}`;document.head.appendChild(s);syncPaperUi();if(closeAfter)$('abuEnPaperModal')?.classList.remove('show');fit();flow();schedule()}
+function applyPaper(closeAfter=true){const sel=$('abuEnPaperPreset');if(sel&&sel.value==='custom'){paper.preset='custom';paper.w=clamp($('abuEnPaperW')?.value,80,500,paper.w||210);paper.h=clamp($('abuEnPaperH')?.value,80,500,paper.h||297)}else if(sel&&PRESETS[sel.value])paper={preset:sel.value,w:PRESETS[sel.value][0],h:PRESETS[sel.value][1]};if(sk(PAPER_KEY))localStorage.setItem(sk(PAPER_KEY),JSON.stringify(paper));const d=dims(),wpx=mmToPx(d.w),hpx=mmToPx(d.h);$('abuEnPaperOverride')?.remove();const s=document.createElement('style');s.id='abuEnPaperOverride';s.textContent=`.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}@media print{@page{size:${d.w}mm ${d.h}mm!important;margin:0}.a4-page{width:${wpx}px!important;height:${hpx}px!important;min-height:${hpx}px!important;max-height:${hpx}px!important}}`;document.head.appendChild(s);syncPaperUi();if(closeAfter)$('abuEnPaperModal')?.classList.remove('show');fit();flow();schedule()}
 function flow(){document.querySelectorAll('.a4-page').forEach(p=>p.classList.remove('abu-question-overflow'));let guard=0;while(guard++<40){const pages=[...document.querySelectorAll('.a4-page')],page=pages.find(p=>p.scrollHeight>p.clientHeight+4);if(!page)break;const area=page.querySelector('.questions-area'),last=area?.lastElementChild;if(!area||!last||!last.classList.contains('question-container'))break;if(area.children.length===1){page.classList.add('abu-question-overflow');break}let next=page.nextElementSibling;if(!next||!next.classList.contains('a4-page')){if(typeof window.addNewPage!=='function')break;window.addNewPage(true);next=document.querySelector('.a4-page:last-child')}const target=next?.querySelector('.questions-area');if(!target)break;target.insertBefore(last,target.firstChild)}fit()}
 function scaleFor(el){const page=el.closest('.a4-page');if(!page)return 1;const r=page.getBoundingClientRect();return r.width&&page.offsetWidth?r.width/page.offsetWidth:1}
 const moved=new WeakSet(),resized=new WeakSet();
