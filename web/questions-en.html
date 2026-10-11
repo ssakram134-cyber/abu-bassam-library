@@ -627,6 +627,8 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         }
 
         function scheduleQuestionDraft() {
+            // The enhanced runtime owns the only active draft scheduler once loaded.
+            if (window.__ABU_QUESTIONS_EN_FIXES_V2__) return;
             clearTimeout(draftTimer);
             draftTimer = setTimeout(() => saveQuestionDraft(false), 500);
         }
