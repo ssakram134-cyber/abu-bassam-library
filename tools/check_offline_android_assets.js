@@ -13,9 +13,9 @@ const files=new Map(),actions=[],responses=[],timers=new Set();
 let downloadReads=0,bodyDelay=null;
 const validJs=Buffer.from('function safe(){return 3;}\n'+' '.repeat(1000));
 const validGz=zlib.gzipSync(Buffer.from('var lang=1;\n'.repeat(3000)));
-const api=new Function('Buffer','gunzipSync','stat','readFile','fetch','setTimeout','clearTimeout','AbortController','mkdir','dirname','rename','rm','writeFile','projectRoot','DOWNLOAD_TIMEOUT_MS','process',
+const api=new Function('URL','Buffer','gunzipSync','stat','readFile','fetch','setTimeout','clearTimeout','AbortController','mkdir','dirname','rename','rm','writeFile','projectRoot','DOWNLOAD_TIMEOUT_MS','process',
  helpers+';return {validAssetContent,existsEnough,fetchWithTimeout,download};')(
- Buffer,zlib.gunzipSync,
+ URL,Buffer,zlib.gunzipSync,
  async path=>{if(!files.has(path))throw Error('missing '+path);return {size:files.get(path).length}},
  async path=>{if(!files.has(path))throw Error('missing');return files.get(path)},
  async (url,options)=>{
