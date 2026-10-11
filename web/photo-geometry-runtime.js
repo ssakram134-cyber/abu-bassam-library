@@ -18,7 +18,56 @@ function bind(h,i,cr,sr,ox,oy){h.addEventListener('pointerdown',e=>{e.preventDef
 async function apply(){let it=item();if(!it)return;const originalSrc=it.src;try{if(typeof setBusy==='function')setBusy(true,mode==='crop'?'جاري القص...':'جاري تصحيح المنظور...');await new Promise(r=>setTimeout(r,30));let out=mode==='crop'?cropFull(it.img):warpFull(it.img),mime=String(it.src).startsWith('data:image/png')?'image/png':'image/jpeg',data=out.toDataURL(mime,mime==='image/png'?undefined:.98),im=new Image();await new Promise((res,rej)=>{im.onload=res;im.onerror=rej;im.src=data});if(item()!==it||it.src!==originalSrc)throw new Error('تغيّرت الصورة أثناء القص؛ ألغيت النتيجة المتأخرة حفاظًا على تعديلك');it.src=data;it.img=im;if(typeof refreshPeople==='function')refreshPeople();if(typeof renderPaper==='function')renderPaper();window.AbuPhotoAdvanced?.invalidatePosterPages?.();close('abuGeoModal')}catch(e){alert('تعذر تنفيذ العملية: '+(e.message||e))}finally{if(typeof setBusy==='function')setBusy(false)}}
 function cropFull(im){let w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,l=pts[0].x,t=pts[0].y,r=pts[2].x,b=pts[2].y,cv=document.createElement('canvas');let ow=Math.max(1,Math.round((r-l)*w)),oh=Math.max(1,Math.round((b-t)*h)),scale=Math.min(1,Math.sqrt(12_000_000/(ow*oh)),5200/Math.max(ow,oh));cv.width=Math.max(1,Math.round(ow*scale));cv.height=Math.max(1,Math.round(oh*scale));const ctx=cv.getContext('2d');if(!ctx)throw new Error('محرك القص غير متاح');ctx.drawImage(im,l*w,t*h,(r-l)*w,(b-t)*h,0,0,cv.width,cv.height);return cv}
 function dist(a,b,w,h){return Math.hypot((a.x-b.x)*w,(a.y-b.y)*h)}
-function warpFull(im){let sw=im.naturalWidth||im.width,sh=im.naturalHeight||im.height,ow=Math.round((dist(pts[0],pts[1],sw,sh)+dist(pts[3],pts[2],sw,sh))/2),oh=Math.round((dist(pts[0],pts[3],sw,sh)+dist(pts[1],pts[2],sw,sh))/2),maxPx=8000000,sc=Math.min(1,Math.sqrt(maxPx/Math.max(1,ow*oh)));ow=Math.max(1,Math.round(ow*sc));oh=Math.max(1,Math.round(oh*sc));let src=document.createElement('canvas'),inputScale=Math.min(1,Math.sqrt(8_000_000/(sw*sh)),5200/Math.max(sw,sh));sw=Math.max(1,Math.round(sw*inputScale));sh=Math.max(1,Math.round(sh*inputScale));src.width=sw;src.height=sh;let sx=src.getContext('2d');if(!sx)throw new Error('محرك المنظور غير متاح');sx.drawImage(im,0,0,sw,sh);let sd=sx.getImageData(0,0,sw,sh).data,out=document.createElement('canvas');out.width=ow;out.height=oh;let ox=out.getContext('2d'),od=ox.createImageData(ow,oh),d=od.data,p0=pts[0],p1=pts[1],p2=pts[2],p3=pts[3];for(let y=0;y<oh;y++){let v=oh<=1?0:y/(oh-1);for(let x=0;x<ow;x++){let u=ow<=1?0:x/(ow-1),px=(1-u)*(1-v)*p0.x+u*(1-v)*p1.x+u*v*p2.x+(1-u)*v*p3.x,py=(1-u)*(1-v)*p0.y+u*(1-v)*p1.y+u*v*p2.y+(1-u)*v*p3.y,ix=clamp(Math.round(px*(sw-1)),0,sw-1),iy=clamp(Math.round(py*(sh-1)),0,sh-1),si=(iy*sw+ix)*4,di=(y*ow+x)*4;d[di]=sd[si];d[di+1]=sd[si+1];d[di+2]=sd[si+2];d[di+3]=sd[si+3]}}ox.putImageData(od,0,0);return out}
+function projectiveCoefficients(corners){
+ const [p0,p1,p2,p3]=corners;
+ const cross=(a,b,c)=>(b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x);
+ const turns=[cross(p0,p1,p2),cross(p1,p2,p3),cross(p2,p3,p0),cross(p3,p0,p1)];
+ if(turns.some(t=>!Number.isFinite(t)||Math.abs(t)<0.000001||t*turns[0]<0))throw new Error('نقاط المنظور متقاطعة أو متقاربة جدًا؛ أعد ترتيب الزوايا الأربع.');
+ const dx1=p1.x-p2.x,dx2=p3.x-p2.x,dx3=p0.x-p1.x+p2.x-p3.x;
+ const dy1=p1.y-p2.y,dy2=p3.y-p2.y,dy3=p0.y-p1.y+p2.y-p3.y;
+ let g=0,h=0;
+ if(Math.abs(dx3)+Math.abs(dy3)>1e-10){
+  const denominator=dx1*dy2-dx2*dy1;
+  if(Math.abs(denominator)<1e-10)throw new Error('زوايا المنظور لا تكوّن مساحة قابلة للتصحيح.');
+  g=(dx3*dy2-dx2*dy3)/denominator;
+  h=(dx1*dy3-dx3*dy1)/denominator;
+ }
+ const a=p1.x-p0.x+g*p1.x,b=p3.x-p0.x+h*p3.x,c=p0.x;
+ const d=p1.y-p0.y+g*p1.y,e=p3.y-p0.y+h*p3.y,f=p0.y;
+ if([1,1+g,1+h,1+g+h].some(z=>!Number.isFinite(z)||z<=1e-8))throw new Error('المنظور شديد التشوه؛ قرّب الزوايا من حواف الورقة.');
+ return {a,b,c,d,e,f,g,h}
+}
+function warpFull(im){
+ const originalW=im.naturalWidth||im.width,originalH=im.naturalHeight||im.height;
+ if(!originalW||!originalH)throw new Error('أبعاد الصورة غير صالحة');
+ const coeff=projectiveCoefficients(pts);
+ let ow=Math.round((dist(pts[0],pts[1],originalW,originalH)+dist(pts[3],pts[2],originalW,originalH))/2);
+ let oh=Math.round((dist(pts[0],pts[3],originalW,originalH)+dist(pts[1],pts[2],originalW,originalH))/2);
+ if(ow<8||oh<8)throw new Error('منطقة المنظور صغيرة جدًا.');
+ const sc=Math.min(1,Math.sqrt(8_000_000/Math.max(1,ow*oh)),5200/Math.max(ow,oh));
+ ow=Math.max(1,Math.round(ow*sc));oh=Math.max(1,Math.round(oh*sc));
+ const inputScale=Math.min(1,Math.sqrt(8_000_000/(originalW*originalH)),5200/Math.max(originalW,originalH));
+ const sw=Math.max(1,Math.round(originalW*inputScale)),sh=Math.max(1,Math.round(originalH*inputScale));
+ const source=document.createElement('canvas');source.width=sw;source.height=sh;
+ const ctx=source.getContext('2d');if(!ctx)throw new Error('محرك المنظور غير متاح');
+ ctx.drawImage(im,0,0,sw,sh);const pixels=ctx.getImageData(0,0,sw,sh).data;
+ const output=document.createElement('canvas');output.width=ow;output.height=oh;
+ const outCtx=output.getContext('2d');if(!outCtx)throw new Error('ذاكرة المعالجة غير كافية');
+ const img=outCtx.createImageData(ow,oh),dst=img.data;
+ const {a,b,c,d,e,f,g,h}=coeff;
+ for(let y=0;y<oh;y++){
+  const v=oh<=1?0:y/(oh-1);
+  for(let x=0;x<ow;x++){
+   const u=ow<=1?0:x/(ow-1),z=1+g*u+h*v;
+   if(z<=1e-8)continue;
+   const px=(a*u+b*v+c)/z,py=(d*u+e*v+f)/z;
+   const ix=clamp(Math.round(px*(sw-1)),0,sw-1),iy=clamp(Math.round(py*(sh-1)),0,sh-1);
+   const si=(iy*sw+ix)*4,di=(y*ow+x)*4;
+   dst[di]=pixels[si];dst[di+1]=pixels[si+1];dst[di+2]=pixels[si+2];dst[di+3]=pixels[si+3]
+  }
+ }
+ outCtx.putImageData(img,0,0);return output
+}
 function openRuler(){if(!pageCanvases?.length)return alert('أنشئ معاينة للطباعة أولاً');let pd=pagePrintMeta?.paper||(typeof getPaperSize==='function'?getPaperSize():{w:210,h:297}),margin=Math.max(0,Number(pagePrintMeta?.kind==='poster'?pagePrintMeta?.margin:$('marginInput')?.value)||0),wrap=$('abuRulerWrap'),paper=$('abuRulerPaper'),safe=$('abuRulerSafe'),caption=$('abuRulerCaption'),maxW=Math.min(560,window.innerWidth-70),ratio=pd.h/pd.w,w=maxW,h=w*ratio;if(h>window.innerHeight*.65){h=window.innerHeight*.65;w=h/ratio}wrap.style.width=w+'px';wrap.style.height=h+'px';paper.style.backgroundImage=`url(${pageCanvases[currentPage||0].toDataURL('image/png')})`;let pxX=w/pd.w,pxY=h/pd.h;safe.style.left=margin*pxX+'px';safe.style.right=margin*pxX+'px';safe.style.top=margin*pxY+'px';safe.style.bottom=margin*pxY+'px';let dpi=typeof currentDpi==='function'?currentDpi():0;caption.textContent=`ورقة ${pd.w} × ${pd.h} ملم • هامش ${margin} ملم • ${Math.round(dpi)} DPI • الإطار الأحمر = منطقة آمنة تقريبية`;$('abuRulerModal')?.classList.add('show')}
 window.AbuPhotoGeometry={close,setMode,reset,apply};
 window.openAbuPhotoRuler=openRuler;
