@@ -26,7 +26,13 @@ const cases = [
   ['كتاب -مؤجل', 'كتاب مؤجل رقم 2', 'all', false],
   ['كتاب -"قيد المتابعة"', 'نسخة كتاب قيد المتابعة', 'all', false],
   ['-سري', 'ملف خاص', 'all', true],
-  ['-سري', 'ملف سري', 'all', false]
+  ['-سري', 'ملف سري', 'all', false],
+  ['07829667521', 'ملف +9647829667521', 'all', true],
+  ['+9647829667521', 'ملف 07829667521', 'all', true],
+  ['009647829667521', 'ملف 07829667521', 'all', true],
+  ['07829667521', 'ملف 07829667522', 'all', false],
+  ['07829667521', 'ملف 1078296675210', 'all', false],
+  ['07829667521', 'ملف 078296675210', 'all', false]
 ];
 for (const [query, value, mode, expected] of cases) {
   assert.equal(matches(query, value, mode), expected, JSON.stringify({ query, value, mode }));
@@ -37,4 +43,8 @@ assert.ok(index.includes('<script src="vault-search-utils.js"></script>'));
 assert.ok(index.indexOf('vault-search-utils.js') < index.indexOf('document-vault-runtime.js'));
 assert.ok(vault.includes('AbuVaultSearch.matches('), 'vault must actually call new matcher');
 assert.ok(vault.includes('id="vSearchMode"'), 'all/any selector must be visible');
-console.log('Vault search tests passed: 13 search cases, normalization, quoted phrase/exclusion, all/any mode, load order and integration.');
+assert.ok(vault.includes("SEARCH_RECENTS='abuVaultSearchRecentsV1'"));
+assert.ok(vault.includes('searchRemember()'), 'recent queries should only save after opt-in');
+assert.ok(vault.includes('id="vSearchRecent"') && vault.includes('id="vSearchShortcuts"'));
+assert.ok(vault.includes("state.query='';const search=$('vSearch')"), 'auth must clear prior search state');
+console.log('Vault search tests passed: 19 search cases, normalization, quoted phrase/exclusion, all/any mode, load order and integration.');
