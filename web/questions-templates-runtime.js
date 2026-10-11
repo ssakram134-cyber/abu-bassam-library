@@ -137,7 +137,7 @@ function renderTemplates(){let spec=$('abuSubjectTemplates'),gen=$('abuGeneralTe
 function openTemplates(){renderSubjects();renderTemplates();$('abuQTemplateModal')?.classList.add('show')}
 function closeTemplates(){$('abuQTemplateModal')?.classList.remove('show')}
 function findTemplate(id,isCustom){return (isCustom?customTemplates:SYSTEM_TEMPLATES).find(t=>t.id===id)}
-function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{localStorage.setItem(questionKey('abuLastQuestionTemplateV1'),id)}catch(e){}}
+function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{questionKey('abuLastQuestionTemplateV1')&&localStorage.setItem(questionKey('abuLastQuestionTemplateV1'),id)}catch(e){}}
 
 function openProfile(){closeTemplates();for(let [id,key] of [['qpfAdministration','administration'],['qpfSchool','school'],['qpfSchoolType','schoolType'],['qpfTeacher','teacher'],['qpfYear','year'],['qpfRole','role'],['qpfDay','day'],['qpfDate','date'],['qpfTitle','examTitle'],['qpfDuration','duration']])if($(id))$(id).value=profile[key]||'';$('abuQProfileModal')?.classList.add('show')}
 function closeProfile(){$('abuQProfileModal')?.classList.remove('show')}
