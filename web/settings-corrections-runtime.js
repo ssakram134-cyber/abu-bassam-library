@@ -24,8 +24,57 @@ function installPrivacyUi(){const info=$('abuPermissionInfo');if(!info||$('abuPr
 async function realDevices(){const box=$('abuDeviceList'),count=$('abuDeviceCount');if(!box||!count)return;box.innerHTML='<div class="abu-setting-note">جاري قراءة الأجهزة الموثقة...</div>';let list=[];try{if(window.AbuBassamDevices?.list)list=await AbuBassamDevices.list();if(!Array.isArray(list))list=[]}catch(e){count.textContent='!';box.innerHTML='<div class="abu-setting-note" style="color:#a83340">تعذر قراءة الأجهزة: '+esc(e?.message||e)+'</div>';return}count.textContent=String(list.length);if(!list.length){box.innerHTML='<div class="abu-setting-note" style="text-align:center">لا توجد بيانات أجهزة متاحة حاليًا. لم يتم إنشاء جهاز افتراضي.</div>';return}const cid=currentId();box.innerHTML=list.map((device,index)=>{const id=String(device.device_id||device.id||''),isCurrent=!!cid&&id===cid,last=device.last_seen||device.updated_at||'',online=Date.parse(last)&&Date.now()-Date.parse(last)<5*60*1000,name=String(device.device_name||device.name||('الجهاز '+(index+1)));return `<div class="abu-device"><div class="abu-device-icon">${/Windows/i.test(device.platform||'')?'🖥️':'📱'}</div><div><b>${esc(name)}${isCurrent?' • هذا الجهاز':''}</b><small>${esc(device.model||device.platform||'Android')} • التطبيق ${esc(device.app_version||'4.3.2')}<br>${online?'متصل الآن':'آخر اتصال '+fmtTime(last)}</small></div><span class="abu-device-lock">🔒 قراءة فقط</span></div>`}).join('')}
 async function storageStats(){const target=$('abuStorageInfo');if(!target)return;let archiveBytes=0,archiveCount=0;try{if(window.DocumentVault?.stats){const d=await DocumentVault.stats();archiveBytes=Number(d?.bytes)||0;archiveCount=Number(d?.count)||0}}catch(_){}let localBytes=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i)||'',v=localStorage.getItem(k)||'';localBytes+=(k.length+v.length)*2}}catch(_){}let estimate=null;try{if(navigator.storage?.estimate)estimate=await navigator.storage.estimate()}catch(_){}const usage=Number(estimate?.usage)||0,quota=Number(estimate?.quota)||0;target.textContent=estimate?`إجمالي بيانات WebView/IndexedDB/Cache: ${fmtBytes(usage)}${quota?' من '+fmtBytes(quota):''} | الأرشيف: ${archiveCount} عنصر • ${fmtBytes(archiveBytes)} | LocalStorage: ${fmtBytes(localBytes)}. SecureStore وملفات Android الخاصة لا تدخل في هذا الرقم.`:`الأرشيف: ${archiveCount} عنصر • ${fmtBytes(archiveBytes)} | LocalStorage: ${fmtBytes(localBytes)} | تعذر الحصول على تقدير IndexedDB/Cache من النظام.`}
 function scrub(value,key=''){if(/pass|password|token|secret|session|credential|auth/i.test(key))return undefined;if(Array.isArray(value))return value.map(x=>scrub(x)).filter(x=>x!==undefined);if(value&&typeof value==='object'){const out={};Object.entries(value).forEach(([k,v])=>{const c=scrub(v,k);if(c!==undefined)out[k]=c});return out}return value}
-function settingsBackup(){const out={format:'AbuBassamSettings',version:6,createdAt:new Date().toISOString(),settings:{}};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||/pass|password|token|secret|session|credential|auth/i.test(key))continue;const raw=localStorage.getItem(key)||'';if(!raw||raw.length>=300000)continue;try{out.settings[key]=JSON.stringify(scrub(JSON.parse(raw)))}catch(_){out.settings[key]=raw}}const json=JSON.stringify(out,null,2),data='data:application/json;base64,'+btoa(unescape(encodeURIComponent(json))),name='Abu_Bassam_Settings_Safety_'+Date.now()+'.json';if(window.Android?.saveBase64){Android.saveBase64(name,'application/json',data);return true}const a=document.createElement('a');a.download=name;a.href=data;document.body.appendChild(a);a.click();a.remove();return true}
-function resetDefaultsSafe(){if(!confirm('سيتم حفظ نسخة أمان ثم استعادة المظهر والخطوط وخيارات الطباعة فقط. لن تتغير المزامنة أو WhatsApp ولن تُحذف الصور أو المستندات. هل تريد المتابعة؟'))return;try{settingsBackup()}catch(e){return alert('تعذر إنشاء نسخة الأمان؛ لم يتم تغيير الإعدادات. '+String(e?.message||e))}RESET_KEYS.forEach(k=>localStorage.removeItem(k));try{window.AbuBassamTypography?.resetAll?.(true)}catch(_){}try{window.applyTheme?.('default')}catch(_){}window.AbuBassamOps?.add?.({type:'settings',title:'استعادة الإعدادات الافتراضية',section:'الإعدادات',details:'المظهر والخطوط والطباعة فقط'});alert('تمت استعادة المظهر والخطوط والطباعة فقط. بقيت المزامنة وWhatsApp وملفاتك كما هي.');setTimeout(()=>window.AbuBassamSettings?.open?.(),50)}
+let resetPending=false, pendingBackupResult=null, backupSequence=0;
+function settingsBackup(){
+ const out={format:'AbuBassamSettings',version:6,createdAt:new Date().toISOString(),settings:{}};
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);
+  if(!key||/pass|password|token|secret|session|credential|auth/i.test(key))continue;
+  const raw=localStorage.getItem(key)||'';
+  if(!raw||raw.length>=300000)continue;
+  try{out.settings[key]=JSON.stringify(scrub(JSON.parse(raw)))}catch(_){out.settings[key]=raw}
+ }
+ const json=JSON.stringify(out,null,2);
+ const data='data:application/json;base64,'+btoa(unescape(encodeURIComponent(json)));
+ const name='Abu_Bassam_Settings_Safety_'+Date.now()+'.json';
+ if(!window.Android?.saveBase64)return Promise.reject(new Error('لا تتوفر طريقة حفظ مؤكدة لملف الأمان على هذا الجهاز.'));
+ if(pendingBackupResult)return Promise.reject(new Error('هناك عملية حفظ نسخة أمان جارية.'));
+ return new Promise((resolve,reject)=>{
+  const requestId='settings-backup-'+Date.now()+'-'+(++backupSequence);
+  const timer=setTimeout(()=>{
+   if(pendingBackupResult?.requestId!==requestId)return;
+   pendingBackupResult=null;
+   reject(new Error('انتهت مهلة حفظ نسخة الأمان دون تأكيد من Android.'));
+  },180000);
+  pendingBackupResult={requestId,resolve,reject,timer};
+  try{window.Android.saveBase64(name,'application/json',data,requestId)}
+  catch(e){pendingBackupResult=null;clearTimeout(timer);reject(e)}
+ })
+}
+window.AbuBassamSettingsBackupResult=function(result){
+ const pending=pendingBackupResult;
+ if(!pending||String(result?.requestId||'')!==pending.requestId)return;
+ pendingBackupResult=null;
+ clearTimeout(pending.timer);
+ if(result.ok===true)pending.resolve();
+ else pending.reject(new Error(String(result.error||'تعذر حفظ نسخة الأمان.')))
+};
+async function resetDefaultsSafe(){
+ if(resetPending)return;
+ if(!confirm('سيتم حفظ نسخة أمان ثم استعادة المظهر والخطوط وخيارات الطباعة فقط. لن تتغير المزامنة أو WhatsApp ولن تُحذف الصور أو المستندات. هل تريد المتابعة؟'))return;
+ resetPending=true;
+ try{
+  await settingsBackup();
+  RESET_KEYS.forEach(k=>localStorage.removeItem(k));
+  try{window.AbuBassamTypography?.resetAll?.(true)}catch(_){}
+  try{window.applyTheme?.('default')}catch(_){}
+  window.AbuBassamOps?.add?.({type:'settings',title:'استعادة الإعدادات الافتراضية',section:'الإعدادات',details:'المظهر والخطوط والطباعة فقط'});
+  alert('تم حفظ نسخة الأمان واستعادة المظهر والخطوط والطباعة فقط. بقيت المزامنة وWhatsApp وملفاتك كما هي.');
+  setTimeout(()=>window.AbuBassamSettings?.open?.(),50);
+ }catch(e){
+  alert('تعذر تأكيد حفظ نسخة الأمان؛ لم يتم تغيير الإعدادات. '+String(e?.message||e))
+ }finally{resetPending=false}
+}
 function googleShare(){window.AbuBassamSettings?.backup?.('share');const state=$('abuGoogleState');if(state){state.textContent='مشاركة Android — اختر Drive أو Gmail';state.classList.remove('ok')}}
 function googleInfo(){alert('لا يوجد تسجيل دخول مباشر إلى Google داخل التطبيق. عند اختيار النسخ إلى Google يفتح Android شاشة المشاركة، ومن هناك تختار Google Drive أو Gmail وتوافق بنفسك. لا تُخزن كلمة مرور Google داخل التطبيق.')}
 function enforceWifiPolicy(){if(!wifiOnly())return true;const kind=connectionClass(),note=$('abuSettingsSyncNote');if(kind==='wifi'){if(note)note.textContent='Wi‑Fi متاح • المزامنة التلقائية تعمل حسب الجدول.';return true}if(note)note.textContent=kind==='other'?'Wi‑Fi فقط • ستنتظر المزامنة التلقائية حتى الاتصال بشبكة Wi‑Fi.':'Wi‑Fi فقط • تعذر تحديد نوع الشبكة الآن؛ لن تبدأ المزامنة حتى يمكن التحقق من Wi‑Fi.';return false}

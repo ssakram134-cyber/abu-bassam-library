@@ -5,6 +5,7 @@ window.__ABU_QUESTION_PAPER_V2__=true;
 window.__ABU_QUESTION_PAPER_V3__=true;
 const $=id=>document.getElementById(id);
 const KEY='abuQuestionPaperSettingsV3';
+const sk=key=>window.AbuQuestionScope?.scopedKey(key)||null;
 const LEGACY=['abuQuestionPaperSettingsV2','abuQuestionPaperSettingsV1'];
 const presets={A4P:[210,297],A4L:[297,210],A5P:[148,210],A5L:[210,148]};
 const labels={A4P:'A4 عمودي',A4L:'A4 أفقي',A5P:'A5 عمودي',A5L:'A5 أفقي',custom:'مخصص'};
@@ -12,8 +13,8 @@ let state={preset:'A4P',w:210,h:297};
 function clamp(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback}
 function load(){
   let old=null;
-  try{old=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
-  if(!old){for(const key of LEGACY){try{old=JSON.parse(localStorage.getItem(key)||'null');if(old)break}catch(e){}}}
+  try{old=JSON.parse((sk(KEY)&&localStorage.getItem(sk(KEY)))||'null')}catch(e){}
+  if(!old){for(const key of LEGACY){try{old=JSON.parse((sk(key)&&localStorage.getItem(sk(key)))||'null');if(old)break}catch(e){}}}
   if(!old||typeof old!=='object')return;
   const p=Object.prototype.hasOwnProperty.call(presets,old.preset)?old.preset:(old.preset==='custom'?'custom':'A4P');
   if(p==='custom')state={preset:'custom',w:clamp(old.w,80,500,210),h:clamp(old.h,80,500,297)};
@@ -21,7 +22,7 @@ function load(){
 }
 load();
 function mmToPx(mm){return Math.round(mm*96/25.4)}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function save(){try{if(sk(KEY))localStorage.setItem(sk(KEY),JSON.stringify(state))}catch(e){}}
 function css(){return `.abu-paper-modal{position:fixed;inset:0;z-index:12600;background:#000b;display:none;align-items:flex-end}.abu-paper-modal.show{display:flex}.abu-paper-sheet{width:100%;max-height:78vh;overflow:auto;background:#fff;border-radius:22px 22px 0 0;padding:13px;color:#1f2937}.abu-paper-head{display:flex;justify-content:space-between;align-items:center}.abu-paper-head button{border:0;border-radius:50%;width:36px;height:36px;font-size:20px}.abu-paper-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}.abu-paper-grid label{font-size:9px;font-weight:800}.abu-paper-grid select,.abu-paper-grid input{width:100%;min-height:42px;border:1px solid #cbd5e1;border-radius:9px;padding:6px;font-family:Tajawal;background:#fff}.abu-paper-custom{display:none;grid-template-columns:1fr 1fr;gap:8px}.abu-paper-custom.show{display:grid}.abu-paper-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.abu-paper-actions button{min-height:42px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-family:Tajawal;font-weight:900}.abu-paper-btn{background:#1565c0!important}@media print{.abu-paper-modal{display:none!important}}`}
 function modal(){return `<div id="abuPaperModal" class="abu-paper-modal"><div class="abu-paper-sheet"><div class="abu-paper-head"><div><b>إعدادات ورق الأسئلة</b><div style="font-size:9px;color:#64748b">A4 وA5 أو مقاس مخصص بالملم</div></div><button onclick="AbuQuestionPaper.close()">×</button></div><div class="abu-paper-grid"><label>مقاس الورق<select id="abuPaperPreset" onchange="AbuQuestionPaper.preset()"><option value="A4P">A4 عمودي — 210 × 297 ملم</option><option value="A4L">A4 أفقي — 297 × 210 ملم</option><option value="A5P">A5 عمودي — 148 × 210 ملم</option><option value="A5L">A5 أفقي — 210 × 148 ملم</option><option value="custom">مخصص</option></select></label><div id="abuPaperCustom" class="abu-paper-custom"><label>العرض (ملم)<input id="abuPaperW" type="number" min="80" max="500" step="1" value="210"></label><label>الارتفاع (ملم)<input id="abuPaperH" type="number" min="80" max="500" step="1" value="297"></label></div></div><div class="abu-paper-actions"><button onclick="AbuQuestionPaper.apply()">تطبيق</button><button onclick="AbuQuestionPaper.close()">إغلاق</button></div></div></div>`}
 function ensure(){

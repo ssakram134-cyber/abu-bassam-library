@@ -3,14 +3,16 @@
 if(window.__ABU_BACKUP_CENTER_V1__)return;window.__ABU_BACKUP_CENTER_V1__=true;
 const EP='https://dlbxcqkbmvnrcrbhuttv.supabase.co/functions/v1/backup-center',BUCKET='abu-bassam-private',DB='AbuBassamDocumentVaultV4',STORE='items',APP='4.3.2',SK='abu_bassam_device_secret_v1';
 const AUTO='abuBassamBackupAutoV1',CAD='abuBassamBackupCadenceV1',KEEP='abuBassamBackupRetentionV1',LAST='abuBassamBackupLastSuccessV1',LASTFP='abuBassamBackupLastFingerprintV1',LASTERR='abuBassamBackupLastErrorV1',RETRY='abuBassamBackupRetryAfterV1';
-const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,modalBuilt=false;
+const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000;let busy=false,modalBuilt=false,restoring=false;const RESTORE_TOKEN=Symbol('backup-restore');
 function stateScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function scopedKey(key){return key+':'+stateScope()}
-function stateGet(key){const scoped=scopedKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+function stateGet(key){return localStorage.getItem(scopedKey(key))}
 function stateSet(key,value){localStorage.setItem(scopedKey(key),String(value))}
 function stateRemove(key){localStorage.removeItem(scopedKey(key))}
+function assertScope(expected){if(expected!==stateScope())throw Error('تغيّر الحساب أو الجهاز أثناء العملية؛ أُوقفت العملية لحماية بيانات الفرع.')}
 const $=id=>document.getElementById(id),dev=()=>window.AbuBassamSecurity?.device?.()||{},role=()=>window.AbuBassamSecurity?.role?.()||'',cloud=()=>window.AbuBassamCloud,can=k=>{const sec=window.AbuBassamSecurity;if(sec?.role?.()==='owner')return true;return typeof sec?.can==='function'&&sec.can(k)===true};
 function log(type,title,details=''){try{window.AbuBassamOps?.add?.({type,title,details,section:'النسخ الاحتياطي'})}catch{}}
+function htmlEscape(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function fmt(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function when(v){if(!v)return'لا يوجد';try{return new Date(v).toLocaleString('ar-IQ')}catch{return String(v)}}
 function openDb(){return new Promise((o,r)=>{const q=indexedDB.open(DB,1);q.onsuccess=()=>o(q.result);q.onerror=()=>r(q.error||Error('تعذر فتح الأرشيف'))})}
@@ -19,7 +21,7 @@ async function backupItems(){const items=await all();if(items.length>MAX_ITEMS)t
 function safeSettings(){const out={},ok=window.AbuDocumentVaultHardening?.safeSettingKey;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!(typeof ok==='function'&&ok(k)))continue;const v=localStorage.getItem(k);if(v!==null&&v.length<500000)out[k]=v}return out}
 async function digest(data){const h=await crypto.subtle.digest('SHA-256',data instanceof ArrayBuffer?data:data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength));return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function fingerprint(){const items=(await backupItems()).map(x=>[x.id,x.name,Number(x.blob?.size)||0,x.updatedAt||'',x.folder||'',!!x.favorite,!!x.deleted,x.deletedAt||'']).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));const raw=new TextEncoder().encode(JSON.stringify({items,settings:safeSettings()}));return digest(raw)}
-async function packageBytes(){if(!window.JSZip)throw Error('أداة ZIP غير جاهزة');const d=dev(),fallback=window.AbuBassamDevices?.ensure?.()||{},items=await backupItems();let total=0,zip=new JSZip(),manifest={format:'AbuBassamVault',version:7,createdAt:new Date().toISOString(),branchDeviceId:String(d.device_id||fallback.id||''),branchName:String(d.device_name||fallback.name||'هذا الفرع'),appVersion:APP,count:items.length,items:[]};for(const item of items){const size=Number(item.blob?.size||0);total+=size;if(size>100*1024*1024)throw Error('يوجد ملف أكبر من 100MB: '+String(item.name||'ملف'));if(total>MAX_TOTAL)throw Error('إجمالي الملفات يتجاوز 500MB');const id=String(item.id||crypto.randomUUID?.()||Date.now()).replace(/[^A-Za-z0-9_.-]/g,'_'),name=String(item.name||'ملف').replace(/[\\/:*?"<>|\r\n]/g,'_').slice(0,180),path=item.blob?`files/${id}/${name}`:'';manifest.items.push({id:item.id,name:item.name,category:item.category,mime:item.mime,size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:!!item.deleted,deletedAt:item.deletedAt||'',path});if(item.blob)zip.file(path,item.blob)}zip.file('manifest.json',JSON.stringify(manifest,null,2));zip.file('app-settings.json',JSON.stringify({format:'AbuBassamSettings',version:7,createdAt:new Date().toISOString(),settings:safeSettings()},null,2));const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});if(bytes.byteLength>MAX_ZIP)throw Error('حجم النسخة المضغوطة أكبر من 120MB. استخدم المزامنة أو قسّم الأرشيف إلى مجلدات أصغر.');return{bytes,count:items.length}}
+async function packageBytes(){if(!window.JSZip)throw Error('أداة ZIP غير جاهزة');const d=dev(),fallback=window.AbuBassamDevices?.ensure?.()||{},items=await backupItems();let total=0,zip=new JSZip(),manifest={format:'AbuBassamVault',version:7,createdAt:new Date().toISOString(),branchDeviceId:String(d.device_id||fallback.id||''),branchName:String(d.device_name||fallback.name||'هذا الفرع'),appVersion:APP,count:items.length,items:[]};for(const item of items){const size=Number(item.blob?.size||0);total+=size;if(size>100*1024*1024)throw Error('يوجد ملف أكبر من 100MB: '+String(item.name||'ملف'));if(total>MAX_TOTAL)throw Error('إجمالي الملفات يتجاوز 500MB');const id=String(item.id||crypto.randomUUID?.()||Date.now()).replace(/[^A-Za-z0-9_.-]/g,'_'),name=String(item.name||'ملف').replace(/[\\/:*?"<>|\r\n]/g,'_').slice(0,180),path=item.blob?`files/${manifest.items.length}-${id}/${name}`:'';manifest.items.push({id:item.id,name:item.name,category:item.category,mime:item.mime,size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:!!item.deleted,deletedAt:item.deletedAt||'',path});if(item.blob)zip.file(path,item.blob)}zip.file('manifest.json',JSON.stringify(manifest,null,2));zip.file('app-settings.json',JSON.stringify({format:'AbuBassamSettings',version:7,createdAt:new Date().toISOString(),settings:safeSettings()},null,2));const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});if(bytes.byteLength>MAX_ZIP)throw Error('حجم النسخة المضغوطة أكبر من 120MB. استخدم المزامنة أو قسّم الأرشيف إلى مجلدات أصغر.');return{bytes,count:items.length}}
 async function secret(){const api=window.AbuBassamNativeSecurity;if(!api?.request)throw Error('SECURE_STORAGE_REQUIRED');return String(await api.request('secureGet',{key:SK})||'')}
 async function auth(){await cloud()?.ready?.();const s=cloud()?.session?.(),d=dev(),fallback=window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||fallback.id||''),sec=await secret();if(!s?.access_token)throw Error('اربط حساب المزامنة أولًا');if(!id||!sec)throw Error('هذا الجهاز غير موثق');return{token:s.access_token,id,secret:sec}}
 async function api(action,method='GET',body=null,query=''){const a=await auth(),res=await fetch(`${EP}?action=${encodeURIComponent(action)}${query}`,{method,headers:{Authorization:`Bearer ${a.token}`,'Content-Type':'application/json','x-device-id':a.id,'x-device-secret':a.secret},body:body===null?undefined:JSON.stringify(body)}),data=await res.json().catch(()=>({}));if(!res.ok||data?.error)throw Error(data?.error||`HTTP ${res.status}`);return data}
@@ -29,16 +31,134 @@ function retention(){return Math.max(1,Math.min(30,Number(stateGet(KEEP)||7)||7)
 function cadence(){return['daily','weekly','manual'].includes(stateGet(CAD)||'daily')?stateGet(CAD)||'daily':'daily'}
 function auto(){return stateGet(AUTO)!=='0'}
 function due(){if(!auto()||cadence()==='manual'||!navigator.onLine||!cloud()?.isConnected?.()||!can('backupCreate'))return false;const retryAt=Number(stateGet(RETRY)||0);if(retryAt&&Date.now()<retryAt)return false;const last=Number(stateGet(LAST)||0),ms=cadence()==='weekly'?7*86400000:86400000;return !last||Date.now()-last>=ms}
-async function backupNow(kind='manual',force=false){if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');const required=kind==='pre_restore'?'backupRestore':'backupCreate';if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');busy=true;status('جاري فحص التغييرات...');try{const fp=await fingerprint();if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){stateSet(LAST,String(Date.now()));stateRemove(LASTERR);status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');return{skipped:true}}status('جاري إنشاء Snapshot...');const pkg=await packageBytes(),sha=await digest(pkg.bytes),parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK)),plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});for(let i=0;i<plan.uploads.length;i++){status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK),blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob)}status('التحقق من اكتمال النسخة...');await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);stateRemove(LASTERR);stateRemove(RETRY);log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} عنصر • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');await refreshList();return{ok:true,backup_id:plan.backup_id}}
-catch(e){const m=String(e?.message||e);stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000));status('فشل النسخ: '+m);log('backup','فشل النسخ الاحتياطي',m);throw e}finally{busy=false;paint()}}
-async function downloadBytes(id){const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`),arrays=[],total=Number(d.backup?.size_bytes)||0;let got=0;for(let i=0;i<d.parts.length;i++){status(`تنزيل الجزء ${i+1} من ${d.parts.length}...`);const res=await retry(async()=>{const x=await fetch(d.parts[i].url,{cache:'no-store'});if(!x.ok)throw Error('تعذر تنزيل جزء النسخة');return x});const a=new Uint8Array(await res.arrayBuffer());arrays.push(a);got+=a.length}if(got!==total)throw Error('حجم النسخة المستعادة لا يطابق السجل');const out=new Uint8Array(got);let off=0;for(const a of arrays){out.set(a,off);off+=a.length}const sha=await digest(out);if(sha!==String(d.backup.sha256||''))throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');return{bytes:out,backup:d.backup}}
-async function restoreCloud(id){if(busy)return false;if(!can('backupRestore')){alert('الأدمن عطّل الاستعادة لهذا الفرع.');return false}if(!confirm('سيتم تنزيل النسخة المختارة والتحقق من سلامتها أولًا، ثم إنشاء Snapshot أمان للحالة الحالية قبل الاستعادة. متابعة؟'))return false;busy=true;try{const d=await downloadBytes(id),cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');if(d.backup.branch_device_id!==cur)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن استعادتها داخل هذا الفرع');const file=new File([d.bytes],`Abu_Bassam_Cloud_${id}.zip`,{type:'application/zip'});status('تم التحقق من النسخة المختارة • إنشاء Snapshot أمان للحالة الحالية...');busy=false;await backupNow('pre_restore',true);busy=true;const restore=window.AbuDocumentVaultHardening?.restore;if(typeof restore!=='function')throw Error('خدمة الاستعادة الآمنة غير جاهزة');status('جاري الاستعادة الآمنة...');const restored=await restore(file,{mode:'snapshot',silentConfirm:true});if(restored!==true){status('تم إلغاء الاستعادة أو لم تكتمل');return false}await api('cleanup','POST',{retention:retention()}).catch(()=>{});log('restore','استعادة نسخة سحابية',id);status('تمت الاستعادة بنجاح ✓');await refreshList();return true}catch(e){alert('تعذرت الاستعادة: '+String(e?.message||e));status('تعذرت الاستعادة');return false}finally{busy=false;paint()}}
+async function backupNow(kind='manual',force=false,restoreToken=null){
+ const nested=restoring&&kind==='pre_restore'&&restoreToken===RESTORE_TOKEN;
+ if(busy&&!nested)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');
+ const required=kind==='pre_restore'?'backupRestore':'backupCreate';
+ if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');
+ const originalBusy=busy,scope=stateScope();
+ busy=true;status('جاري فحص التغييرات...');
+ try{
+  const fp=await fingerprint();
+  assertScope(scope);
+  if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){
+   stateSet(LAST,String(Date.now()));stateRemove(LASTERR);
+   status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');
+   return {skipped:true};
+  }
+  status('جاري إنشاء Snapshot...');
+  const pkg=await packageBytes();assertScope(scope);
+  const sha=await digest(pkg.bytes);assertScope(scope);
+  const parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK));
+  const plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});
+  assertScope(scope);
+  if(!Array.isArray(plan.uploads)||plan.uploads.length!==parts)throw Error('خطة الرفع غير مكتملة');
+  for(let i=0;i<plan.uploads.length;i++){
+   assertScope(scope);
+   status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);
+   const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK);
+   const blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});
+   await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob);
+   assertScope(scope);
+  }
+  status('التحقق من اكتمال النسخة...');
+  assertScope(scope);
+  await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});
+  assertScope(scope);
+  stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);
+  stateRemove(LASTERR);stateRemove(RETRY);
+  log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} عنصر • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);
+  status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');
+  await refreshList();
+  return {ok:true,backup_id:plan.backup_id};
+ }catch(e){
+  // A canceled account/device session must never write its error into the next account's preferences.
+  if(scope===stateScope()){
+   const m=String(e?.message||e);
+   stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000));
+   status('فشل النسخ: '+m);log('backup','فشل النسخ الاحتياطي',m);
+  }
+  throw e;
+ }finally{busy=originalBusy;paint()}
+}
+async function readBoundedPart(url,limit){
+ return retry(async()=>{
+  const response=await fetch(url,{cache:'no-store'});
+  if(!response.ok)throw Error('تعذر تنزيل جزء النسخة');
+  const header=response.headers?.get?.('content-length');
+  if(header!==null&&header!==undefined&&Number(header)>limit)throw Error('جزء النسخة يتجاوز الحجم المسموح');
+  if(!response.body?.getReader)throw Error('التنزيل الآمن المتدفق غير متاح على هذا الجهاز');
+  const reader=response.body.getReader();
+  let total=0;const chunks=[];
+  try{
+   for(;;){
+    const {done,value}=await reader.read();
+    if(done)break;
+    total+=value.byteLength;
+    if(total>limit){await reader.cancel?.().catch(()=>{});throw Error('جزء النسخة يتجاوز الحجم المسموح')}
+    chunks.push(value);
+   }
+  }finally{reader.releaseLock()}
+  const output=new Uint8Array(total);let offset=0;
+  for(const chunk of chunks){output.set(chunk,offset);offset+=chunk.byteLength}
+  return output;
+ })
+}
+async function downloadBytes(id,scope=stateScope()){
+ const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`);
+ assertScope(scope);
+ const total=Number(d.backup?.size_bytes);
+ if(!Number.isSafeInteger(total)||total<=0||total>MAX_ZIP)throw Error('حجم النسخة غير صالح أو يتجاوز 120MB');
+ if(!Array.isArray(d.parts)||!d.parts.length||d.parts.length>120||d.parts.length>total)throw Error('عدد أجزاء النسخة غير صالح');
+ const out=new Uint8Array(total);let got=0;
+ for(let i=0;i<d.parts.length;i++){
+  assertScope(scope);
+  status(`تنزيل الجزء ${i+1} من ${d.parts.length}...`);
+  const remaining=total-got;
+  const chunk=await readBoundedPart(d.parts[i].url,Math.min(CHUNK,remaining));
+  assertScope(scope);
+  if(!chunk.length||got+chunk.length>total)throw Error('جزء النسخة ناقص أو أكبر من السجل');
+  out.set(chunk,got);got+=chunk.length;
+ }
+ if(got!==total)throw Error('حجم النسخة المستعادة لا يطابق السجل');
+ const sha=await digest(out);assertScope(scope);
+ if(sha!==String(d.backup.sha256||''))throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');
+ return {bytes:out,backup:d.backup};
+}
+async function restoreCloud(id){
+ if(busy)return false;
+ if(!can('backupRestore')){alert('الأدمن عطّل الاستعادة لهذا الفرع.');return false}
+ if(!confirm('سيتم تنزيل النسخة المختارة والتحقق من سلامتها أولًا، ثم إنشاء Snapshot أمان للحالة الحالية قبل الاستعادة. متابعة؟'))return false;
+ const scope=stateScope();busy=true;restoring=true;
+ try{
+  const d=await downloadBytes(id,scope);assertScope(scope);
+  const cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');
+  if(d.backup.branch_device_id!==cur)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن استعادتها داخل هذا الفرع');
+  const file=new File([d.bytes],`Abu_Bassam_Cloud_${id}.zip`,{type:'application/zip'});
+  status('تم التحقق من النسخة المختارة • إنشاء Snapshot أمان للحالة الحالية...');
+  await backupNow('pre_restore',true,RESTORE_TOKEN);
+  assertScope(scope);
+  const restore=window.AbuDocumentVaultHardening?.restore;
+  if(typeof restore!=='function')throw Error('خدمة الاستعادة الآمنة غير جاهزة');
+  status('جاري الاستعادة الآمنة...');
+  const restored=await restore(file,{mode:'snapshot',silentConfirm:true});
+  assertScope(scope);
+  if(restored!==true){status('تم إلغاء الاستعادة أو لم تكتمل');return false}
+  await api('cleanup','POST',{retention:retention()}).catch(()=>{});
+  assertScope(scope);
+  log('restore','استعادة نسخة سحابية',id);status('تمت الاستعادة بنجاح ✓');
+  await refreshList();return true;
+ }catch(e){
+  if(scope===stateScope()){alert('تعذرت الاستعادة: '+String(e?.message||e));status('تعذرت الاستعادة')}
+  return false;
+ }finally{restoring=false;busy=false;paint()}
+}
 async function deleteCloud(id){if(!can('backupDelete'))return alert('الأدمن عطّل حذف النسخ.');if(!confirm('حذف هذه النسخة السحابية نهائيًا؟'))return;try{await api('delete','DELETE',{backup_id:id});log('backup','حذف نسخة سحابية',id);await refreshList()}catch(e){alert(String(e?.message||e))}}
 function status(t){const e=$('abuBackupStatus');if(e)e.textContent=t||''}
 function css(){if($('abuBackupCss'))return;const s=document.createElement('style');s.id='abuBackupCss';s.textContent=`.abm{position:fixed;z-index:39000;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:9px;direction:rtl}.abm.on{display:flex}.abb{width:min(760px,100%);max-height:94vh;overflow:auto;background:#fffaf3;border-radius:18px;color:#261f1b}.abh{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;background:#0b665f;color:#fff;padding:11px}.abh button{width:36px;height:36px;border:0;border-radius:50%}.abc{padding:10px}.abgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.abcard{background:#fff;border:1px solid #ddd0c6;border-radius:12px;padding:9px}.abcard b{font-size:9px}.abcard small{display:block;font-size:8px;color:#74685f;line-height:1.7}.abtools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.abtools button,.abrow button{border:0;border-radius:9px;min-height:40px;background:#087f72;color:#fff;font-weight:900}.abrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;align-items:center;margin:7px 0}.abrow select,.abrow input{min-height:38px;border:1px solid #cbbcaf;border-radius:8px;background:#fff;padding:6px}.ablist{display:grid;gap:6px}.abi{background:#fff;border:1px solid #ddd0c6;border-radius:10px;padding:8px;display:grid;grid-template-columns:1fr auto;gap:6px}.abacts{display:flex;gap:4px}.abacts button{border:0;border-radius:7px;background:#087f72;color:#fff;padding:6px;font-size:8px}.abacts .danger{background:#a62d3a}.abnote{font-size:8px;line-height:1.8;color:#74685f;background:#f3eee7;border-radius:9px;padding:8px}@media(max-width:560px){.abgrid{grid-template-columns:1fr}.abrow{grid-template-columns:1fr 1fr}.abi{grid-template-columns:1fr}.abacts{justify-content:flex-start}}`;document.head.appendChild(s)}
 function build(){if(modalBuilt)return;modalBuilt=true;css();document.body.insertAdjacentHTML('beforeend',`<div id="abuBackupModal" class="abm"><div class="abb"><div class="abh"><div><b>☁️ مركز النسخ الاحتياطي</b><div style="font-size:8px">Snapshots مستقلة عن المزامنة • عزل حسب الفرع</div></div><button id="abuBackupClose">×</button></div><div class="abc"><div class="abgrid"><div class="abcard"><b>آخر نسخة ناجحة</b><small id="abuBackupLast"></small></div><div class="abcard"><b>الحالة</b><small id="abuBackupState"></small></div><div class="abcard"><b>آخر خطأ</b><small id="abuBackupError"></small></div></div><div class="abrow"><label><input id="abuBackupAuto" type="checkbox"> تلقائي</label><select id="abuBackupCad"><option value="daily">يومي عند وجود تغيير</option><option value="weekly">أسبوعي عند وجود تغيير</option><option value="manual">يدوي فقط</option></select><select id="abuBackupKeep"><option value="3">آخر 3 نسخ</option><option value="7">آخر 7 نسخ</option><option value="14">آخر 14 نسخة</option><option value="30">آخر 30 نسخة</option></select></div><div class="abtools"><button id="abuBackupNow">☁️ نسخة سحابية الآن</button><button id="abuBackupRefresh">↻ تحديث سجل النسخ</button></div><label id="abuBackupAllWrap" style="display:none;font-size:9px"><input id="abuBackupAll" type="checkbox"> عرض نسخ جميع الفروع للأدمن</label><div id="abuBackupStatus" class="abnote"></div><div id="abuBackupList" class="ablist"></div><div class="abnote" style="margin-top:8px">النسخ التلقائي يعمل عند فتح التطبيق، عودته للواجهة، أو عودة الإنترنت. إذا أغلق Android التطبيق بالكامل فلن يستطيع JavaScript إنشاء نسخة حتى يُفتح التطبيق مجددًا. النسخ اليدوي المشفر AES‑GCM يبقى متاحًا من قسم الحفظ والمستندات.</div></div></div></div>`);$('abuBackupClose').onclick=()=>$('abuBackupModal').classList.remove('on');$('abuBackupNow').onclick=()=>backupNow('manual',true).catch(e=>alert(String(e?.message||e)));$('abuBackupRefresh').onclick=refreshList;$('abuBackupAuto').onchange=e=>{stateSet(AUTO,e.target.checked?'1':'0');paint()};$('abuBackupCad').onchange=e=>{stateSet(CAD,e.target.value);paint()};$('abuBackupKeep').onchange=e=>stateSet(KEEP,String(e.target.value));$('abuBackupAll').onchange=refreshList}
 function paint(){build();$('abuBackupAuto').checked=auto();$('abuBackupCad').value=cadence();$('abuBackupKeep').value=String(retention());$('abuBackupLast').textContent=when(Number(stateGet(LAST)||0));$('abuBackupError').textContent=stateGet(LASTERR)||'لا يوجد';$('abuBackupState').textContent=busy?'عملية جارية':auto()?`تلقائي: ${cadence()==='daily'?'يومي':cadence()==='weekly'?'أسبوعي':'يدوي'}`:'متوقف';$('abuBackupAllWrap').style.display=role()==='owner'?'block':'none'}
-async function refreshList(){paint();try{const all=role()==='owner'&&$('abuBackupAll')?.checked,d=await api('list','GET',null,all?'&all=1':''),cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');$('abuBackupList').innerHTML=(d.backups||[]).length?(d.backups||[]).map(b=>`<div class="abi"><div><b>${b.backup_kind==='automatic'?'تلقائية':b.backup_kind==='pre_restore'?'قبل الاستعادة':'يدوية'} • ${when(b.created_at)}</b><small>${String(b.branch_name||'هذا الفرع')} • ${Number(b.item_count)||0} عنصر • ${fmt(b.size_bytes)} • SHA ${String(b.sha256||'').slice(0,10)}…</small></div><div class="abacts">${b.branch_device_id===cur?`<button data-restore="${b.backup_id}">استعادة</button>`:''}<button class="danger" data-delete="${b.backup_id}">حذف</button></div></div>`).join(''):'<div class="abnote">لا توجد نسخ سحابية جاهزة بعد.</div>';document.querySelectorAll('[data-restore]').forEach(x=>x.onclick=()=>restoreCloud(x.dataset.restore));document.querySelectorAll('[data-delete]').forEach(x=>x.onclick=()=>deleteCloud(x.dataset.delete));status('القائمة محدثة • النسخ غير المكتملة لا تظهر هنا')}catch(e){status('تعذر تحميل سجل النسخ: '+String(e?.message||e))}}
+async function refreshList(){const scope=stateScope();paint();try{const all=role()==='owner'&&$('abuBackupAll')?.checked,d=await api('list','GET',null,all?'&all=1':''),cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');assertScope(scope);$('abuBackupList').innerHTML=(d.backups||[]).length?(d.backups||[]).map(b=>`<div class="abi"><div><b>${b.backup_kind==='automatic'?'تلقائية':b.backup_kind==='pre_restore'?'قبل الاستعادة':'يدوية'} • ${when(b.created_at)}</b><small>${htmlEscape(b.branch_name||'هذا الفرع')} • ${Number(b.item_count)||0} عنصر • ${fmt(b.size_bytes)} • SHA ${String(b.sha256||'').slice(0,10)}…</small></div><div class="abacts">${b.branch_device_id===cur?`<button data-restore="${htmlEscape(b.backup_id)}">استعادة</button>`:''}<button class="danger" data-delete="${htmlEscape(b.backup_id)}">حذف</button></div></div>`).join(''):'<div class="abnote">لا توجد نسخ سحابية جاهزة بعد.</div>';document.querySelectorAll('[data-restore]').forEach(x=>x.onclick=()=>restoreCloud(x.dataset.restore));document.querySelectorAll('[data-delete]').forEach(x=>x.onclick=()=>deleteCloud(x.dataset.delete));status('القائمة محدثة • النسخ غير المكتملة لا تظهر هنا')}catch(e){if(scope===stateScope())status('تعذر تحميل سجل النسخ: '+String(e?.message||e))}}
 function open(){build();paint();$('abuBackupModal').classList.add('on');refreshList()}
 function inject(){const h=document.querySelector('#vaultCenter .v-actions');if(!h||$('abuBackupCenterBtn'))return;const b=document.createElement('button');b.id='abuBackupCenterBtn';b.textContent='☁️ النسخ التلقائي';b.onclick=open;h.appendChild(b)}
 async function autoCheck(){if(busy||!due())return;try{await backupNow('automatic',false)}catch(_){} }

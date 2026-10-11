@@ -9,12 +9,17 @@
     "android": {
       "package": "com.abubassam.librarycamera3",
       "versionCode": 432,
-      "permissions": ["CAMERA", "INTERNET"],
+      "permissions": [
+        "CAMERA",
+        "INTERNET",
+        "READ_CONTACTS"
+      ],
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_CONTACTS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -25,7 +30,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "يحتاج تطبيق مكتبة أبو بسام إلى الكاميرا للمسح الضوئي وقراءة الباركود وتصوير المستندات."
+          "cameraPermission": "يحتاج تطبيق مكتبة أبو بسام إلى الكاميرا للمسح الضوئي وقراءة الباركود وتصوير المستندات.",
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -39,6 +45,12 @@
         {
           "configureAndroidBackup": true,
           "faceIDPermission": "يستخدم تطبيق مكتبة أبو بسام المصادقة الحيوية لحماية بيانات تسجيل الدخول على هذا الجهاز."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "يستخدم تطبيق مكتبة أبو بسام جهة الاتصال التي تختارها فقط لإدخال رقم هاتف في الباج، ولا يعدّل أو يرفع جهات الاتصال."
         }
       ]
     ]

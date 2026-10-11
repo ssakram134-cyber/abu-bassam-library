@@ -278,6 +278,8 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         </div>
     </div>
 
+    <script src="questions-storage-scope-runtime.js"></script>
+    <script src="questions-legacy-draft-recovery-runtime.js"></script>
     <script>
         let currentScale = 1;
         
@@ -306,10 +308,17 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         window.addEventListener('resize', fitToScreen);
 
         let undoStack = [];
+        const QUESTION_UNDO_BUDGET = 6 * 1024 * 1024;
         function saveState() {
             const container = document.getElementById('pages-container');
-            undoStack.push(container.innerHTML);
-            if (undoStack.length > 30) undoStack.shift();
+            if (!container) return;
+            const snapshot = container.innerHTML;
+            if (snapshot.length > QUESTION_UNDO_BUDGET) { undoStack = []; return; }
+            undoStack.push(snapshot);
+            let stored = undoStack.reduce((sum, item) => sum + item.length, 0);
+            while (undoStack.length > 20 || stored > QUESTION_UNDO_BUDGET) {
+                stored -= undoStack.shift().length;
+            }
         }
 
         function undoAction() {
@@ -619,7 +628,9 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
 
         function saveQuestionDraft(showMessage) {
             try {
-                localStorage.setItem(QUESTION_DRAFT_KEY, document.getElementById('pages-container').innerHTML);
+                const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+                if(!scopedKey)throw new Error('Authenticated question storage is not available');
+                localStorage.setItem(scopedKey, document.getElementById('pages-container').innerHTML);
                 if (showMessage) alert('English question draft saved on this device ✓');
             } catch (error) {
                 if (showMessage) alert('The draft could not be saved. Added images may be too large.');
@@ -627,13 +638,16 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         }
 
         function scheduleQuestionDraft() {
+            // The enhanced runtime owns the only active draft scheduler once loaded.
+            if (window.__ABU_QUESTIONS_EN_FIXES_V2__) return;
             clearTimeout(draftTimer);
             draftTimer = setTimeout(() => saveQuestionDraft(false), 500);
         }
 
         function restoreQuestionDraft() {
             try {
-                const saved = localStorage.getItem(QUESTION_DRAFT_KEY);
+                const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+                const saved = scopedKey?localStorage.getItem(scopedKey):null;
                 if (!saved) return false;
                 document.getElementById('pages-container').innerHTML = saved;
                 rebindAllDraggables();
@@ -663,8 +677,11 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         }
 
         function resetQuestionDraft() {
+            if (!window.__ABU_QUESTIONS_EN_FIXES_V2__) return alert('Wait until the secure draft editor has loaded before clearing a draft.');
             if (!confirm('Start a new form? The current English draft will be removed.')) return;
-            localStorage.removeItem(QUESTION_DRAFT_KEY);
+            const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+            if(!scopedKey)return alert('Authenticated storage unavailable; the draft was not reset.');
+            try{localStorage.removeItem(scopedKey)}catch(e){return alert('Could not remove the draft.')}
             location.reload();
         }
 

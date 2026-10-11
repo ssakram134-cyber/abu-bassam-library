@@ -7,6 +7,7 @@ import {
   Linking,
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { registerRootComponent } from 'expo';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
+import * as Contacts from 'expo-contacts';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
@@ -28,6 +30,7 @@ const APP_VERSION = '4.3.2';
 const BUILD_NUMBER = '432';
 const STARTUP_WATCHDOG_MS = 12000;
 const PRIVACY_CAPTURE_KEY = 'abu-bassam-private-screen';
+const PERMISSION_INTRO_KEY = 'abu_bassam_first_run_permissions_v1';
 const BARCODE_TYPES = [
   'qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'upc_a', 'upc_e',
   'datamatrix', 'pdf417', 'aztec', 'codabar', 'itf14',
@@ -41,17 +44,20 @@ const ANDROID_BRIDGE = `
     catch (error) {}
   }
   window.Android = {
-    saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
+    saveBase64: function (name, mime, data, requestId) { send('saveBase64', { name: name, mime: mime, data: data, requestId: requestId }); },
     saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
     printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
     printBase64: function (name, mime, data) { send('printBase64', { name: name, mime: mime, data: data }); },
-    scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
+    scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data, requestId: arguments[1] }); },
     printHtml: function (html) { send('printHtml', { html: html }); },
     savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
     shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
     openExternal: function (url) { send('openExternal', { url: url }); },
     openAppSettings: function () { send('openAppSettings'); },
+    showPermissionGuide: function () { send('showPermissionGuide'); },
+    pickContact: function (target, requestId) { send('pickContact', { target: target, requestId: requestId }); },
+    cancelContactChoice: function () { send('cancelContactChoice'); },
     getDeviceInfo: function () { send('getDeviceInfo'); },
     cleanCache: function () { send('cleanCache'); },
     security: function (action, requestId, payload) { send('security', { action: action, requestId: requestId, payload: payload || {} }); },
@@ -84,7 +90,7 @@ function printDimensions(paper) {
   }
   return { width: 210, height: 297 };
 }
-function nativeDeviceInfo(cameraPermission) {
+function nativeDeviceInfo(cameraPermission, contactAccess) {
   const constants = Platform.constants || {};
   const model = String(constants.Model || constants.model || 'Android');
   const manufacturer = String(constants.Manufacturer || constants.manufacturer || '').trim();
@@ -101,6 +107,8 @@ function nativeDeviceInfo(cameraPermission) {
       : cameraPermission?.canAskAgain === false
         ? 'مرفوض — افتح إعدادات النظام'
         : 'يُطلب عند الاستخدام',
+    contactsPermission: contactAccess === 'granted' ? 'مسموح' : contactAccess === 'blocked' ? 'مرفوض — افتح الإعدادات' : 'اختياري عند استخدام الباج',
+    batteryPermission: 'إعداد اختياري من معلومات تطبيق Android',
     connection: 'هذا الجهاز',
   };
 }
@@ -108,7 +116,9 @@ function nativeDeviceInfo(cameraPermission) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRequestIdRef = useRef(null);
+  const cameraSessionRef = useRef(0);
+  const [cameraPermission, requestCameraPermission, refreshCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraBusy, setCameraBusy] = useState(false);
@@ -117,16 +127,111 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [permissionIntroVisible, setPermissionIntroVisible] = useState(false);
+  const [contactAccess, setContactAccess] = useState('unknown');
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [contactChoice, setContactChoice] = useState(null);
+  const contactPickerEpochRef = useRef(0);
+
+  useEffect(() => {
+    let mounted = true;
+    SecureStore.getItemAsync(PERMISSION_INTRO_KEY).then((done) => {
+      if (mounted && done !== '1') setPermissionIntroVisible(true);
+    }).catch(() => { if (mounted) setPermissionIntroVisible(true); });
+    Contacts.getPermissionsAsync().then((result) => {
+      if (mounted) setContactAccess(result?.granted ? 'granted' : result?.canAskAgain === false ? 'blocked' : 'ask');
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  const finishPermissionIntro = useCallback(() => {
+    setPermissionIntroVisible(false);
+    SecureStore.setItemAsync(PERMISSION_INTRO_KEY, '1').catch(() => {});
+  }, []);
+
+  const allowCameraFromIntro = useCallback(async () => {
+    if (permissionBusy) return;
+    setPermissionBusy(true);
+    try {
+      const status = await refreshCameraPermission();
+      if (!status?.granted && status?.canAskAgain === false) {
+        await Linking.openSettings();
+        return;
+      }
+      const granted = status?.granted ? status : await requestCameraPermission();
+      if (!granted?.granted && granted?.canAskAgain === false) {
+        Alert.alert('إذن الكاميرا', 'تم منع طلب الإذن. يمكنك تفعيله لاحقًا من إعدادات تطبيق Android.');
+      }
+    } catch (_) {
+      Alert.alert('إذن الكاميرا', 'تعذر طلب الكاميرا. افتح إعدادات التطبيق للسماح بها.');
+    } finally { setPermissionBusy(false); }
+  }, [permissionBusy, refreshCameraPermission, requestCameraPermission]);
+
+  const allowContactsFromIntro = useCallback(async () => {
+    if (permissionBusy) return;
+    setPermissionBusy(true);
+    try {
+      const result = await Contacts.requestPermissionsAsync();
+      setContactAccess(result?.granted ? 'granted' : result?.canAskAgain === false ? 'blocked' : 'ask');
+      if (!result?.granted && result?.canAskAgain === false) {
+        Alert.alert('جهات الاتصال', 'يمكنك تفعيل إذن قراءة الأرقام من إعدادات Android لاحقًا.');
+      }
+    } catch (_) { Alert.alert('جهات الاتصال', 'تعذر طلب إذن جهات الاتصال على هذا الجهاز.'); }
+    finally { setPermissionBusy(false); }
+  }, [permissionBusy]);
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     webRef.current?.injectJavaScript(`if (typeof window.${functionName} === 'function') window.${functionName}(${json}); true;`);
   }, []);
+  const choosePhone = useCallback((choice, phone) => {
+    if (!choice) return;
+    setContactChoice(null);
+    inject('AbuBassamNativeContactSelected', {
+      target: choice.target, requestId: choice.requestId,
+      ...(phone ? { name: choice.name, phone } : { cancelled: true }),
+    });
+  }, [inject]);
+
+  const pickContact = useCallback(async ({ target, requestId }) => {
+    const field = String(target || '');
+    const token = String(requestId || '');
+    if (!['phone', 'guardianPhone', 'driverPhone'].includes(field) || !/^[1-9][0-9]{0,9}$/.test(token)) return;
+    const pickerEpoch = ++contactPickerEpochRef.current;
+    try {
+      let permission = await Contacts.getPermissionsAsync();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        throw new Error('إذن جهات الاتصال مرفوض. افتح إعدادات Android لتفعيله عند الحاجة.');
+      }
+      if (!permission?.granted) permission = await Contacts.requestPermissionsAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask');
+      if (!permission?.granted) throw new Error('لم يُمنح إذن قراءة جهات الاتصال');
+      const selected = await Contacts.presentContactPickerAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      if (!selected) { inject('AbuBassamNativeContactSelected', { target: field, requestId: token, cancelled: true }); return; }
+      const numbers = (selected.phoneNumbers || [])
+        .filter(item => typeof item?.number === 'string' && item.number.trim())
+        .map(item => ({ label: String(item.label || item.type || 'رقم').slice(0,30), phone: item.number.trim().slice(0,40) }));
+      if (!numbers.length) throw new Error('جهة الاتصال المختارة لا تحتوي على رقم هاتف');
+      if (numbers.length === 1) {
+        inject('AbuBassamNativeContactSelected', { target: field, requestId: token, name: String(selected.name || ''), phone: numbers[0].phone });
+        return;
+      }
+      setContactChoice({ target: field, requestId: token, name: String(selected.name || '').slice(0,120), numbers });
+    } catch (error) {
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
+      inject('AbuBassamNativeContactSelected', { target: field, requestId: token, error: String(error?.message || 'تعذر اختيار جهة الاتصال') });
+    }
+  }, [inject]);
+
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    cameraSessionRef.current += 1;
+    cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
@@ -140,65 +245,105 @@ function App() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (contactChoice) { choosePhone(contactChoice, null); return true; }
       if (cameraMode) { closeCamera(); return true; }
+      if (permissionIntroVisible) { finishPermissionIntro(); return true; }
       if (!webReady) return false;
       inject('AbuBassamNativeBackPress', { source: 'hardware', at: Date.now() });
       return true;
     });
     return () => subscription.remove();
-  }, [cameraMode, closeCamera, inject, webReady]);
+  }, [cameraMode, closeCamera, contactChoice, choosePhone, permissionIntroVisible, finishPermissionIntro, inject, webReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshCameraPermission().catch(() => {});
+        Contacts.getPermissionsAsync().then(permission =>
+          setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask')
+        ).catch(() => {});
+      }
       if (webReady) inject('AbuBassamNativeAppState', { state, at: Date.now() });
     });
     return () => subscription.remove();
-  }, [inject, webReady]);
+  }, [inject, refreshCameraPermission, webReady]);
 
-  const openCamera = useCallback(async (mode, frameKind = 'paper') => {
+  const openCamera = useCallback(async (mode, frameKind = 'paper', requestId = null) => {
+    const cameraSession = ++cameraSessionRef.current;
+    cameraRequestIdRef.current = requestId == null ? null : String(requestId);
     try {
-      let permission = cameraPermission;
+      let permission = await refreshCameraPermission();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        cameraError('تم منع إذن الكاميرا. افتح إعدادات Android ← التطبيقات ← مكتبة أبو بسام ← الكاميرا.');
+        return;
+      }
       if (!permission?.granted) permission = await requestCameraPermission();
-      if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      if (cameraSession !== cameraSessionRef.current) return;
+      if (!permission?.granted) { cameraRequestIdRef.current = null; cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
-    } catch (_) { cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.'); }
-  }, [cameraError, cameraPermission, requestCameraPermission]);
+    } catch (_) {
+      if (cameraSession !== cameraSessionRef.current) return;
+      cameraRequestIdRef.current = null;
+      cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.');
+    }
+  }, [cameraError, refreshCameraPermission, requestCameraPermission]);
 
   const captureDocument = useCallback(async () => {
     if (!cameraReady || cameraBusy || !cameraRef.current) return;
+    const cameraSession = cameraSessionRef.current;
+    const requestId = cameraRequestIdRef.current;
+    const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
     setCameraBusy(true);
     try {
       const picture = await cameraRef.current.takePictureAsync({ base64: true, exif: false, quality: 1, skipProcessing: false });
+      if (cameraSession !== cameraSessionRef.current) return;
       if (!picture?.base64) throw new Error('لم تُحفظ الصورة');
-      const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
       closeCamera();
-      inject('AbuBassamNativeCameraResult', { mode, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
-    } catch (_) { setCameraBusy(false); cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.'); }
+      inject('AbuBassamNativeCameraResult', { mode, requestId, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
+    } catch (_) {
+      if (cameraSession !== cameraSessionRef.current) return;
+      setCameraBusy(false);
+      cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.');
+    }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
-  const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+  const onBarcodeScanned = useCallback((result, cameraSession) => {
+    if (cameraSession !== cameraSessionRef.current || barcodeLocked || !result?.data) return;
+    const requestId = cameraRequestIdRef.current;
     setBarcodeLocked(true);
+    cameraSessionRef.current += 1; cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
-    inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
+    inject('AbuBassamNativeCameraResult', { mode: 'barcode', requestId, data: String(result.data), barcodeType: result.type || '' });
+    setTimeout(() => { if (cameraSessionRef.current === cameraSession + 1) setBarcodeLocked(false); }, 500);
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
+  const saveBase64 = useCallback(async ({ name, mime, data, requestId }) => {
+    const confirmationId = String(requestId || '');
+    const report = (ok, error = '') => {
+      if (confirmationId) {
+        const result = { requestId: confirmationId, ok, error };
+        inject('AbuBassamSettingsBackupResult', result);
+        inject('AbuBassamNativeFileSaveResult', result);
+      }
+    };
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { report(false, 'أُلغي اختيار مجلد الحفظ.'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
-      Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
-  }, []);
+      if (confirmationId) report(true);
+      else Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
+    } catch (error) {
+      if (confirmationId) report(false, String(error?.message || error));
+      else Alert.alert('تعذر الحفظ', String(error?.message || error));
+    }
+  }, [inject]);
 
   const saveToGallery = useCallback(async ({ name, mime, data }) => {
     try {
@@ -253,8 +398,23 @@ function App() {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
+      if (imagePages.length > 20) throw new Error('لا تسمح ذاكرة الهاتف بطباعة أكثر من 20 صفحة في دفعة واحدة؛ اطبع ملف PDF بدلًا من ذلك.');
+      if (String(paper || '').startsWith('CUSTOM:')) {
+        const parts = String(paper).split(':'), width = Number(parts[1]), height = Number(parts[2]);
+        if (parts.length !== 3 || !Number.isFinite(width) || !Number.isFinite(height) || width < 50 || height < 50 || width > 500 || height > 500) {
+          throw new Error('مقاس الورق المخصص غير صالح.');
+        }
+      }
       const size = printDimensions(paper);
-      const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
+      let encodedTotal = 0;
+      const body = imagePages.map((src) => {
+        if (typeof src !== 'string' || src.length > 16 * 1024 * 1024 || !/^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i.test(src)) {
+          throw new Error('صفحة الطباعة ليست صورة PNG أو JPEG أو WebP محلية صالحة، أو أنها كبيرة جدًا.');
+        }
+        encodedTotal += src.length;
+        if (encodedTotal > 80 * 1024 * 1024) throw new Error('إجمالي صفحات الطباعة كبير جدًا؛ قسّم الدفعة.');
+        return `<section><img alt="صفحة للطباعة" src="${src}"></section>`;
+      }).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
     } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
@@ -266,19 +426,28 @@ function App() {
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
+    let tempPdfUri = '';
     try {
-      if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
+      if (!String(html || '').trim()) throw new Error('لا توجد صفحات لحفظها');
       const result = await Print.printToFileAsync({ html: String(html), base64: true });
-      const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
+      tempPdfUri = String(result?.uri || '');
+      const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`);
+      const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
       if (!permission.granted) return;
+      const base64 = result.base64 || await FileSystem.readAsStringAsync(tempPdfUri, { encoding: FileSystem.EncodingType.Base64 });
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+    } catch (error) {
+      Alert.alert('تعذر حفظ PDF', String(error?.message || error));
+    } finally {
+      // The print-to-file cache must be cleared even if the user cancels folder selection.
+      if (tempPdfUri && FileSystem.cacheDirectory && tempPdfUri.startsWith(FileSystem.cacheDirectory)) {
+        await FileSystem.deleteAsync(tempPdfUri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
@@ -321,7 +490,7 @@ function App() {
     try { await Linking.openSettings(); }
     catch (_) { Alert.alert('تعذر فتح الإعدادات', 'افتح إعدادات Android ثم اختر تطبيق مكتبة أبو بسام.'); }
   }, []);
-  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission)), [cameraPermission, inject]);
+  const getDeviceInfo = useCallback(() => inject('AbuBassamNativeDeviceInfo', nativeDeviceInfo(cameraPermission, contactAccess)), [cameraPermission, contactAccess, inject]);
   const cleanCache = useCallback(async () => {
     try {
       const root = FileSystem.cacheDirectory;
@@ -339,7 +508,7 @@ function App() {
       if (action === 'secureGet') return replySecurity(requestId, true, await SecureStore.getItemAsync(safeKey()) || '');
       if (action === 'secureSet') { await SecureStore.setItemAsync(safeKey(), String(payload.value || '')); return replySecurity(requestId, true, true); }
       if (action === 'secureDelete') { await SecureStore.deleteItemAsync(safeKey()); return replySecurity(requestId, true, true); }
-      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission));
+      if (action === 'deviceInfo') return replySecurity(requestId, true, nativeDeviceInfo(cameraPermission, contactAccess));
       if (action === 'biometricStatus') {
         const [available, enrolled, types] = await Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync(), LocalAuthentication.supportedAuthenticationTypesAsync()]);
         return replySecurity(requestId, true, { available, enrolled, types });
@@ -358,22 +527,22 @@ function App() {
       }
       throw new Error('عملية الأمان غير معروفة');
     } catch (error) { replySecurity(requestId, false, null, error?.message || error); }
-  }, [cameraPermission, replySecurity]);
+  }, [cameraPermission, contactAccess, replySecurity]);
 
-  const scanBarcodeImage = useCallback(async ({ data }) => {
+  const scanBarcodeImage = useCallback(async ({ data, requestId }) => {
     let uri = null;
     try {
       const raw = String(data || '');
       if (raw.length > 11_200_000 || !/^data:image\/(png|jpeg|webp);base64,/i.test(raw)) throw new Error('صيغة الصورة غير مدعومة أو حجمها أكبر من 8MB');
       const parsed = splitDataUrl(raw);
       const suffix = parsed.mime === 'image/png' ? 'png' : parsed.mime === 'image/webp' ? 'webp' : 'jpg';
-      uri = FileSystem.cacheDirectory + 'abu_barcode_gallery_' + Date.now() + '.' + suffix;
+      uri = FileSystem.cacheDirectory + 'abu_barcode_gallery_' + Date.now() + '_' + String(requestId||'0').replace(/[^0-9]/g,'').slice(0,16) + '.' + suffix;
       await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
       const matches = await Camera.scanFromURLAsync(uri, BARCODE_TYPES);
       const first = matches?.find(item => typeof item.data === 'string' && item.data.length > 0);
-      inject('AbuBassamNativeBarcodeImageResult', first ? { data: first.data, barcodeType: first.type || 'qr' } : { error: 'لم يتم العثور على باركود؛ قص الصورة ليملأ الرمز معظم مساحتها.' });
+      inject('AbuBassamNativeBarcodeImageResult', first ? { requestId, data: first.data, barcodeType: first.type || 'qr' } : { requestId, error: 'لم يتم العثور على باركود؛ قص الصورة ليملأ الرمز معظم مساحتها.' });
     } catch (error) {
-      inject('AbuBassamNativeBarcodeImageResult', { error: String(error?.message || 'تعذرت قراءة صورة الباركود') });
+      inject('AbuBassamNativeBarcodeImageResult', { requestId, error: String(error?.message || 'تعذرت قراءة صورة الباركود') });
     } finally {
       if (uri) await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
     }
@@ -382,7 +551,11 @@ function App() {
   const onWebMessage = useCallback(async (event) => {
     let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
     if (message.type === 'webBootReady') { setWebReady(true); return; }
-    if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
+    if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind, message.requestId);
+    if (message.type === 'cancelCamera') return closeCamera();
+    if (message.type === 'showPermissionGuide') { Contacts.getPermissionsAsync().then(p => setContactAccess(p?.granted ? 'granted' : p?.canAskAgain === false ? 'blocked' : 'ask')).catch(() => {}); setPermissionIntroVisible(true); return; }
+    if (message.type === 'pickContact') return pickContact(message);
+    if (message.type === 'cancelContactChoice') { contactPickerEpochRef.current += 1; setContactChoice(null); return; }
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
@@ -398,9 +571,10 @@ function App() {
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, closeCamera, pickContact, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
+  const cameraSessionAtRender = cameraSessionRef.current;
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
@@ -418,12 +592,57 @@ function App() {
         onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
       />
       {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {webReady && permissionIntroVisible && !cameraMode && (
+        <View style={styles.permissionOverlay}>
+          <ScrollView contentContainerStyle={styles.permissionContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.permissionTitle}>أذونات مكتبة أبو بسام</Text>
+            <Text style={styles.permissionDescription}>مرحبًا بك. اختر ما تسمح به للتطبيق. يمكنك المتابعة حتى لو رفضت أي إذن، ولا نطلب الوصول إلى الصور أو الملفات كلها.</Text>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>📷 الكاميرا</Text>
+              <Text style={styles.permissionDescription}>لتصوير المستمسكات والهوية وقراءة الباركود. {cameraPermission?.granted ? 'مسموح ✓' : 'تُطلب أيضًا عند فتح الكاميرا.'}</Text>
+              <TouchableOpacity disabled={permissionBusy || cameraPermission?.granted} style={styles.permissionButton} onPress={allowCameraFromIntro}><Text style={styles.permissionButtonText}>{cameraPermission?.granted ? 'مسموح ✓' : cameraPermission?.canAskAgain === false ? 'فتح إعدادات الكاميرا' : 'السماح للكاميرا'}</Text></TouchableOpacity>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>👥 جهات الاتصال — اختياري</Text>
+              <Text style={styles.permissionDescription}>لاختيار رقم هاتف ولي الأمر أو سائق الخط أو الباج التعريفي. نستخدم جهة الاتصال التي تختارها فقط، ولا نعدّل دفتر الهاتف.</Text>
+              <TouchableOpacity disabled={permissionBusy || contactAccess === 'granted'} style={styles.permissionButton} onPress={() => contactAccess === 'blocked' ? Linking.openSettings().catch(() => {}) : allowContactsFromIntro()}><Text style={styles.permissionButtonText}>{contactAccess === 'granted' ? 'مسموح ✓' : contactAccess === 'blocked' ? 'فعّل من الإعدادات' : 'السماح بقراءة الأرقام'}</Text></TouchableOpacity>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>🗂 الصور والملفات</Text>
+              <Text style={styles.permissionDescription}>يتم اختيارها من نافذة ملفات Android فقط؛ لا نطلب صلاحية الوصول الشامل إلى التخزين.</Text>
+            </View>
+            <View style={styles.permissionRow}>
+              <Text style={styles.permissionLabel}>🔋 البطارية — اختياري</Text>
+              <Text style={styles.permissionDescription}>لا يحتاج التطبيق لاستثناء من توفير البطارية عند تشغيله عادةً. لتغيير إعداداته افتح معلومات التطبيق ثم البطارية، ولا يعني ذلك ضمان مزامنة مستمرة بالخلفية.</Text>
+              <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => Linking.openSettings().catch(() => Alert.alert('إعدادات Android', 'افتح معلومات التطبيق ← البطارية.'))}><Text style={styles.permissionSecondaryText}>فتح إعدادات التطبيق والبطارية</Text></TouchableOpacity>
+            </View>
+            <Text style={styles.permissionDescription}>إشعارات التطبيق الداخلية متاحة دون طلب إذن إشعارات Android؛ وسيُطلب الإذن عند تفعيل إشعارات النظام مستقبلًا إذا كانت مستخدمة. الإنترنت لا يُظهر نافذة سماح.</Text>
+            <TouchableOpacity style={styles.permissionContinue} disabled={permissionBusy} onPress={finishPermissionIntro}><Text style={styles.permissionContinueText}>متابعة إلى تطبيق المكتبة</Text></TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+      {webReady && contactChoice && (
+        <View style={styles.contactChoiceOverlay}>
+          <ScrollView contentContainerStyle={styles.permissionContent}>
+            <Text style={styles.permissionTitle}>اختيار رقم الهاتف</Text>
+            <Text style={styles.permissionDescription}>لجهة الاتصال: {contactChoice.name || 'جهة اتصال'}. اختر الرقم الذي تريد وضعه في الباج.</Text>
+            {contactChoice.numbers.map((item, index) => (
+              <TouchableOpacity key={index} style={styles.contactNumberButton} onPress={() => choosePhone(contactChoice, item.phone)}>
+                <Text style={styles.contactNumberText}>{item.label} — {item.phone}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => choosePhone(contactChoice, null)}>
+              <Text style={styles.permissionSecondaryText}>إلغاء دون تغيير الرقم</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
-            onCameraReady={() => setCameraReady(true)} onMountError={onCameraMountError}
+          <CameraView key={cameraSessionAtRender} ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
+            onCameraReady={() => { if (cameraSessionAtRender === cameraSessionRef.current) setCameraReady(true); }} onMountError={() => { if (cameraSessionAtRender === cameraSessionRef.current) onCameraMountError(); }}
             barcodeScannerSettings={barcodeMode ? { barcodeTypes: BARCODE_TYPES } : undefined}
-            onBarcodeScanned={barcodeMode && !barcodeLocked ? onBarcodeScanned : undefined} />
+            onBarcodeScanned={barcodeMode && !barcodeLocked ? (result) => onBarcodeScanned(result, cameraSessionAtRender) : undefined} />
           <View style={styles.cameraShade} pointerEvents="box-none">
             <View style={styles.cameraHeader}>
               <TouchableOpacity style={styles.roundButton} onPress={closeCamera} accessibilityLabel="إغلاق الكاميرا"><Text style={styles.roundButtonText}>×</Text></TouchableOpacity>
@@ -445,6 +664,21 @@ function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
+  contactChoiceOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 160, elevation: 160, backgroundColor: '#fffaf3' },
+  contactNumberButton: { padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#bfd9d1', backgroundColor: '#fff' },
+  contactNumberText: { fontSize: 15, fontWeight: '700', textAlign: 'right', color: '#075c50' },
+  permissionOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 150, elevation: 150, backgroundColor: '#fffaf3' },
+  permissionContent: { paddingHorizontal: 18, paddingVertical: 24, gap: 12 },
+  permissionTitle: { color: '#06483e', fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  permissionDescription: { color: '#554b43', fontSize: 13, lineHeight: 21, textAlign: 'right' },
+  permissionRow: { borderWidth: 1, borderColor: '#d7d1c8', borderRadius: 14, padding: 13, backgroundColor: '#fff', gap: 7 },
+  permissionLabel: { color: '#06483e', fontSize: 16, fontWeight: '900', textAlign: 'right' },
+  permissionButton: { backgroundColor: '#087f72', alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 11, borderRadius: 9 },
+  permissionButtonText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  permissionSecondaryButton: { paddingVertical: 9, alignSelf: 'flex-start' },
+  permissionSecondaryText: { color: '#085eae', fontSize: 13, fontWeight: '800' },
+  permissionContinue: { marginTop: 5, paddingVertical: 16, backgroundColor: '#06483e', borderRadius: 13, alignItems: 'center' },
+  permissionContinueText: { color: '#fff', fontWeight: '900', fontSize: 15 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
   loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },

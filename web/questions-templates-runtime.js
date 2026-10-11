@@ -11,8 +11,9 @@ const DIGITS='٠١٢٣٤٥٦٧٨٩';
 const arNum=v=>String(v).replace(/\d/g,d=>DIGITS[Number(d)]);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>JSON.parse(JSON.stringify(v));
-const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||clone(f)}catch(e){return clone(f)}};
-const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+const questionKey=key=>window.AbuQuestionScope?.scopedKey(key)||null;
+const load=(k,f)=>{const key=questionKey(k);if(!key)return clone(f);try{return JSON.parse(localStorage.getItem(key)||'null')||clone(f)}catch(e){return clone(f)}};
+const save=(k,v)=>{const key=questionKey(k);if(!key)return false;try{localStorage.setItem(key,JSON.stringify(v));return true}catch(e){return false}};
 
 const DEFAULT_PROFILE={
   administration:'إدارة: .........................',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',
@@ -112,19 +113,31 @@ function modalHtml(){return `<div id="abuQTemplateModal" class="abu-qmodal"><div
 function addControls(){let bar=$('controls');if(!bar)return;if(!$('abuTemplatesBtn')){let b=document.createElement('button');b.id='abuTemplatesBtn';b.className='btn abu-qbtn';b.textContent='📚 القوالب';b.onclick=openTemplates;bar.appendChild(b)}if(!$('abuFormatBtn')){let b=document.createElement('button');b.id='abuFormatBtn';b.className='btn abu-format-btn';b.textContent='✍️ تنسيق';b.onclick=openFormat;bar.appendChild(b)}if(!$('abuUndo2')){let u=document.createElement('button');u.id='abuUndo2';u.className='btn btn-undo';u.textContent='↶ تراجع';u.onclick=undo2;bar.appendChild(u);let r=document.createElement('button');r.id='abuRedo2';r.className='btn btn-undo';r.textContent='↷ إعادة';r.onclick=redo2;bar.appendChild(r)}}
 
 function currentHtml(){return $('pages-container')?.innerHTML||''}
-function pushHistory(force=false){let now=currentHtml();if(!now||(!force&&now===lastSnapshot))return;if(lastSnapshot)history.push(lastSnapshot);if(history.length>40)history.shift();lastSnapshot=now;redoStack=[]}
+const QUESTION_HISTORY_BUDGET=6*1024*1024;
+function boundQuestionHistory(stack){
+ let total=stack.reduce((sum,entry)=>sum+entry.length,0);
+ while(stack.length&&(stack.length>20||total>QUESTION_HISTORY_BUDGET))
+  total-=stack.shift().length;
+}
+function pushHistory(force=false){
+ let now=currentHtml();
+ if(!now||(!force&&now===lastSnapshot))return;
+ if(lastSnapshot){history.push(lastSnapshot);boundQuestionHistory(history)}
+ lastSnapshot=now;redoStack=[]
+}
 function scheduleHistory(){clearTimeout(historyTimer);historyTimer=setTimeout(()=>pushHistory(false),700)}
-function undo2(){if(!history.length)return;let now=currentHtml();let prev=history.pop();redoStack.push(now);$('pages-container').innerHTML=prev;lastSnapshot=prev;afterDomRestore()}
-function redo2(){if(!redoStack.length)return;let now=currentHtml();history.push(now);let next=redoStack.pop();$('pages-container').innerHTML=next;lastSnapshot=next;afterDomRestore()}
+function undo2(){if(!history.length)return;let now=currentHtml();let prev=history.pop();redoStack.push(now);boundQuestionHistory(redoStack);$('pages-container').innerHTML=prev;lastSnapshot=prev;afterDomRestore()}
+function redo2(){if(!redoStack.length)return;let now=currentHtml();history.push(now);boundQuestionHistory(history);let next=redoStack.pop();$('pages-container').innerHTML=next;lastSnapshot=next;afterDomRestore()}
 function afterDomRestore(){try{if(typeof rebindAllDraggables==='function')rebindAllDraggables();if(typeof scheduleQuestionDraft==='function')scheduleQuestionDraft()}catch(e){}enhanceImages()}
 
 function renderSubjects(){let box=$('abuSubjects');if(!box)return;box.innerHTML='';['math1','science3','science4','islamic'].forEach(k=>{let b=document.createElement('button');b.textContent=subjectMeta[k].label;b.classList.toggle('on',currentSubject===k);b.onclick=()=>{currentSubject=k;document.dispatchEvent(new CustomEvent('abuQuestionSubjectChanged',{detail:{subject:k}}));renderSubjects();renderTemplates()};box.appendChild(b)})}
-function cardHtml(t,isCustom=false){return `<div class="abu-tcard"><div class="abu-tpreview"><b>${esc(t.name)}</b><span>${t.subject==='general'?'قالب عام':'قالب خاص بالمادة'}</span></div><b>${esc(t.name)}</b><button onclick="AbuQuestionTemplates.applyTemplate('${esc(t.id)}',${isCustom?'true':'false'})">استخدام النموذج</button></div>`}
+function cardHtml(t,isCustom=false){return `<div class="abu-tcard"><div class="abu-tpreview"><b>${esc(t.name)}</b><span>${t.subject==='general'?'قالب عام':'قالب خاص بالمادة'}</span></div><b>${esc(t.name)}</b><button data-apply-template="${esc(t.id)}" data-custom="${isCustom?'1':'0'}">استخدام النموذج</button></div>`}
+function onTemplateCardClick(event){const button=event.target?.closest?.('button[data-apply-template]');if(!button||!button.closest('#abuQTemplateModal'))return;event.preventDefault();applyTemplate(button.dataset.applyTemplate,button.dataset.custom==='1')}
 function renderTemplates(){let spec=$('abuSubjectTemplates'),gen=$('abuGeneralTemplates');if(!spec||!gen)return;let list=SYSTEM_TEMPLATES.filter(t=>t.subject===currentSubject);let custom=customTemplates.filter(t=>t.subject===currentSubject);spec.innerHTML=list.map(t=>cardHtml(t)).join('')+custom.map(t=>cardHtml(t,true)).join('');gen.innerHTML=GENERAL_TEMPLATES.map(t=>cardHtml(t)).join('')+customTemplates.filter(t=>t.subject==='general').map(t=>cardHtml(t,true)).join('')}
 function openTemplates(){renderSubjects();renderTemplates();$('abuQTemplateModal')?.classList.add('show')}
 function closeTemplates(){$('abuQTemplateModal')?.classList.remove('show')}
 function findTemplate(id,isCustom){return (isCustom?customTemplates:SYSTEM_TEMPLATES).find(t=>t.id===id)}
-function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{localStorage.setItem('abuLastQuestionTemplateV1',id)}catch(e){}}
+function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{questionKey('abuLastQuestionTemplateV1')&&localStorage.setItem(questionKey('abuLastQuestionTemplateV1'),id)}catch(e){}}
 
 function openProfile(){closeTemplates();for(let [id,key] of [['qpfAdministration','administration'],['qpfSchool','school'],['qpfSchoolType','schoolType'],['qpfTeacher','teacher'],['qpfYear','year'],['qpfRole','role'],['qpfDay','day'],['qpfDate','date'],['qpfTitle','examTitle'],['qpfDuration','duration']])if($(id))$(id).value=profile[key]||'';$('abuQProfileModal')?.classList.add('show')}
 function closeProfile(){$('abuQProfileModal')?.classList.remove('show')}
@@ -151,7 +164,7 @@ function drawCrop(){if(!cropImage)return;let c=$('abuQCropCanvas'),max=700,s=Mat
 function applyCrop(){if(!cropTarget||!cropImage)return;let l=+$('qCropL').value/100,r=+$('qCropR').value/100,t=+$('qCropT').value/100,b=+$('qCropB').value/100;if(r-l<.05||b-t<.05)return alert('منطقة القص صغيرة جدًا.');let c=document.createElement('canvas');c.width=Math.max(1,Math.round((r-l)*cropImage.width));c.height=Math.max(1,Math.round((b-t)*cropImage.height));c.getContext('2d').drawImage(cropImage,l*cropImage.width,t*cropImage.height,c.width,c.height,0,0,c.width,c.height);pushHistory(true);const isPng=String(cropTarget.src||'').startsWith('data:image/png');cropTarget.src=c.toDataURL(isPng?'image/png':'image/jpeg',isPng?undefined:.95);scheduleHistory();window.scheduleQuestionDraft?.();closeCrop()}
 
 function bindCropRanges(){['qCropL','qCropR','qCropT','qCropB'].forEach(id=>$(id)?.addEventListener('input',drawCrop))}
-function init(){addCss();document.body.insertAdjacentHTML('beforeend',modalHtml());addControls();trackEditable();bindCropRanges();enhanceImages();lastSnapshot=currentHtml();let container=$('pages-container');if(container){new MutationObserver(()=>{enhanceImages();scheduleHistory()}).observe(container,{childList:true,subtree:true,characterData:true});container.addEventListener('input',scheduleHistory,true)}let saved=load(STORE,{});if(saved.subject&&subjectMeta[saved.subject])currentSubject=saved.subject;window.addEventListener('beforeunload',()=>save(STORE,{subject:currentSubject}));}
+function init(){document.addEventListener('click',onTemplateCardClick);addCss();document.body.insertAdjacentHTML('beforeend',modalHtml());addControls();trackEditable();bindCropRanges();enhanceImages();lastSnapshot=currentHtml();let container=$('pages-container');if(container){new MutationObserver(()=>{enhanceImages();scheduleHistory()}).observe(container,{childList:true,subtree:true,characterData:true});container.addEventListener('input',scheduleHistory,true)}let saved=load(STORE,{});if(saved.subject&&subjectMeta[saved.subject])currentSubject=saved.subject;window.addEventListener('beforeunload',()=>save(STORE,{subject:currentSubject}));}
 
 window.AbuQuestionTemplates={openTemplates,closeTemplates,applyTemplate,openProfile,closeProfile,saveProfile,applyProfile,saveCustom,clearCustom,openFormat,closeFormat,cmd,align,applyFormat,closeCrop,applyCrop,undo:undo2,redo:redo2};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();

@@ -39,7 +39,12 @@ for(const marker of [
   'await cp(source, destination, { recursive: true, force: true });',
   'for(const [relative,urls,minBytes] of OCR_ASSETS)',
   'await download(urls,resolve(vendorRoot,relative),minBytes);',
-  'async function fetchWithTimeout(url)',
+  'async function fetchWithTimeout(url,maxBytes)',
+  'if(!validAssetContent(data,path))',
+  'await rename(temporary,path);',
+  "const temporary=path+'.partial-'+process.pid;",
+  'if(bytes>maxBytes){controller.abort();',
+  'for(const [relative,urls,minBytes] of DOCUMENT_ASSETS)',
   'https://cdn.jsdelivr.net/npm/@tesseract.js-data/ara@1.0.0/4.0.0_best_int/ara.traineddata.gz',
   'https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz',
   'Required offline OCR asset is missing or incomplete',
@@ -64,7 +69,7 @@ for(const marker of [
   "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"',
   'onShouldStartLoadWithRequest',"if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url))",
   "const [cameraFrameKind, setCameraFrameKind] = useState('paper');",
-  "openCamera(message.mode, message.frameKind)",
+  "openCamera(message.mode, message.frameKind, message.requestId)",
   'cameraFrameKind === \'card\' ? styles.cardDocumentFrame'
 ])need(native,marker,'native Android shell missing source-level safeguard: '+marker);
 
