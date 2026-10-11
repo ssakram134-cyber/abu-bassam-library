@@ -321,6 +321,8 @@
       var Zip = await loadZip(), archive = await Zip.loadAsync(await file.arrayBuffer());
       var docPart = archive.file('word/document.xml');
       if (!docPart) throw new Error(ar ? 'لا يوجد نص Word صالح' : 'Missing Word document content');
+      var declaredSize = Number(docPart._data && docPart._data.uncompressedSize);
+      if (!Number.isFinite(declaredSize) || declaredSize < 0 || declaredSize > 2 * 1024 * 1024) throw new Error(ar ? 'حجم XML الداخلي غير آمن' : 'Unsafe uncompressed Word XML size');
       var xmlText = await docPart.async('string');
       if (xmlText.length > 2 * 1024 * 1024) throw new Error(ar ? 'نص Word أكبر من الحد الآمن' : 'Word text exceeds safe limit');
       var allLines = wordParagraphs(xmlText);
