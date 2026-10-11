@@ -38,6 +38,10 @@ const dense={type:'qr',data:{symbology:'qr',kind:'text',content:'أ'.repeat(720)
 const denseMm=api.qrModuleSizeMm(dense,api.qrSvg(dense.data.content));
 assert.ok(denseMm<.20,'Test needs genuinely dense QR');
 assert.throws(()=>api.validateSymbols([dense]),/كثيف جدًا/,'Unreadably dense QR must not be presented as printable');
+api.state.sides='front';
+assert.throws(()=>api.validateSymbols([dense],true),/كثيف جدًا/,'Back PNG needs validation even if UI changes to front while saving');
+api.validateSymbols([dense],false);
+api.state.sides='both';
 api.state.queue=[{model:dense,copies:1}];
 assert.throws(()=>api.printDocument(),/كثيف جدًا/,'Printing cannot silently bypass density check');
 const wrongSize={...short,width:90,height:55};
