@@ -311,10 +311,11 @@ function App() {
 
   const onBarcodeScanned = useCallback((result) => {
     if (barcodeLocked || !result?.data) return;
+    const requestId = cameraRequestIdRef.current;
     setBarcodeLocked(true);
     cameraSessionRef.current += 1; cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
-    inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
+    inject('AbuBassamNativeCameraResult', { mode: 'barcode', requestId, data: String(result.data), barcodeType: result.type || '' });
     setTimeout(() => setBarcodeLocked(false), 500);
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
