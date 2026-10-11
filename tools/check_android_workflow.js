@@ -69,7 +69,7 @@ for(const marker of [
   "originWhitelist={['file://*','about:*']}",'mixedContentMode="never"',
   'onShouldStartLoadWithRequest',"if (/^(https:|tel:|mailto:|tg:|whatsapp:)/i.test(url))",
   "const [cameraFrameKind, setCameraFrameKind] = useState('paper');",
-  "openCamera(message.mode, message.frameKind)",
+  "openCamera(message.mode, message.frameKind, message.requestId)",
   'cameraFrameKind === \'card\' ? styles.cardDocumentFrame'
 ])need(native,marker,'native Android shell missing source-level safeguard: '+marker);
 
