@@ -309,14 +309,14 @@ function App() {
     }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
-  const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+  const onBarcodeScanned = useCallback((result, cameraSession) => {
+    if (cameraSession !== cameraSessionRef.current || barcodeLocked || !result?.data) return;
     const requestId = cameraRequestIdRef.current;
     setBarcodeLocked(true);
     cameraSessionRef.current += 1; cameraRequestIdRef.current = null;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', requestId, data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
+    setTimeout(() => { if (cameraSessionRef.current === cameraSession + 1) setBarcodeLocked(false); }, 500);
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
@@ -538,6 +538,7 @@ function App() {
   }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, closeCamera, pickContact, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
+  const cameraSessionAtRender = cameraSessionRef.current;
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
@@ -602,10 +603,10 @@ function App() {
       )}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
-            onCameraReady={() => setCameraReady(true)} onMountError={onCameraMountError}
+          <CameraView key={cameraSessionAtRender} ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
+            onCameraReady={() => { if (cameraSessionAtRender === cameraSessionRef.current) setCameraReady(true); }} onMountError={() => { if (cameraSessionAtRender === cameraSessionRef.current) onCameraMountError(); }}
             barcodeScannerSettings={barcodeMode ? { barcodeTypes: BARCODE_TYPES } : undefined}
-            onBarcodeScanned={barcodeMode && !barcodeLocked ? onBarcodeScanned : undefined} />
+            onBarcodeScanned={barcodeMode && !barcodeLocked ? (result) => onBarcodeScanned(result, cameraSessionAtRender) : undefined} />
           <View style={styles.cameraShade} pointerEvents="box-none">
             <View style={styles.cameraHeader}>
               <TouchableOpacity style={styles.roundButton} onPress={closeCamera} accessibilityLabel="إغلاق الكاميرا"><Text style={styles.roundButtonText}>×</Text></TouchableOpacity>
