@@ -30,7 +30,7 @@ for(const [source,label] of [[childTemplates,'child badge templates'],[modelsPlu
 }
 need(childTemplates,"document.addEventListener('abu-cards-rendered'",'child template lifecycle listener');
 need(studio,'const PRINT_SETTINGS_KEY=','validated card printer preferences');
-need(studio,'function validateSymbols(jobs)','protect against printing invalid QR');
+need(studio,'function validateSymbols(jobs,needsBack=','protect QR validation for the explicitly exported back face');
 need(studio,'let resetArmed=false','confirmation required before destructive reset');
 need(studio,"state.forms.login.password=''",'clear stored login secrets during startup');
 need(studio,"finally{URL.revokeObjectURL(url)}",'release temporary card image blobs on failure');
