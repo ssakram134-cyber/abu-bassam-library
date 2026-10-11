@@ -40,7 +40,7 @@ function streamResponse(bytes,declared){
   body:{getReader(){let done=false;return{
    read:async()=>{partReads++;if(done)return {done:true};done=true;return {done:false,value:bytes}},
    cancel:async()=>{},releaseLock(){}}
-  }}}};
+  }}};
 }
 (async()=>{
  // Legacy global settings must never be copied into a newly authenticated user's scope.
