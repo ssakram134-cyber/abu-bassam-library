@@ -56,6 +56,7 @@ emit('abu-bassam-auth-changed');assert.equal(cancelSignals.length,1,'Account swi
 assert.equal(state.forms.child.driverPhone,'','Logout must invalidate pending contact');
 state.type='child';
 // Same user/type, but a different edited badge: reject the callback.
+state.type='child';
 window.CardsStudio.pickContact('driverPhone');
 const changedBadge=messages.at(-1);
 state.forms.child.name='هاجر — بطاقة جديدة';
