@@ -5,6 +5,18 @@ const en=fs.readFileSync('web/questions-en-fixes-runtime.js','utf8');
 const custom=fs.readFileSync('web/questions-custom-library-runtime.js','utf8');
 const arHtml=fs.readFileSync('web/questions-ar.html','utf8');
 const enHtml=fs.readFileSync('web/questions-en.html','utf8');
+const host=fs.readFileSync('web/productivity-tools-runtime.js','utf8');
+const templates=fs.readFileSync('web/questions-templates-runtime.js','utf8');
+const maintenance=fs.readFileSync('web/questions-maintenance-runtime.js','utf8');
+new vm.Script(host,{filename:'question host'});
+new vm.Script(templates,{filename:'question templates'});
+new vm.Script(maintenance,{filename:'question maintenance'});
+assert.ok(host.includes("document.addEventListener('abu-bassam-auth-changed',clearQuestionFrameOnAuthChange)"),
+ 'Switching account must unload the active question iframe');
+assert.ok(host.includes("frame.src='about:blank'"),'Previous questions must not remain displayed after logout');
+assert.ok(templates.includes('data-apply-template=')&&!templates.includes('onclick="AbuQuestionTemplates.applyTemplate('),
+ 'Template identifiers must not appear in HTML inline event JavaScript');
+assert.ok(maintenance.includes("if(saved!==true)throw Error("),'Question repair must report a failed draft write');
 for(const [name,src] of [['Arabic completion',ar],['English completion',en],['custom templates',custom]])
  new vm.Script(src,{filename:name});
 for(const [name,html] of [['Arabic',arHtml],['English',enHtml]]){
