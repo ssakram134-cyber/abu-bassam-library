@@ -6,7 +6,7 @@
 
 لا يحتاج أي Secret.
 
-عند Push إلى `main` أو Pull Request يقوم Workflow الخاص بـ Android بفحص المشروع وبناء APK تجريبي إذا لم تكن أسرار توقيع Release موجودة. الملف التجريبي يُوسم داخل `BUILD_TYPE.txt` بالقيمة:
+**الحالة الحالية بتاريخ 2026-10-12:** ملف `.github/workflows/android.yml` لا ينفذ بناء APK تلقائياً؛ يعمل عبر `workflow_dispatch` فقط، ووظيفة البناء نفسها معطلة بشرط `if: ${{ false }}` امتثالاً لقرار المستخدم (تصحيح المصادر فقط داخل GitHub). عند اعتماد بناء محلي مستقل في وقت لاحق، لا يلزم Secret GitHub لإنشاء APK تجريبي. الصيغة النظرية لوسم النسخة التجريبية في `BUILD_TYPE.txt` هي:
 
 `test-release-default-key-with-embedded-js-NOT-FOR-PRODUCTION-UPDATES`
 
@@ -32,7 +32,7 @@
 4. `ANDROID_KEY_PASSWORD`
    - كلمة مرور المفتاح نفسه.
 
-بعد ضبط الأسرار يمكن تشغيل `Android checks and build` يدويًا من GitHub Actions واختيار `production = true`.
+**لا يتم حالياً تشغيل بناء الإنتاج داخل GitHub Actions ولو ضُبطت الأسرار**؛ هذا المسار معطل. إذا صدر لاحقاً قرار صريح لتفعيله، يلزم تدقيق مفاتيح التوقيع أولاً. مسار البناء المحلي المعتمد هو Expo/Gradle وفق `AGENTS.md`.
 
 عند طلب Production صراحةً، يفشل Workflow إذا كان أي Secret ناقصًا، ويتحقق بعد البناء من أن `BUILD_TYPE.txt` يحتوي:
 
