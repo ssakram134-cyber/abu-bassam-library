@@ -398,8 +398,23 @@ function App() {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
+      if (imagePages.length > 20) throw new Error('لا تسمح ذاكرة الهاتف بطباعة أكثر من 20 صفحة في دفعة واحدة؛ اطبع ملف PDF بدلًا من ذلك.');
+      if (String(paper || '').startsWith('CUSTOM:')) {
+        const parts = String(paper).split(':'), width = Number(parts[1]), height = Number(parts[2]);
+        if (parts.length !== 3 || !Number.isFinite(width) || !Number.isFinite(height) || width < 50 || height < 50 || width > 500 || height > 500) {
+          throw new Error('مقاس الورق المخصص غير صالح.');
+        }
+      }
       const size = printDimensions(paper);
-      const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
+      let encodedTotal = 0;
+      const body = imagePages.map((src) => {
+        if (typeof src !== 'string' || src.length > 16 * 1024 * 1024 || !/^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i.test(src)) {
+          throw new Error('صفحة الطباعة ليست صورة PNG أو JPEG أو WebP محلية صالحة، أو أنها كبيرة جدًا.');
+        }
+        encodedTotal += src.length;
+        if (encodedTotal > 80 * 1024 * 1024) throw new Error('إجمالي صفحات الطباعة كبير جدًا؛ قسّم الدفعة.');
+        return `<section><img alt="صفحة للطباعة" src="${src}"></section>`;
+      }).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
     } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
