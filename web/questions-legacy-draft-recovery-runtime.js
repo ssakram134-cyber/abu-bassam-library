@@ -23,9 +23,10 @@ async function read(id){
   request.onerror=()=>reject(request.error||Error('Unable to read question draft'))
  })}finally{db.close?.()}
 }
-async function insertOnly(row){
+async function insertOnly(row,owner){
  const db=await openDb();
  try{
+  if(!eligible()||scope().identity()!==owner)throw Error('تغيّر الحساب خلال فتح قاعدة البيانات.');
   await new Promise((resolve,reject)=>{
    const tx=db.transaction(STORE,'readwrite');
    tx.objectStore(STORE).add(row);
@@ -48,11 +49,11 @@ async function importDraft(lang=language()){
   // An IndexedDB add() below prevents overwriting even when two imports race.
   if(await read(target))throw Error('توجد مسودة سابقة لهذا الحساب؛ احفظها بصورة مستقلة قبل استيراد المسودة القديمة.');
   const old=await read(type);
-  const fallback=String(localStorage.getItem(OLD_KEYS[type])||'');
+  let fallback='';try{fallback=String(localStorage.getItem(OLD_KEYS[type])||'')}catch(_){}
   const html=String(old?.html||fallback||'');
   if(!html)throw Error('لم يُعثر على مسودة قديمة لاستردادها.');
   if(!eligible()||scope().identity()!==owner)throw Error('تغيّر الحساب قبل كتابة المسودة.');
-  await insertOnly({id:target,html,updatedAt:Date.now()});
+  await insertOnly({id:target,html,updatedAt:Date.now()},owner);
   if(!eligible()||scope().identity()!==owner)throw Error('تغيّر الحساب بعد عملية النقل. افحص المسودة عند تسجيل الدخول.');
   alert('تم استيراد نسخة إلى حسابك دون حذف المسودة القديمة. سيُعاد فتح محرر الأسئلة.');
   location.reload();
