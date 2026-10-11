@@ -165,12 +165,36 @@ function field(label,key,type='text',extra=''){
   if(type==='textarea')return `<label class="cs-field ${extra}">${label}<textarea data-field="${key}">${esc(value)}</textarea></label>`;
   return `<label class="cs-field ${extra}">${label}<input data-field="${key}" type="${type}" value="${esc(value)}"></label>`
 }
+let pendingContact=null,contactSelectionCounter=0;
+function contactButton(field,label){return '<div class="cs-photo-actions"><button type="button" onclick="CardsStudio.pickContact(\''+field+'\')">📇 '+esc(label)+'</button></div>'}
+function currentContactIdentity(){return String(window.AbuBassamCloud?.session?.()?.user?.id||window.AbuBassamSecurity?.device?.()?.device_id||'local')}
+function normalizeContactPhone(input){const value=String(input||'').replace(/\D/g,'');if(/^009647\d{9}$/.test(value))return'0'+value.slice(5);if(/^9647\d{9}$/.test(value))return'0'+value.slice(3);return value}
+function pickContact(field){
+ if(!requireCard('cardsEditText'))return;
+ if(!((state.type==='personal'&&field==='phone')||(state.type==='child'&&['guardianPhone','driverPhone'].includes(field))))return;
+ if(!window.Android?.pickContact)return alert('اختيار جهة اتصال يحتاج إصدار Android الداعم لهذه الميزة.');
+ const requestId=String(++contactSelectionCounter);
+ pendingContact={field,requestId,type:state.type,identity:currentContactIdentity()};
+ window.Android.pickContact(field,requestId)
+}
+window.AbuBassamNativeContactSelected=function(result){
+ const pending=pendingContact;if(!pending||String(result?.requestId||'')!==pending.requestId||result?.target!==pending.field)return;
+ pendingContact=null;
+ if(pending.identity!==currentContactIdentity()||pending.type!==state.type||!canCard('cardsEditText'))return;
+ if(result.error)return alert(String(result.error));
+ const phone=normalizeContactPhone(result.phone);
+ if(!phone)return alert('جهة الاتصال المختارة لا تحتوي على رقم هاتف.');
+ state.forms[state.type][pending.field]=phone;
+ if(state.type==='personal'&&!state.forms.personal.name&&result.name)state.forms.personal.name=String(result.name).slice(0,150);
+ saveDraft();renderForm();renderPreview()
+};
+document.addEventListener('abu-bassam-auth-changed',()=>{pendingContact=null});
 function photoTools(){let t=state.photoTransform;return `<div class="cs-photo-tools" id="csPhotoTools"><div class="cs-photo-actions"><button onclick="CardsStudio.pickPhoto()">🖼 إضافة صورة</button><button onclick="CardsStudio.cameraPhoto()">📷 تصوير بالكاميرا</button><button class="alt" onclick="CardsStudio.removePhoto()">حذف الصورة</button><button class="alt" onclick="CardsStudio.resetPhoto()">إعادة القص</button></div><div class="cs-sliders"><label>التكبير<input id="csPhotoZoom" type="range" min="1" max="3.5" step=".01" value="${t.zoom}" oninput="CardsStudio.photoControl()"></label><label>أفقي<input id="csPhotoX" type="range" min="-70" max="70" value="${t.x}" oninput="CardsStudio.photoControl()"></label><label>عمودي<input id="csPhotoY" type="range" min="-70" max="70" value="${t.y}" oninput="CardsStudio.photoControl()"></label><label>دوران<input id="csPhotoRotate" type="range" min="-180" max="180" value="${t.rotate}" oninput="CardsStudio.photoControl()"></label></div></div>`}
 
 function renderForm(){
   let form=$('csForm'),d=state.forms[state.type],html='';$('csFormTitle').textContent='بيانات '+TYPE_LABELS[state.type];
-  if(state.type==='personal')html=field('الاسم','name')+field('السكن','address')+field('رقم الهاتف','phone','tel')+field('الإيميل','email','email')+field('معرف التليجرام','telegram')+field('رابط الموقع Google Maps','location','url')+field('الملاحظات','notes','textarea','full')+photoTools();
-  if(state.type==='child')html=field('اسم الطفل','name')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+field('الملاحظات','notes','textarea','full')+photoTools();
+  if(state.type==='personal')html=field('الاسم','name')+field('السكن','address')+field('رقم الهاتف','phone','tel')+contactButton('phone','اختيار جهة اتصال')+field('الإيميل','email','email')+field('معرف التليجرام','telegram')+field('رابط الموقع Google Maps','location','url')+field('الملاحظات','notes','textarea','full')+photoTools();
+  if(state.type==='child')html=field('اسم الطفل','name')+field('السكن','address')+`<label class="cs-field">نوع الجهة التعليمية<select data-field="institutionType"><option value="kindergarten">روضة أطفال القادسية</option><option value="school">مدرسة</option></select></label>`+(d.institutionType==='school'?field('اكتب اسم المدرسة','school'):`<div class="cs-field"><span>الاسم المعتمد</span><div style="padding:10px;border-radius:10px;background:#eef7ff;color:#075a8e;font-weight:900">روضة أطفال القادسية</div></div>`)+field('رقم سائق الخط','driverPhone','tel')+contactButton('driverPhone','اختيار سائق الخط')+field('رقم هاتف ولي الأمر','guardianPhone','tel')+contactButton('guardianPhone','اختيار ولي الأمر')+field('الملاحظات','notes','textarea','full')+photoTools();
   if(state.type==='login'){
     html=`<label class="cs-field">نوع الحساب<select data-field="service"><option value="facebook">Facebook</option><option value="google">Google / Google Play</option><option value="apple">Apple / App Store</option><option value="email">البريد الإلكتروني</option><option value="other">أخرى</option></select></label>`+(d.service==='other'?field('اسم الخدمة','customService'):'')+field('البريد / الهاتف / اسم المستخدم','account')+field('كلمة السر','password')+field('ملاحظات اختيارية','notes','textarea','full')+`<div class="abu-capital-hint" style="grid-column:1/-1;padding:7px 9px;border-radius:9px;background:#fff1f2;color:#a11d2d;font-size:9px;font-weight:900">A B C — أي حرف إنجليزي كبير يظهر باللون الأحمر داخل الباج تلقائيًا.</div><div class="cs-photo-tools"><div class="cs-photo-actions"><button onclick="CardsStudio.openLoginOcr()">📷 قراءة البريد وكلمة السر من صورة</button></div></div>`;
   }
@@ -377,6 +401,6 @@ function resetTypography(){if(!requireCard('cardsEditText'))return;state.textSty
 function typographyChanged(){renderPreview()}
 function currentType(){return state.type==='reader'?'qr':state.type}
 
-window.CardsStudio={selectType,openBrand,saveBrand,resetBrand,pickBrandLogo,openHistory,closeModal,pickPhoto,cameraPhoto,removePhoto,resetPhoto,photoControl,focusCrop,rotate,clearCard,copyCard,addQueue,removeQueue,previewPrint,printNow,savePdf,exportPng,scanBarcode,scanBarcodeGallery,useBarcode,openStandalone,openLoginOcr,importOcrText,onBarcode,onPhoto,deleteHistory,loadHistory,exportBackup,resetData,onShow,getTextStyle,setTextStyle,resetTypography,typographyChanged,currentType};
+window.CardsStudio={pickContact,selectType,openBrand,saveBrand,resetBrand,pickBrandLogo,openHistory,closeModal,pickPhoto,cameraPhoto,removePhoto,resetPhoto,photoControl,focusCrop,rotate,clearCard,copyCard,addQueue,removeQueue,previewPrint,printNow,savePdf,exportPng,scanBarcode,scanBarcodeGallery,useBarcode,openStandalone,openLoginOcr,importOcrText,onBarcode,onPhoto,deleteHistory,loadHistory,exportBackup,resetData,onShow,getTextStyle,setTextStyle,resetTypography,typographyChanged,currentType};
 window.addEventListener('DOMContentLoaded',build);
 })();
