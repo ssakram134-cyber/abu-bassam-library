@@ -7,12 +7,15 @@ const PROFILE_KEY='abuQuestionHeaderProfileV1';
 const IDB_NAME='AbuBassamQuestionDraftV2';
 const IDB_STORE='drafts';
 const IDB_KEY='ar';
+const scope=()=>window.AbuQuestionScope?.identity()||null;
+const rowId=()=>window.AbuQuestionScope?.draftRow(IDB_KEY)||null;
+const sk=key=>window.AbuQuestionScope?.scopedKey(key)||null;
 const META_KEY='abuBassamQuestionDraftArabicV2Meta';
 const LOCAL_TS_KEY='abuBassamQuestionDraftArabicV2LocalTs';
-let answersVisible=localStorage.getItem('abuQuestionAnswersVisibleV1')==='1';
+let answersVisible=!!sk('abuQuestionAnswersVisibleV1')&&localStorage.getItem(sk('abuQuestionAnswersVisibleV1'))==='1';
 let saveTimer=0,hydrating=true,editedDuringHydration=false,resettingDraft=false,draftWrites=Promise.resolve(),draftGeneration=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function profile(){try{return Object.assign({day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'},JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}'))}catch(e){return{day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'}}}
+function profile(){try{return Object.assign({day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'},JSON.parse((sk(PROFILE_KEY)&&localStorage.getItem(sk(PROFILE_KEY)))||'{}'))}catch(e){return{day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'}}}
 function addCss(){if($('abuQuestionsCompletionStyle'))return;const s=document.createElement('style');s.id='abuQuestionsCompletionStyle';s.textContent=`
 .abu-answer-box{display:none;margin-top:9px;padding:9px;border:1px dashed #0f766e;border-radius:10px;background:#ecfdf5;color:#134e4a;font-size:12px}.abu-answer-box b{display:block;margin-bottom:5px}.abu-show-answers .abu-answer-box{display:block}.abu-answer-toggle{background:#7c3aed!important}.abu-question-overflow:after{content:'⚠ محتوى الصفحة أكبر من مساحة A4';position:absolute;left:14px;bottom:8px;background:#fee2e2;color:#991b1b;border-radius:9px;padding:5px 8px;font:800 9px Tajawal;z-index:500}.abu-extra-template{border-color:#7c3aed55!important}.abu-extra-template .abu-tpreview{border-color:#7c3aed55!important;background:linear-gradient(135deg,#faf5ff,#f0fdf4)!important}.abu-extra-template button{background:#6d28d9!important}@media print{.abu-question-overflow:after{display:none!important}.abu-answer-box{display:none!important}.abu-show-answers .abu-answer-box{display:block!important}}
 `;document.head.appendChild(s)}
@@ -38,7 +41,7 @@ function enhanceAnswers(){
   document.body.classList.toggle('abu-show-answers',answersVisible);syncAnswerButton();
 }
 function syncAnswerButton(){const b=$('abuAnswerToggle');if(b)b.textContent=answersVisible?'📝 الملاحظات/الإجابات: ظاهرة':'📝 الملاحظات/الإجابات: مخفية'}
-function toggleAnswers(){answersVisible=!answersVisible;localStorage.setItem('abuQuestionAnswersVisibleV1',answersVisible?'1':'0');document.body.classList.toggle('abu-show-answers',answersVisible);syncAnswerButton();queueDraft()}
+function toggleAnswers(){answersVisible=!answersVisible;if(sk('abuQuestionAnswersVisibleV1'))localStorage.setItem(sk('abuQuestionAnswersVisibleV1'),answersVisible?'1':'0');document.body.classList.toggle('abu-show-answers',answersVisible);syncAnswerButton();queueDraft()}
 function installAnswerButton(){const bar=$('controls');if(!bar||$('abuAnswerToggle'))return;const b=document.createElement('button');b.id='abuAnswerToggle';b.className='btn abu-answer-toggle';b.type='button';b.onclick=toggleAnswers;bar.appendChild(b);syncAnswerButton()}
 function scaleFor(el){const page=el.closest('.a4-page');if(!page)return 1;const rect=page.getBoundingClientRect();return rect.width&&page.offsetWidth?rect.width/page.offsetWidth:1}
 const boundMove=new WeakSet(),boundResize=new WeakSet();
@@ -73,22 +76,52 @@ function stableRebind(){
 }
 function installStableDrag(){window.setupDragAndResize=stableSetup;window.rebindAllDraggables=stableRebind;stableRebind()}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(IDB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(IDB_STORE))r.result.createObjectStore(IDB_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function idbPut(html,updatedAt=Date.now()){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put({id:IDB_KEY,html,updatedAt});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function idbGet(){try{const db=await dbOpen();const row=await new Promise((resolve,reject)=>{const r=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(IDB_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});db.close?.();return row}catch(e){return null}}
-async function idbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(IDB_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
+async function idbPut(html,updatedAt=Date.now()){
+ const key=rowId(),owner=scope();if(!key||!owner)return false;
+ try{
+  const db=await dbOpen();
+  if(scope()!==owner){db.close?.();return false}
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(IDB_STORE,'readwrite');
+   tx.objectStore(IDB_STORE).put({id:key,html,updatedAt});
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)
+  });
+  db.close?.();return true
+ }catch(e){return false}
+}
+async function idbGet(){
+ const key=rowId(),owner=scope();if(!key||!owner)return null;
+ try{
+  const db=await dbOpen();if(scope()!==owner){db.close?.();return null}
+  const row=await new Promise((resolve,reject)=>{
+   const req=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(key);
+   req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)
+  });
+  db.close?.();return scope()===owner?row:null
+ }catch(e){return null}
+}
+async function idbDelete(){
+ const key=rowId(),owner=scope();if(!key||!owner)return false;
+ try{
+  const db=await dbOpen();if(scope()!==owner){db.close?.();return false}
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(key);
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)
+  });db.close?.();return scope()===owner
+ }catch(e){return false}
+}
 async function saveDurableDraft(show=false){
  const container=$('pages-container');
- if(!container||resettingDraft)return false;
- const html=container.innerHTML,ts=Date.now(),generation=draftGeneration;
+ if(!container||resettingDraft||!scope()){if(show)alert('لا تتوفر هوية حساب موثوقة لحفظ المسودة.');return false}
+ const html=container.innerHTML,ts=Date.now(),generation=draftGeneration,owner=scope();
  // Keep writes ordered: an older autosave must never finish after a newer save.
  const pending=draftWrites.catch(()=>{}).then(async()=>{
-  if(resettingDraft||generation!==draftGeneration)return false;
+  if(resettingDraft||generation!==draftGeneration||scope()!==owner)return false;
   const ok=await idbPut(html,ts);
-  if(ok&&generation===draftGeneration){
+  if(ok&&generation===draftGeneration&&scope()===owner){
    try{
-    localStorage.setItem(LOCAL_TS_KEY,String(ts));
-    localStorage.setItem(META_KEY,String(ts));
-    localStorage.removeItem('abuBassamQuestionDraftArabicV1');
+    localStorage.setItem(sk(LOCAL_TS_KEY),String(ts));
+    localStorage.setItem(sk(META_KEY),String(ts));
    }catch(e){}
   }
   return ok
@@ -101,42 +134,27 @@ async function saveDurableDraft(show=false){
 function queueDraft(){if(hydrating||resettingDraft)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveDurableDraft(false),650)}
 function draftInput(){if(hydrating)editedDuringHydration=true;queueDraft()}
 async function restoreDurableIfNeeded(){
- const container=$('pages-container');
- if(!container){hydrating=false;return false}
+ const container=$('pages-container'),owner=scope();
+ if(!container||!owner){hydrating=false;return false}
  const before=container.innerHTML;
  try{
-  let row=await idbGet();
-  if(editedDuringHydration||before!==container.innerHTML)return false;
-  if(!row?.html){
-   try{
-    const legacy=localStorage.getItem('abuBassamQuestionDraftArabicV1')||'';
-    if(legacy){
-     const ts=Date.now();
-     if(await idbPut(legacy,ts)){
-      row={id:IDB_KEY,html:legacy,updatedAt:ts};
-      localStorage.removeItem('abuBassamQuestionDraftArabicV1');
-      localStorage.setItem(LOCAL_TS_KEY,String(ts));
-      localStorage.setItem(META_KEY,String(ts));
-     }
-    }
-   }catch(e){}
-  }
-  if(!row?.html||editedDuringHydration||before!==container.innerHTML)return false;
+  // Old global IDs and LocalStorage snapshots are quarantined, never silently assigned to a new user.
+  const row=await idbGet();
+  if(!row?.html||scope()!==owner||editedDuringHydration||before!==container.innerHTML)return false;
   container.innerHTML=row.html;
   stableRebind();normalizeHeaders();enhanceAnswers();window.fitToScreen?.();
   return true
  }finally{hydrating=false;if(editedDuringHydration)queueDraft()}
 }
 async function resetDurableDraft(){
- if(resettingDraft||!confirm('بدء نموذج جديد؟ ستُحذف مسودة الأسئلة الحالية من التخزين المحلي.'))return false;
- resettingDraft=true;clearTimeout(saveTimer);draftGeneration++;
+ if(resettingDraft||!scope()||!confirm('بدء نموذج جديد؟ ستُحذف مسودة الأسئلة الحالية من التخزين المحلي.'))return false;
+ const owner=scope();resettingDraft=true;clearTimeout(saveTimer);draftGeneration++;
  try{
   await draftWrites.catch(()=>{});
-  if(!(await idbDelete()))throw Error('تعذر حذف المسودة من قاعدة البيانات؛ أُلغيت إعادة التهيئة لحماية بياناتك.');
+  if(scope()!==owner||!(await idbDelete()))throw Error('تعذر حذف المسودة أو تغير الحساب؛ لم يُغلق المحرر.');
   try{
-   localStorage.removeItem('abuBassamQuestionDraftArabicV1');
-   localStorage.removeItem(META_KEY);
-   localStorage.removeItem(LOCAL_TS_KEY);
+   localStorage.removeItem(sk(META_KEY));
+   localStorage.removeItem(sk(LOCAL_TS_KEY));
   }catch(e){throw Error('تعذر تنظيف المسودة القديمة؛ لم يُعَد تشغيل المحرر.')}
   location.reload();
   return true
