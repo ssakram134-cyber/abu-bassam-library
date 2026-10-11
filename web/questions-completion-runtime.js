@@ -112,7 +112,7 @@ async function idbDelete(){
 }
 async function saveDurableDraft(show=false){
  const container=$('pages-container');
- if(!container||resettingDraft||!scope()){if(show)alert('لا تتوفر هوية حساب موثوقة لحفظ المسودة.');return false}
+ if(!container||resettingDraft||!scope()){window.AbuQuestionScope?.reportSave?.(false);if(show)alert('لا تتوفر هوية حساب موثوقة لحفظ المسودة.');return false}
  const html=container.innerHTML,ts=Date.now(),generation=draftGeneration,owner=scope();
  // Keep writes ordered: an older autosave must never finish after a newer save.
  const pending=draftWrites.catch(()=>{}).then(async()=>{
@@ -128,6 +128,7 @@ async function saveDurableDraft(show=false){
  });
  draftWrites=pending;
  const ok=await pending;
+ window.AbuQuestionScope?.reportSave?.(ok);
  if(show)alert(ok?'تم حفظ مسودة الأسئلة ✓':'تعذر حفظ المسودة؛ لم يتم حذف النسخة القديمة.');
  return ok
 }
