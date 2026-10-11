@@ -46,7 +46,7 @@ const ANDROID_BRIDGE = `
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
     printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
     printBase64: function (name, mime, data) { send('printBase64', { name: name, mime: mime, data: data }); },
-    scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
+    scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data, requestId: arguments[1] }); },
     printHtml: function (html) { send('printHtml', { html: html }); },
     savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
     shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
@@ -360,20 +360,20 @@ function App() {
     } catch (error) { replySecurity(requestId, false, null, error?.message || error); }
   }, [cameraPermission, replySecurity]);
 
-  const scanBarcodeImage = useCallback(async ({ data }) => {
+  const scanBarcodeImage = useCallback(async ({ data, requestId }) => {
     let uri = null;
     try {
       const raw = String(data || '');
       if (raw.length > 11_200_000 || !/^data:image\/(png|jpeg|webp);base64,/i.test(raw)) throw new Error('صيغة الصورة غير مدعومة أو حجمها أكبر من 8MB');
       const parsed = splitDataUrl(raw);
       const suffix = parsed.mime === 'image/png' ? 'png' : parsed.mime === 'image/webp' ? 'webp' : 'jpg';
-      uri = FileSystem.cacheDirectory + 'abu_barcode_gallery_' + Date.now() + '.' + suffix;
+      uri = FileSystem.cacheDirectory + 'abu_barcode_gallery_' + Date.now() + '_' + String(requestId||'0').replace(/[^0-9]/g,'').slice(0,16) + '.' + suffix;
       await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
       const matches = await Camera.scanFromURLAsync(uri, BARCODE_TYPES);
       const first = matches?.find(item => typeof item.data === 'string' && item.data.length > 0);
-      inject('AbuBassamNativeBarcodeImageResult', first ? { data: first.data, barcodeType: first.type || 'qr' } : { error: 'لم يتم العثور على باركود؛ قص الصورة ليملأ الرمز معظم مساحتها.' });
+      inject('AbuBassamNativeBarcodeImageResult', first ? { requestId, data: first.data, barcodeType: first.type || 'qr' } : { requestId, error: 'لم يتم العثور على باركود؛ قص الصورة ليملأ الرمز معظم مساحتها.' });
     } catch (error) {
-      inject('AbuBassamNativeBarcodeImageResult', { error: String(error?.message || 'تعذرت قراءة صورة الباركود') });
+      inject('AbuBassamNativeBarcodeImageResult', { requestId, error: String(error?.message || 'تعذرت قراءة صورة الباركود') });
     } finally {
       if (uri) await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
     }
