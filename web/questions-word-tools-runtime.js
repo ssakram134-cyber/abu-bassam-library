@@ -94,8 +94,9 @@
       }
       if (!q.title || !q.body) missing.push(q.number);
       if (includeAnswers && (!q.answer || /^(اكتب الإجابة|write the answer)/i.test(q.answer))) unanswered.push(q.number);
-      q.images.forEach(function (url) { if (!/^data:image\/(png|jpeg);base64,/i.test(url)) skippedImages++; });
+      q.images.forEach(function (url) { if (!/^data:image\/(png|jpeg);base64,/i.test(url) || url.length > 8000040) skippedImages++; });
     });
+    skippedImages += Array.from(document.querySelectorAll('#pages-container .draggable-item img')).filter(function (img) { return !img.closest('.question-container'); }).length;
     return {
       questions: questions, header: header, duplicates: duplicates, missing: missing,
       unanswered: unanswered, skippedImages: skippedImages,
@@ -230,7 +231,7 @@
     var r = collect(includeAnswers);
     if (!r.questions.length) return alert(ar ? 'أضف سؤالاً أولاً' : 'Add a question first');
     if (r.missing.length && !confirm((ar ? 'يوجد سؤال ناقص النص، هل تريد المتابعة؟ ' : 'Some questions lack text. Continue? ') + r.missing.join(', '))) return;
-    if (r.skippedImages && !confirm(ar ? 'بعض الصور غير مدعومة في تصدير Word، هل تريد متابعة التصدير دونها؟' : 'Some images cannot be included in Word. Export without them?')) return;
+    if (r.skippedImages && !confirm(ar ? 'هناك صور خارج نص السؤال أو غير مدعومة في Word ولن تظهر في الملف. هل تتابع دونها؟' : 'Some floating or unsupported images will be omitted from Word. Continue?')) return;
     var expected = expectedGrade();if(expected!==null&&(r.graded!==r.questions.length||Math.abs(r.total-expected)>0.001)&&!confirm(ar?'تنبيه: مجموع الدرجات لا يطابق الدرجة النهائية أو توجد درجات غير محددة. هل تريد المتابعة؟':'Marks are missing or differ from final marks. Continue?'))return;
     saveBusy = true;
     var status = $('abuQuestionWordStatus');
