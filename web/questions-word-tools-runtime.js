@@ -134,13 +134,13 @@
     }).catch(function (e) { zipPromise = null; throw e; });
     return zipPromise;
   }
-  async function createDocx(r, includeAnswers) {
+  async function createDocx(r, includeAnswers, variantLabel) {
     var JSZip = await loadZip(), zip = new JSZip(), rels = [
       '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     ];
     var body = paragraph(r.header, true, ar);
     body += paragraph(includeAnswers ? (ar ? 'الأسئلة مع الإجابات النموذجية' : 'Questions with model answers') :
-      (ar ? 'ورقة الأسئلة' : 'Questions only'), true, ar);
+      (ar ? 'ورقة الأسئلة' : 'Questions only') + (variantLabel ? ' — ' + variantLabel : ''), true, ar);
     var mediaCount = 0;
     for (var qi = 0; qi < r.questions.length; qi++) {
       var q = r.questions[qi];
@@ -198,6 +198,44 @@
       alert((ar ? 'تعذر إنشاء Word: ' : 'DOCX export failed: ') + (error.message || error));
     } finally { saveBusy = false; }
   }
+  async function exportVariants() {
+    if (saveBusy) return;
+    ensureGrades();
+    var r = collect(false);
+    if (r.questions.length < 3) return alert(ar ? 'تتطلب نماذج أ، ب، ج ثلاثة أسئلة مختلفة على الأقل' : 'At least three questions are required for A/B/C models');
+    var original = r.questions;
+    var variants = [
+      { name: 'A', items: original.slice() },
+      { name: 'B', items: original.slice(1).concat(original.slice(0, 1)) },
+      { name: 'C', items: original.slice().reverse() }
+    ];
+    saveBusy = true;
+    var status = $('abuQuestionWordStatus');
+    if (status) status.textContent = ar ? 'جاري إنشاء 3 نماذج امتحانية...' : 'Creating three exam models...';
+    try {
+      var Zip = await loadZip(), pack = new Zip();
+      for (var i = 0; i < variants.length; i++) {
+        var variant = variants[i];
+        var items = variant.items.map(function (q, n) {
+          var heading = String(q.title || '').replace(/^(س|q)\s*[0-9٠-٩۰-۹]+\s*[/:.\-]?\s*/i, '').trim();
+          return Object.assign({}, q, { number: n + 1, title: (ar ? 'س' : 'Q') + (n + 1) + '/ ' + heading });
+        });
+        var base64 = await createDocx(Object.assign({}, r, { questions: items }), false,
+          (ar ? 'نموذج ' : 'Model ') + variant.name);
+        pack.file('Exam_Model_' + variant.name + '.docx', base64, { base64: true });
+      }
+      var data = await pack.generateAsync({ type: 'base64', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      if (data.length > 20 * 1024 * 1024) throw new Error(ar ? 'حجم النماذج يتجاوز الحد الآمن' : 'Models exceed the safe size limit');
+      window.parent.postMessage({
+        type: 'abuSaveQuestionVariants', language: ar ? 'ar' : 'en',
+        name: 'Abu_Bassam_Exam_ABC_' + Date.now() + '.zip', data: 'data:application/zip;base64,' + data
+      }, '*');
+      if (status) status.textContent = ar ? 'أُرسل طلب حفظ نماذج أ، ب، ج' : 'A/B/C save request sent';
+    } catch (error) {
+      if (status) status.textContent = ar ? 'تعذر إنشاء النماذج' : 'Model export failed';
+      alert((ar ? 'تعذر إنشاء النماذج: ' : 'Model export failed: ') + (error.message || error));
+    } finally { saveBusy = false; }
+  }
   function boot() {
     var bar = $('controls'), pages = $('pages-container');
     if (!bar || !pages) return;
@@ -220,6 +258,7 @@
       v.type = 'button'; v.id = 'abuQuestionWordAudit'; v.className = 'btn abu-word-audit';
       v.textContent = ar ? '🔎 تدقيق / درجات' : '🔎 Audit / Marks';
       v.onclick = report; bar.appendChild(v);
+      var abc = document.createElement('button');abc.type='button';abc.id='abuQuestionAbcExport';abc.className='btn abu-word-btn';abc.textContent=ar?'📚 نماذج أ ب ج':'📚 Models A B C';abc.onclick=exportVariants;bar.appendChild(abc);
       var info = document.createElement('span');
       info.id = 'abuQuestionWordStatus'; info.setAttribute('aria-live', 'polite'); bar.appendChild(info);
     }
@@ -231,7 +270,7 @@
       Promise.resolve().then(function () { scheduled = false; ensureGrades(); });
     }).observe(pages, { childList: true, subtree: true });
   }
-  window.AbuQuestionWordTools = { collect: collect, report: report, exportDocx: exportDocx, ensureGrades: ensureGrades };
+  window.AbuQuestionWordTools = { collect: collect, report: report, exportDocx: exportDocx, exportVariants: exportVariants, ensureGrades: ensureGrades };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 }());
