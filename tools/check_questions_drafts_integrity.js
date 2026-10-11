@@ -1,0 +1,78 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const ar=fs.readFileSync('web/questions-completion-runtime.js','utf8');
+const en=fs.readFileSync('web/questions-en-fixes-runtime.js','utf8');
+const custom=fs.readFileSync('web/questions-custom-library-runtime.js','utf8');
+const arHtml=fs.readFileSync('web/questions-ar.html','utf8');
+const enHtml=fs.readFileSync('web/questions-en.html','utf8');
+for(const [name,src] of [['Arabic completion',ar],['English completion',en],['custom templates',custom]])
+ new vm.Script(src,{filename:name});
+for(const [name,html] of [['Arabic',arHtml],['English',enHtml]]){
+ const blocks=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+ assert.ok(blocks.length,'Question HTML scripts missing: '+name);
+ blocks.forEach((block,index)=>new vm.Script(block,{filename:name+' inline script '+index}));
+}
+assert.ok(enHtml.includes('if (window.__ABU_QUESTIONS_EN_FIXES_V2__) return;'),'Legacy English timers must stop after durable runtime loads');
+assert.ok(custom.includes('data-idb-action="apply"')&&!custom.includes("onclick=\"AbuQuestionCustomLibrary.apply("),
+ 'Custom template IDs must never be embedded in inline JS handlers');
+function between(source,start,end){
+ const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
+ assert.ok(a>=0&&b>a,'Missing draft function block '+start);
+ return source.slice(a,b)
+}
+function draftHarness(language,stored=null){
+ const source=language==='ar'?ar:en;
+ const block=language==='ar'
+  ?between(source,'async function saveDurableDraft(','\nfunction fileToDataUrl(')
+  :between(source,'async function durableSave(','\nfunction addCss(');
+ const state=language==='ar'
+  ?'let saveTimer=0,hydrating=false,editedDuringHydration=false,resettingDraft=false,draftWrites=Promise.resolve(),draftGeneration=0;'
+  :'let saveTimer=0,hydrating=false,editedDuringHydration=false,resettingDraft=false,draftGeneration=0,saveQueue=Promise.resolve();const DRAFT_KEY="EnglishDraft";';
+ const box={innerHTML:'first'},alerts=[],records=[],values=new Map(),location={reloadCount:0,reload(){this.reloadCount++}};
+ let failDelete=false,storedRow=stored,restoreResolve=null;
+ const idbPut=async(html)=>{records.push(html);storedRow={html};return true};
+ const idbGet=async()=>storedRow;
+ const idbDelete=async()=>!failDelete;
+ const localStorage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,String(v)),removeItem:k=>values.delete(k)};
+ const noop=()=>{},window={fitToScreen:noop};
+ const factory=new Function('$','idbPut','idbGet','idbDelete','dbPut','dbGet','dbDelete','localStorage','window','location','alert','confirm','clearTimeout','setTimeout','stableRebind','normalizeHeaders','enhanceAnswers','rebind','enhanceHeader','fit','META_KEY','LOCAL_TS_KEY','IDB_KEY',
+  state+block+';return {save:'+(language==='ar'?'saveDurableDraft':'durableSave')+',reset:'+(language==='ar'?'resetDurableDraft':'reset')+',restore:'+(language==='ar'?'restoreDurableIfNeeded':'restoreDurableEnglish')+'};');
+ const api=factory(()=>box,idbPut,idbGet,idbDelete,idbPut,idbGet,idbDelete,localStorage,window,location,
+  value=>alerts.push(String(value)),()=>true,noop,noop,noop,noop,noop,noop,noop,noop,'meta','ts','ar');
+ return {api,box,records,alerts,values,location,setFailDelete:value=>{failDelete=value},setStored:value=>{storedRow=value}};
+}
+async function verifyDraft(language){
+ const instance=draftHarness(language);
+ const {api,box,records,alerts,location}=instance;
+ const first=api.save();box.innerHTML='second';const second=api.save();
+ assert.equal(await first,true);assert.equal(await second,true);
+ assert.deepEqual(records,['first','second'],'Draft writes must preserve submission order');
+ instance.setFailDelete(true);assert.equal(await api.reset(),false);
+ assert.equal(location.reloadCount,0,'Failed IndexedDB delete must not reload editor');
+ instance.setFailDelete(false);assert.equal(await api.reset(),true);
+ assert.equal(location.reloadCount,1,'Confirmed reset may reload only once');
+ assert.ok(alerts.some(x=>/تعذر حذف|reset cancelled/i.test(x)));
+ const reloaded=draftHarness(language,{html:'durable-after-local-quota'});
+ assert.equal(await reloaded.api.restore(),true,'A recoverable IndexedDB-only draft should load');
+ assert.equal(reloaded.box.innerHTML,'durable-after-local-quota');
+ return true
+}
+async function verifyCustomMigration(){
+ const fragment=between(custom,'async function migrate(){','\nfunction subjectKey(){');
+ const legacyKey='abuQuestionCustomTemplatesV1',store=new Map([[legacyKey,'present']]);
+ const rows=[],inserted=[];let fail=true;
+ const factory=new Function('all','put','legacyRows','localStorage','console','Date','let cache=[];'+fragment+';return {migrate,getCache:()=>cache}');
+ const api=factory(async()=>rows.slice(),async row=>{inserted.push(row.id);if(fail&&row.id==='b')throw Error('QuotaExceeded');rows.push(row)},
+  ()=>[{id:'a',html:'one'},{id:'b',html:'two'}],{removeItem:key=>store.delete(key)},{warn(){}},Date);
+ await api.migrate();
+ assert.equal(store.has(legacyKey),true,'Partial migration must not delete original custom templates');
+ assert.deepEqual(rows.map(x=>x.id),['a']);
+ fail=false;await api.migrate();
+ assert.deepEqual(rows.map(x=>x.id),['a','b'],'Retry should resume without duplicating completed items');
+ assert.equal(store.has(legacyKey),false,'After verified migration old storage may be cleared');
+ return true
+}
+(async()=>{
+ await verifyDraft('ar');await verifyDraft('en');await verifyCustomMigration();
+ console.log('Question draft integrity checks passed: Arabic and English ordered writes, failed-reset isolation, IDB-only recovery, and retryable lossless template migration.');
+})().catch(e=>{console.error(e);process.exitCode=1});
