@@ -190,7 +190,7 @@ window.AbuBassamNativeContactSelected=function(result){
  if(state.type==='personal'&&!state.forms.personal.name&&result.name)state.forms.personal.name=String(result.name).slice(0,150);
  saveDraft();renderForm();renderPreview()
 };
-document.addEventListener('abu-bassam-auth-changed',()=>{pendingContact=null});
+document.addEventListener('abu-bassam-auth-changed',()=>{pendingContact=null;try{window.Android?.cancelContactChoice?.()}catch(e){}});
 function photoTools(){let t=state.photoTransform;return `<div class="cs-photo-tools" id="csPhotoTools"><div class="cs-photo-actions"><button onclick="CardsStudio.pickPhoto()">🖼 إضافة صورة</button><button onclick="CardsStudio.cameraPhoto()">📷 تصوير بالكاميرا</button><button class="alt" onclick="CardsStudio.removePhoto()">حذف الصورة</button><button class="alt" onclick="CardsStudio.resetPhoto()">إعادة القص</button></div><div class="cs-sliders"><label>التكبير<input id="csPhotoZoom" type="range" min="1" max="3.5" step=".01" value="${t.zoom}" oninput="CardsStudio.photoControl()"></label><label>أفقي<input id="csPhotoX" type="range" min="-70" max="70" value="${t.x}" oninput="CardsStudio.photoControl()"></label><label>عمودي<input id="csPhotoY" type="range" min="-70" max="70" value="${t.y}" oninput="CardsStudio.photoControl()"></label><label>دوران<input id="csPhotoRotate" type="range" min="-180" max="180" value="${t.rotate}" oninput="CardsStudio.photoControl()"></label></div></div>`}
 
 function renderForm(){
