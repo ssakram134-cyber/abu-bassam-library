@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require(
 const source=fs.readFileSync('web/backup-center-runtime.js','utf8');
 new Function(source);
 const auditSource=source.replace('window.AbuBackupCenter={',
- 'window.__backupTest={stateGet,stateSet,backupNow,downloadBytes,restoreCloud,readBoundedPart,due};window.AbuBackupCenter={');
+ 'paint=()=>{};status=()=>{};refreshList=async()=>{};window.__backupTest={stateGet,stateSet,backupNow,downloadBytes,restoreCloud,readBoundedPart,due};window.AbuBackupCenter={');
 assert.notEqual(auditSource,source,'Unable to expose backup helpers for regression testing');
 const prefs=new Map(),status=new Map(),alerts=[];
 let userId='owner-A',fetchHandler=null,partReads=0;
