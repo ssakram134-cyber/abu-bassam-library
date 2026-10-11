@@ -22,8 +22,8 @@ assert.ok(native.includes("if (permissionIntroVisible) { finishPermissionIntro()
 assert.ok(native.includes("cancelled: true"),'Canceled Android native contact selection must release pending request');
 assert.ok(cards.includes("if(result.cancelled)return;"),'Canceling the contact picker must not change the badge fields');
 assert.ok(settings.includes('AbuBassamSettings.permissionGuide()'));
-const saved=new Map(),messages=[],events=new Map();let current='owner-one';
-const window={addEventListener(){},AbuBassamCloud:{session:()=>({user:{id:current}})},AbuBassamSecurity:{role:()=> 'owner'},Android:{pickContact:(field,requestId)=>messages.push({field,requestId})}};
+const saved=new Map(),messages=[],events=new Map(),cancelSignals=[];let current='owner-one';
+const window={addEventListener(){},AbuBassamCloud:{session:()=>({user:{id:current}})},AbuBassamSecurity:{role:()=> 'owner'},Android:{pickContact:(field,requestId)=>messages.push({field,requestId}),cancelContactChoice:()=>cancelSignals.push('cancel')}};
 const document={addEventListener:(name,fn)=>events.set(name,[...(events.get(name)||[]),fn]),getElementById:()=>null};
 const emit=name=>(events.get(name)||[]).forEach(listener=>listener());
 const localStorage={getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)};
@@ -52,11 +52,38 @@ const stale=messages.at(-1);current='owner-two';
 window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:stale.requestId,phone:'07812345678'});
 assert.equal(state.forms.child.driverPhone,'','Reject other account callbacks');
 current='owner-one';window.CardsStudio.pickContact('driverPhone');const id=messages.at(-1).requestId;
-emit('abu-bassam-auth-changed');window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:id,phone:'07812345678'});
+emit('abu-bassam-auth-changed');assert.equal(cancelSignals.length,1,'Account switch must revoke native contact chooser');window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:id,phone:'07812345678'});
 assert.equal(state.forms.child.driverPhone,'','Logout must invalidate pending contact');
 state.type='personal';state.forms.personal.name='';window.CardsStudio.pickContact('phone');
 const personal=messages.at(-1);
 window.AbuBassamNativeContactSelected({target:'phone',requestId:personal.requestId,phone:'07829781753',name:'اسم من جهة الاتصال'});
 assert.equal(state.forms.personal.phone,'07829781753');assert.equal(state.forms.personal.name,'اسم من جهة الاتصال');
 for(const t of ["contactButton('guardianPhone'","contactButton('driverPhone'","contactButton('phone'"])assert.ok(cards.includes(t));
-console.log('First-launch Android permissions and private one-contact badge picker checks passed: camera, read-only contacts, optional battery settings, session race safety and lockfile consistency.');
+// Verify native multi-number extraction and exact per-number selection without opening a real OS dialog.
+const numberAt=native.indexOf('const numbers = (selected.phoneNumbers || [])');
+assert.ok(numberAt>0,'Native contact picker must not blindly choose the first phone');
+const numberEnd=native.indexOf(';\n      if (!numbers.length)',numberAt);
+assert.ok(numberEnd>numberAt,'Expected native number array expression');
+const numberExpr=native.slice(numberAt+'const numbers = '.length,numberEnd);
+const numbers=new Function('selected','return '+numberExpr)({phoneNumbers:[
+ {label:'الهاتف الشخصي',number:'07829667521'},
+ {label:'واتساب',number:'07829781753'},
+ {label:'العمل',number:'07885557600'},
+ {label:'احتياطي',number:'07814800015'}
+]});
+assert.equal(numbers.length,4,'More than three numbers must remain selectable');
+assert.equal(numbers[2].phone,'07885557600');
+const chooser=native.match(/const choosePhone = useCallback\((\(choice, phone\) => \{[\s\S]*?\})\s*, \[inject\]\);/);
+assert.ok(chooser,'Native number selector callback must be present');
+const emitted=[],dismissed=[];
+const choosePhone=new Function('inject','setContactChoice','return '+chooser[1])((name,data)=>emitted.push({name,data}),v=>dismissed.push(v));
+const selection={target:'guardianPhone',requestId:'53',name:'ولي الأمر'};
+choosePhone(selection,'07885557600');
+assert.equal(emitted[0].data.phone,'07885557600','Chosen specific number must reach badge');
+assert.equal(emitted[0].data.requestId,'53');
+choosePhone(selection,null);
+assert.ok(emitted[1].data.cancelled===true,'Closing list should not write to badge');
+assert.equal(dismissed.length,2);
+assert.ok(native.includes("pickerEpoch !== contactPickerEpochRef.current"),'Cancel on account switch must invalidate late native picker results');
+assert.ok(native.includes("if (message.type === 'cancelContactChoice')"),'Native runtime must process logout cancellation');
+console.log('First-launch Android permissions and multi-number private contact picker checks passed: camera, read-only contacts, optional battery settings, session race safety and lockfile consistency.');
