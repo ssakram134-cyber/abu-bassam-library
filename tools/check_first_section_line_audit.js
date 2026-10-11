@@ -17,7 +17,7 @@ const required=[
  [photo,'originalSrc','enhancement must not overwrite a changed photo'],
  [photo,'if(job&&job!==enhanceJob)return;ctx.putImageData','stale enhancement pixel job must stop'],
  [geo,'Math.sqrt(12_000_000/(ow*oh))','crop output memory bounded'],
- [geo,'Math.sqrt(8_000_000/(sw*sh))','perspective input memory bounded'],
+ [geo,'Math.sqrt(8_000_000/(originalW*originalH))','perspective input memory bounded'],
  [geo,"it.src!==originalSrc",'delayed crop may not overwrite another image'],
  [complete,'function htmlEsc(v)','design layer text must be escaped'],
  [complete,'function trimHistory(stack)','undo history must have memory cap'],
