@@ -80,8 +80,16 @@ async function fetchWithTimeout(url,maxBytes){
     // Keep the timeout active until the final byte, not just HTTP headers.
     const response=await fetch(url,{redirect:'follow',signal:controller.signal});
     if(!response.ok)throw new Error(`HTTP ${response.status}`);
-    const declared=Number(response.headers?.get?.('content-length'));
-    if(Number.isFinite(declared)&&declared>maxBytes)throw new Error('Offline asset exceeds maximum download size');
+    const lengthHeader=response.headers?.get?.('content-length');
+    const declared=lengthHeader==null?null:Number(lengthHeader);
+    const contentEncoding=String(response.headers?.get?.('content-encoding')||'').toLowerCase().trim();
+    if(declared!==null&&Number.isFinite(declared)&&declared>maxBytes)throw new Error('Offline asset exceeds maximum download size');
+    // Native fetch may transparently decompress gzip/br bodies while retaining compressed headers.
+    // For unencoded responses, a length mismatch detects truncated but otherwise plausible JS or OCR.
+    const assertComplete=(received)=>{
+      if(declared!==null&&Number.isSafeInteger(declared)&&declared>=0&&(!contentEncoding||contentEncoding==='identity')&&received!==declared)
+        throw new Error('Offline asset response length mismatch');
+    };
     let bytes=0,chunks=[];
     if(response.body?.getReader){
       const reader=response.body.getReader();
@@ -94,10 +102,12 @@ async function fetchWithTimeout(url,maxBytes){
           chunks.push(Buffer.from(value))
         }
       }finally{reader.releaseLock()}
+      assertComplete(bytes);
       return Buffer.concat(chunks,bytes)
     }
     const data=Buffer.from(await response.arrayBuffer());
     if(data.length>maxBytes)throw new Error('Offline asset exceeds maximum download size');
+    assertComplete(data.length);
     return data
   }finally{clearTimeout(timer)}
 }
