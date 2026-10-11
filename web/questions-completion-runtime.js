@@ -10,7 +10,7 @@ const IDB_KEY='ar';
 const META_KEY='abuBassamQuestionDraftArabicV2Meta';
 const LOCAL_TS_KEY='abuBassamQuestionDraftArabicV2LocalTs';
 let answersVisible=localStorage.getItem('abuQuestionAnswersVisibleV1')==='1';
-let saveTimer=0;
+let saveTimer=0,hydrating=true,editedDuringHydration=false,resettingDraft=false,draftWrites=Promise.resolve(),draftGeneration=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function profile(){try{return Object.assign({day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'},JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}'))}catch(e){return{day:'',date:'',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',year:'٢٠٢٦ - ٢٠٢٧',role:'الدور الأول'}}}
 function addCss(){if($('abuQuestionsCompletionStyle'))return;const s=document.createElement('style');s.id='abuQuestionsCompletionStyle';s.textContent=`
@@ -76,10 +76,73 @@ function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(I
 async function idbPut(html,updatedAt=Date.now()){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put({id:IDB_KEY,html,updatedAt});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
 async function idbGet(){try{const db=await dbOpen();const row=await new Promise((resolve,reject)=>{const r=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(IDB_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});db.close?.();return row}catch(e){return null}}
 async function idbDelete(){try{const db=await dbOpen();await new Promise((resolve,reject)=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(IDB_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close?.();return true}catch(e){return false}}
-async function saveDurableDraft(show=false){const container=$('pages-container');if(!container)return false;const html=container.innerHTML,ts=Date.now();const ok=await idbPut(html,ts);try{localStorage.setItem(LOCAL_TS_KEY,String(ts));localStorage.setItem(META_KEY,String(ts));localStorage.removeItem('abuBassamQuestionDraftArabicV1')}catch(e){}if(show)alert(ok?'تم حفظ مسودة الأسئلة ✓':'تعذر حفظ المسودة');return ok}
-function queueDraft(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveDurableDraft(false),650)}
-async function restoreDurableIfNeeded(){let row=await idbGet();if(!row?.html){try{const legacy=localStorage.getItem('abuBassamQuestionDraftArabicV1')||'';if(legacy){const ts=Date.now();if(await idbPut(legacy,ts)){row={id:IDB_KEY,html:legacy,updatedAt:ts};localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.setItem(LOCAL_TS_KEY,String(ts));localStorage.setItem(META_KEY,String(ts))}}}catch(e){}}if(!row?.html)return false;const container=$('pages-container');if(!container)return false;container.innerHTML=row.html;stableRebind();normalizeHeaders();enhanceAnswers();window.fitToScreen?.();return true}
-async function resetDurableDraft(){if(!confirm('بدء نموذج جديد؟ ستُحذف مسودة الأسئلة الحالية من التخزين المحلي.'))return;clearTimeout(saveTimer);await idbDelete();try{localStorage.removeItem('abuBassamQuestionDraftArabicV1');localStorage.removeItem(META_KEY);localStorage.removeItem(LOCAL_TS_KEY)}catch(e){}location.reload()}
+async function saveDurableDraft(show=false){
+ const container=$('pages-container');
+ if(!container||resettingDraft)return false;
+ const html=container.innerHTML,ts=Date.now(),generation=draftGeneration;
+ // Keep writes ordered: an older autosave must never finish after a newer save.
+ const pending=draftWrites.catch(()=>{}).then(async()=>{
+  if(resettingDraft||generation!==draftGeneration)return false;
+  const ok=await idbPut(html,ts);
+  if(ok&&generation===draftGeneration){
+   try{
+    localStorage.setItem(LOCAL_TS_KEY,String(ts));
+    localStorage.setItem(META_KEY,String(ts));
+    localStorage.removeItem('abuBassamQuestionDraftArabicV1');
+   }catch(e){}
+  }
+  return ok
+ });
+ draftWrites=pending;
+ const ok=await pending;
+ if(show)alert(ok?'تم حفظ مسودة الأسئلة ✓':'تعذر حفظ المسودة؛ لم يتم حذف النسخة القديمة.');
+ return ok
+}
+function queueDraft(){if(hydrating||resettingDraft)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveDurableDraft(false),650)}
+function draftInput(){if(hydrating)editedDuringHydration=true;queueDraft()}
+async function restoreDurableIfNeeded(){
+ const container=$('pages-container');
+ if(!container){hydrating=false;return false}
+ const before=container.innerHTML;
+ try{
+  let row=await idbGet();
+  if(editedDuringHydration||before!==container.innerHTML)return false;
+  if(!row?.html){
+   try{
+    const legacy=localStorage.getItem('abuBassamQuestionDraftArabicV1')||'';
+    if(legacy){
+     const ts=Date.now();
+     if(await idbPut(legacy,ts)){
+      row={id:IDB_KEY,html:legacy,updatedAt:ts};
+      localStorage.removeItem('abuBassamQuestionDraftArabicV1');
+      localStorage.setItem(LOCAL_TS_KEY,String(ts));
+      localStorage.setItem(META_KEY,String(ts));
+     }
+    }
+   }catch(e){}
+  }
+  if(!row?.html||editedDuringHydration||before!==container.innerHTML)return false;
+  container.innerHTML=row.html;
+  stableRebind();normalizeHeaders();enhanceAnswers();window.fitToScreen?.();
+  return true
+ }finally{hydrating=false;if(editedDuringHydration)queueDraft()}
+}
+async function resetDurableDraft(){
+ if(resettingDraft||!confirm('بدء نموذج جديد؟ ستُحذف مسودة الأسئلة الحالية من التخزين المحلي.'))return false;
+ resettingDraft=true;clearTimeout(saveTimer);draftGeneration++;
+ try{
+  await draftWrites.catch(()=>{});
+  if(!(await idbDelete()))throw Error('تعذر حذف المسودة من قاعدة البيانات؛ أُلغيت إعادة التهيئة لحماية بياناتك.');
+  try{
+   localStorage.removeItem('abuBassamQuestionDraftArabicV1');
+   localStorage.removeItem(META_KEY);
+   localStorage.removeItem(LOCAL_TS_KEY);
+  }catch(e){throw Error('تعذر تنظيف المسودة القديمة؛ لم يُعَد تشغيل المحرر.')}
+  location.reload();
+  return true
+ }catch(e){alert(String(e?.message||e));return false}
+ finally{resettingDraft=false}
+}
 function fileToDataUrl(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(r.error||new Error('تعذر قراءة الصورة'));r.readAsDataURL(file)})}
 function loadImage(src){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('تعذر فتح الصورة'));im.src=src})}
 async function optimizedImage(file){if(!file||!String(file.type||'').startsWith('image/'))throw new Error('الملف المختار ليس صورة.');if(file.size>40*1024*1024)throw new Error('الصورة أكبر من الحد الآمن 40MB.');const src=await fileToDataUrl(file),im=await loadImage(src),w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,maxSide=Math.max(w,h);if(maxSide<=2600&&file.size<=6*1024*1024)return src;const scale=Math.min(1,2600/maxSide),cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale)),canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(im,0,0,cw,ch);const png=String(file.type).toLowerCase()==='image/png';return canvas.toDataURL(png?'image/png':'image/jpeg',png?undefined:.94)}
@@ -127,7 +190,7 @@ function injectExtraTemplates(){
 function applyExtra(key,index){const item=EXTRA[key]?.[index];if(!item)return;const meta=metaFor(key);const questions=item[1].map((row,i)=>q(i+1,row[0],row[1])).join('');const html=page(meta,item[0],'أجب عن جميع الأسئلة مع مراعاة وضوح الخط.',[questions]);const c=$('pages-container');if(!c)return;try{window.saveState?.()}catch(_){}c.innerHTML=html;normalizeHeaders();enhanceAnswers();stableRebind();window.AbuQuestionTypes?.enhance?.();window.fitToScreen?.();window.checkAutoFlow?.();queueDraft();$('abuQTemplateModal')?.classList.remove('show')}
 function wrapTemplates(){if(!window.AbuQuestionTemplates||AbuQuestionTemplates.__abuCompletionWrapped)return false;const origOpen=AbuQuestionTemplates.openTemplates?.bind(AbuQuestionTemplates),origApply=AbuQuestionTemplates.applyTemplate?.bind(AbuQuestionTemplates);if(origOpen)AbuQuestionTemplates.openTemplates=function(...args){const r=origOpen(...args);setTimeout(injectExtraTemplates,20);return r};if(origApply)AbuQuestionTemplates.applyTemplate=function(...args){const r=origApply(...args);setTimeout(()=>{normalizeHeaders();enhanceAnswers();stableRebind();window.fitToScreen?.();window.checkAutoFlow?.();queueDraft()},30);return r};AbuQuestionTemplates.__abuCompletionWrapped=true;return true}
 function watch(){
-  const c=$('pages-container');if(c){c.addEventListener('input',queueDraft,true);c.addEventListener('change',queueDraft,true);new MutationObserver(()=>{normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();setTimeout(stableRebind,0);queueDraft()}).observe(c,{childList:true,subtree:true})}
+  const c=$('pages-container');if(c){c.addEventListener('input',draftInput,true);c.addEventListener('change',draftInput,true);new MutationObserver(()=>{normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();setTimeout(stableRebind,0);queueDraft()}).observe(c,{childList:true,subtree:true})}
   const modal=$('abuQTemplateModal');if(modal)new MutationObserver(()=>setTimeout(injectExtraTemplates,0)).observe(modal,{childList:true,subtree:true})
 }
 async function init(){addCss();installAnswerButton();normalizeHeaders();removeQuestionLibraryBranding();enhanceAnswers();installStableDrag();window.saveQuestionDraft=saveDurableDraft;window.scheduleQuestionDraft=queueDraft;window.resetQuestionDraft=resetDurableDraft;window.handleAddImage=safeAddImage;wrapFlow();wrapPaper();watch();await restoreDurableIfNeeded();let tries=0,t=setInterval(()=>{tries++;const ready=wrapTemplates();wrapFlow();wrapPaper();if(ready||tries>40)clearInterval(t)},100);setTimeout(injectExtraTemplates,500)}
