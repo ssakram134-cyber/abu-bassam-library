@@ -170,6 +170,7 @@ function contactButton(field,label){return '<div class="cs-photo-actions"><butto
 function currentContactIdentity(){return String(window.AbuBassamCloud?.session?.()?.user?.id||window.AbuBassamSecurity?.device?.()?.device_id||'local')}
 function normalizeContactPhone(input){const value=String(input||'').replace(/\D/g,'');if(/^009647\d{9}$/.test(value))return'0'+value.slice(5);if(/^9647\d{9}$/.test(value))return'0'+value.slice(3);return value}
 function pickContact(field){
+ if(pendingContact)return;
  if(!requireCard('cardsEditText'))return;
  if(!((state.type==='personal'&&field==='phone')||(state.type==='child'&&['guardianPhone','driverPhone'].includes(field))))return;
  if(!window.Android?.pickContact)return alert('اختيار جهة اتصال يحتاج إصدار Android الداعم لهذه الميزة.');
