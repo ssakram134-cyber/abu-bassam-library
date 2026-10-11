@@ -42,7 +42,7 @@ const window={
  AbuBassamOps:{add(){}}
 };
 const sandbox={
- window,document,Android,localStorage,navigator:{},
+ window,document,Android,AbuBassamSettings:settings,localStorage,navigator:{},
  confirm:()=>{promptCount++;return true},
  alert:x=>alerts.push(String(x)),
  setTimeout:(fn,ms)=>{const id=nextTimer++;timers.set(id,{fn,ms});return id},
