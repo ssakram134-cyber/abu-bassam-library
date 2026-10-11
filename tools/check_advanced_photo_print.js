@@ -28,7 +28,7 @@ for(const marker of [
   "if(!uploadedImages.length){pageCanvases=[]",
   "Math.max(0,Math.round(Math.max(0,Number(mm)||0)",
   "if(iw+2*margin>pw||ih+2*margin>ph)",
-  "if(uploadedImages.length*count>maxJobs)",
+  "if(totalCopies>maxJobs)",
   "else if(selectedIndex===i)selectedIndex=Math.min(i,uploadedImages.length-1)",
   "if(pageCanvases.length>20){let pdf=makePdfData()"
 ])need(home,marker,'main photo/print regression');
@@ -47,7 +47,8 @@ for(const [name,code] of [['poster project',posterProject],['advanced completion
 need(posterProject,"document.addEventListener('abu-runtime-loaded',event=>",'poster project must retry when its actual runtime becomes ready');
 need(read('advanced-completion-runtime.js'),"document.addEventListener('abu-design-advanced-ready',ensureDesignCompletion)",'design tools event-driven startup');
 need(read('design-studio-advanced-runtime.js'),"new CustomEvent('abu-design-advanced-ready')",'design studio readiness signal');
-for(const marker of ['Math.sqrt(12_000_000/(ow*oh))','Math.sqrt(8_000_000/(sw*sh))'])need(read('photo-geometry-runtime.js'),marker,'bounded geometry memory');
+for(const marker of ['Math.sqrt(12_000_000/(ow*oh))','Math.sqrt(8_000_000/(originalW*originalH))'])need(read('photo-geometry-runtime.js'),marker,'bounded geometry memory');
+for(const marker of ['geoTarget=it;geoSourceAtOpen=it.src','geoTarget!==it||it.src!==originalSrc','async function warpFull(im)','if((y&63)===63)await new Promise'])need(read('photo-geometry-runtime.js'),marker,'guard stale crop and yield perspective work');
 for(const marker of ['function htmlEsc(v)','function trimHistory(stack)','invalidatePosterPages?.()'])need(read('advanced-completion-runtime.js'),marker,'safe layer names, undo size and poster cache invalidation');
 need(read('design-studio-advanced-runtime.js'),"attributeFilter:['class']", 'prevent style mutation feedback loops during card dragging');
 if(read('design-studio-advanced-runtime.js').includes('return setTimeout(observe,80)'))errors.push('design studio must not poll 80ms while canvas is missing');
