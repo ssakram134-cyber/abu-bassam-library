@@ -54,6 +54,7 @@ assert.equal(state.forms.child.driverPhone,'','Reject other account callbacks');
 current='owner-one';window.CardsStudio.pickContact('driverPhone');const id=messages.at(-1).requestId;
 emit('abu-bassam-auth-changed');assert.equal(cancelSignals.length,1,'Account switch must revoke native contact chooser');window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:id,phone:'07812345678'});
 assert.equal(state.forms.child.driverPhone,'','Logout must invalidate pending contact');
+state.type='child';
 // Same user/type, but a different edited badge: reject the callback.
 window.CardsStudio.pickContact('driverPhone');
 const changedBadge=messages.at(-1);
@@ -69,6 +70,7 @@ assert.equal(state.forms.child.driverPhone,'','Old contact selection must not ov
 // Switching badge type actively closes the native chooser.
 window.CardsStudio.pickContact('driverPhone');
 const switchedBadge=messages.at(-1);
+assert.equal(switchedBadge.field,'driverPhone','The picker must still be for the child badge');
 window.CardsStudio.selectType('personal');
 assert.equal(cancelSignals.length,2,'Switching badge type must cancel native contact selection');
 window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:switchedBadge.requestId,phone:'07833333333'});
