@@ -44,7 +44,7 @@ const ANDROID_BRIDGE = `
     catch (error) {}
   }
   window.Android = {
-    saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
+    saveBase64: function (name, mime, data, requestId) { send('saveBase64', { name: name, mime: mime, data: data, requestId: requestId }); },
     saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
     savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
     printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
@@ -320,18 +320,26 @@ function App() {
   }, [barcodeLocked, inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
+  const saveBase64 = useCallback(async ({ name, mime, data, requestId }) => {
+    const confirmationId = String(requestId || '');
+    const report = (ok, error = '') => {
+      if (confirmationId) inject('AbuBassamSettingsBackupResult', { requestId: confirmationId, ok, error });
+    };
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) { report(false, 'أُلغي اختيار مجلد الحفظ.'); return; }
       const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
       await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
-      Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
-  }, []);
+      if (confirmationId) report(true);
+      else Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
+    } catch (error) {
+      if (confirmationId) report(false, String(error?.message || error));
+      else Alert.alert('تعذر الحفظ', String(error?.message || error));
+    }
+  }, [inject]);
 
   const saveToGallery = useCallback(async ({ name, mime, data }) => {
     try {
