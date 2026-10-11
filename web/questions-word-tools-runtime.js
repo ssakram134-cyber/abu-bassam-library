@@ -286,6 +286,80 @@
       alert((ar ? 'تعذر إنشاء النماذج: ' : 'Model export failed: ') + (error.message || error));
     } finally { saveBusy = false; }
   }
+  function wordParagraphs(xmlSource) {
+    if (/<!DOCTYPE|<!ENTITY/i.test(xmlSource)) throw new Error(ar ? 'بنية XML غير آمنة' : 'Unsafe XML document');
+    var parser = new DOMParser(), doc = parser.parseFromString(xmlSource, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) throw new Error(ar ? 'تعذر قراءة نص Word' : 'Malformed Word XML');
+    var wordNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    var paragraphs = Array.from(doc.getElementsByTagNameNS(wordNS, 'p')).slice(0, 250);
+    return paragraphs.map(function (p) {
+      return Array.from(p.getElementsByTagNameNS(wordNS, 't')).map(function (t) {
+        return t.textContent || '';
+      }).join('').trim();
+    }).filter(Boolean);
+  }
+  function parseImportedQuestions(lines) {
+    var heading = /^(?:س\s*[0-9٠-٩۰-۹]+|Q(?:uestion)?\s*[0-9]+)\s*[/):.\-]?\s*/i;
+    var hasHeadings = lines.some(function (line) { return heading.test(line); });
+    var result = [];
+    lines.forEach(function (line) {
+      if (hasHeadings) {
+        if (heading.test(line) || !result.length) result.push({ title: line, body: '' });
+        else result[result.length - 1].body += (result[result.length - 1].body ? '\n' : '') + line;
+      } else result.push({ title: line, body: '' });
+    });
+    return result.slice(0, 30);
+  }
+  async function importDocx(file) {
+    if (!file) return;
+    if (!/\.docx$/i.test(file.name || '') || file.size > 6 * 1024 * 1024) {
+      return alert(ar ? 'اختر ملف DOCX لا يتجاوز 6 ميغابايت' : 'Select a DOCX file smaller than 6 MB');
+    }
+    var status = $('abuQuestionWordStatus');
+    try {
+      if (status) status.textContent = ar ? 'جاري قراءة Word محلياً...' : 'Reading Word locally...';
+      var Zip = await loadZip(), archive = await Zip.loadAsync(await file.arrayBuffer());
+      var docPart = archive.file('word/document.xml');
+      if (!docPart) throw new Error(ar ? 'لا يوجد نص Word صالح' : 'Missing Word document content');
+      var xmlText = await docPart.async('string');
+      if (xmlText.length > 2 * 1024 * 1024) throw new Error(ar ? 'نص Word أكبر من الحد الآمن' : 'Word text exceeds safe limit');
+      var allLines = wordParagraphs(xmlText);
+      var groups = parseImportedQuestions(allLines);
+      if (!groups.length) throw new Error(ar ? 'لم يتم العثور على أسئلة نصية' : 'No text questions found');
+      var template = document.querySelector('#pages-container .question-container');
+      var area = document.querySelector('#pages-container .a4-page:last-of-type .questions-area') ||
+        document.querySelector('#pages-container .questions-area');
+      if (!template || !area) throw new Error(ar ? 'محرر الأسئلة غير جاهز' : 'Question editor not ready');
+      var notice = (ar ? 'تم استخراج ' : 'Found ') + groups.length + (ar ? ' سؤالاً محتملاً.' : ' potential questions.') +
+        (allLines.length > 250 || groups.length >= 30 ? (ar ? '\nسيُستورد أول 30 سؤالاً كحد أقصى.' : '\nAt most 30 questions will be imported.') : '') +
+        (ar ? '\nقد تحتاج الأسئلة إلى تقسيم وتصحيح يدوي. لن تُستورد الصور والجداول والمعادلات. هل تضيف النصوص إلى الورقة الحالية؟' :
+          '\nReview and split imported text manually. Images, tables and formulas are excluded. Add to current sheet?');
+      if (!confirm(notice)) { if (status) status.textContent = ''; return; }
+      try { window.saveState && window.saveState(); } catch (_) {}
+      groups.forEach(function (item, index) {
+        var clone = template.cloneNode(true);
+        clone.removeAttribute('data-abu-grade');
+        clone.removeAttribute('data-abu-difficulty');
+        clone.querySelector('.abu-question-grade')?.remove();
+        clone.querySelectorAll('.draggable-item').forEach(function (e) { e.remove(); });
+        var title = clone.querySelector('.q-title'), body = clone.querySelector('.text-area');
+        if (title) title.textContent = item.title || ((ar ? 'السؤال ' : 'Question ') + (index + 1));
+        if (body) body.textContent = item.body || (ar ? 'أكمل تحرير السؤال هنا.' : 'Complete question here.');
+        var answer = clone.querySelector('.abu-answer-box [contenteditable]');
+        if (answer) answer.textContent = '';
+        area.appendChild(clone);
+      });
+      window.AbuQuestionCompletion?.ensureAnswers?.();
+      window.AbuQuestionCompletion?.rebind?.();
+      window.AbuQuestionTypes?.enhance?.();
+      window.checkAutoFlow?.();
+      window.scheduleQuestionDraft?.();
+      if (status) status.textContent = ar ? 'تمت إضافة الأسئلة للنموذج الحالي، راجعها ثم احفظ.' : 'Questions added. Review and save.';
+    } catch (error) {
+      if (status) status.textContent = ar ? 'فشل استيراد Word' : 'Word import failed';
+      alert((ar ? 'تعذر استيراد Word: ' : 'Word import failed: ') + (error.message || error));
+    }
+  }
   function boot() {
     var bar = $('controls'), pages = $('pages-container');
     if (!bar || !pages) return;
@@ -310,6 +384,8 @@
       v.onclick = report; bar.appendChild(v);
       var target = document.createElement('button');target.type='button';target.id='abuQuestionExpectedGrade';target.className='btn abu-word-audit';target.textContent=ar?'🎯 الدرجة النهائية':'🎯 Target Marks';target.onclick=setExpectedGrade;bar.appendChild(target);
       var abc = document.createElement('button');abc.type='button';abc.id='abuQuestionAbcExport';abc.className='btn abu-word-btn';abc.textContent=ar?'📚 نماذج أ ب ج':'📚 Models A B C';abc.onclick=exportVariants;bar.appendChild(abc);
+      var choose=document.createElement('input');choose.id='abuQuestionDocxImportInput';choose.type='file';choose.accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';choose.style.display='none';choose.onchange=function(){var f=choose.files&&choose.files[0];choose.value='';importDocx(f)};bar.appendChild(choose);
+      var importButton=document.createElement('button');importButton.type='button';importButton.id='abuQuestionDocxImportBtn';importButton.className='btn abu-word-btn';importButton.textContent=ar?'⬆️ استيراد Word':'⬆️ Import Word';importButton.onclick=function(){choose.click()};bar.appendChild(importButton);
       var info = document.createElement('span');
       info.id = 'abuQuestionWordStatus'; info.setAttribute('aria-live', 'polite'); bar.appendChild(info);
     }
@@ -321,7 +397,7 @@
       Promise.resolve().then(function () { scheduled = false; ensureGrades(); });
     }).observe(pages, { childList: true, subtree: true });
   }
-  window.AbuQuestionWordTools = { collect: collect, report: report, exportDocx: exportDocx, exportVariants: exportVariants, ensureGrades: ensureGrades };
+  window.AbuQuestionWordTools = { collect: collect, report: report, exportDocx: exportDocx, exportVariants: exportVariants, importDocx: importDocx, wordParagraphs: wordParagraphs, parseImportedQuestions: parseImportedQuestions, ensureGrades: ensureGrades };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 }());
