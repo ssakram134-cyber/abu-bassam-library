@@ -33,6 +33,15 @@ new Function('window','document','TextEncoder','JSZip','crypto','localStorage','
  assert.deepEqual(manifest.items.map(x=>!!x.deleted),[false,true,true]);
  assert.ok(manifest.items[1].path,'Recoverable trash must include its original blob');
  assert.equal(manifest.items[2].path,'','Tombstone may not contain a blob');
+ // Different original IDs may normalize to the same path segment: file records must not overwrite one another in ZIP.
+ const originalRows=window.records;
+ window.records=[{...originalRows[0],id:'same/a'},{...originalRows[0],id:'same_a'}];
+ await window.testVault.backupBytes();
+ const collisionManifest=JSON.parse(await ZipMock.current.file('manifest.json').async('string'));
+ assert.notEqual(collisionManifest.items[0].path,collisionManifest.items[1].path,'Sanitized IDs must still produce distinct ZIP entries');
+ assert.equal(ZipMock.current.entries.size,4,'Both colliding-ID blobs must be retained alongside manifests');
+ window.records=originalRows;
+ await window.testVault.backupBytes();
  const file={size:zip.length,arrayBuffer:async()=>zip.buffer.slice(0)};
  const ok=await window.testVault.safeRestore(file,{mode:'snapshot',skipSafetyBackup:true,silentConfirm:true,silentSuccess:true,silentError:true});
  assert.equal(ok,true,'Restoring a valid snapshot must succeed');
