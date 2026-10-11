@@ -86,7 +86,7 @@ async function idbPut(html,updatedAt=Date.now()){
    tx.objectStore(IDB_STORE).put({id:key,html,updatedAt});
    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)
   });
-  db.close?.();return true
+  db.close?.();return scope()===owner
  }catch(e){return false}
 }
 async function idbGet(){
