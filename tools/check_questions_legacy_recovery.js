@@ -13,7 +13,7 @@ let user='account-A',device='device-1',role='owner',confirmed=false,reloads=0,re
 const records=new Map(),alerts=[],saved=new Map();
 const host={AbuBassamCloud:{session:()=>({user:{id:user}})},AbuBassamSecurity:{device:()=>({device_id:device}),role:()=>role}};
 const document={readyState:'loading',documentElement:{lang:'ar'},addEventListener(){},getElementById:()=>null};
-const window={parent:host};
+const window={parent:host,addEventListener(){}};
 new Function('window',helper)(window);
 const storage={getItem:key=>saved.get(key)||null,setItem:(key,v)=>saved.set(key,String(v)),removeItem:key=>saved.delete(key)};
 const db={
