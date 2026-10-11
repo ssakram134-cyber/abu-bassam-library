@@ -28,5 +28,14 @@ const required=[
  [compress,'MAX_OUTPUT_BYTES=24*1024*1024','individual compression output size cap'],
  [compress,'MAX_TOTAL_OUTPUT_BYTES=96*1024*1024','compression batch output size cap'],
  [compress,'sw*sh>48_000_000','input decoded image must fit memory'],
+ [geo,"$('abuRulerModal')?.classList.add('show')",'paper-size ruler must open its own modal'],
+ [geo,"window.addEventListener('pointermove',move)",'crop drag must survive handle re-render'],
+ [geo,"token!==drawToken",'stale crop animation frames must not duplicate handles'],
+ [compress,"function lockProcessingControls(locked)",'compression controls must lock during processing'],
+ [compress,"if(processing)return alert('لا يمكن إضافة صور أثناء المعالجة",'compression must reject file additions while busy'],
+ [compress,"window.moveItem=(i,d)=>{if(processing)return;",'compression must reject reordering while busy'],
+ [complete,"it.src!==before)return false",'photo undo must discard delayed image changes'],
+ [complete,"if(await setPhotoSource(it,next))pushUndo(it,before)",'flip history must change only after successful image replacement'],
+ [photo,"selectedItem()!==item||item.src!==before",'restoring original photo must reject stale selection'],
 ];for(const [src,needle,reason] of required)if(!src.includes(needle))issues.push('Regression guard missing: '+reason);
 if(issues.length){console.error(issues.join('\n'));process.exitCode=1}else console.log('First-section photo/print code audit passed\n'+rows.join('\n')+'\nTotal physical lines examined by static checks: '+total+'; critical regression guards: '+required.length);
