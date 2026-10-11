@@ -278,6 +278,7 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
         </div>
     </div>
 
+    <script src="questions-storage-scope-runtime.js"></script>
     <script>
         let currentScale = 1;
         
@@ -626,7 +627,9 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
 
         function saveQuestionDraft(showMessage) {
             try {
-                localStorage.setItem(QUESTION_DRAFT_KEY, document.getElementById('pages-container').innerHTML);
+                const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+                if(!scopedKey)throw new Error('Authenticated question storage is not available');
+                localStorage.setItem(scopedKey, document.getElementById('pages-container').innerHTML);
                 if (showMessage) alert('English question draft saved on this device ✓');
             } catch (error) {
                 if (showMessage) alert('The draft could not be saved. Added images may be too large.');
@@ -642,7 +645,8 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
 
         function restoreQuestionDraft() {
             try {
-                const saved = localStorage.getItem(QUESTION_DRAFT_KEY);
+                const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+                const saved = scopedKey?localStorage.getItem(scopedKey):null;
                 if (!saved) return false;
                 document.getElementById('pages-container').innerHTML = saved;
                 rebindAllDraggables();
@@ -673,7 +677,9 @@ C/ Illustrate with a diagram the parts of the skeletal system.</div>
 
         function resetQuestionDraft() {
             if (!confirm('Start a new form? The current English draft will be removed.')) return;
-            localStorage.removeItem(QUESTION_DRAFT_KEY);
+            const scopedKey=window.AbuQuestionScope?.scopedKey(QUESTION_DRAFT_KEY);
+            if(!scopedKey)return alert('Authenticated storage unavailable; the draft was not reset.');
+            try{localStorage.removeItem(scopedKey)}catch(e){return alert('Could not remove the draft.')}
             location.reload();
         }
 
