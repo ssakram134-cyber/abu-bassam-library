@@ -11,8 +11,9 @@ const DIGITS='٠١٢٣٤٥٦٧٨٩';
 const arNum=v=>String(v).replace(/\d/g,d=>DIGITS[Number(d)]);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>JSON.parse(JSON.stringify(v));
-const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||clone(f)}catch(e){return clone(f)}};
-const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+const questionKey=key=>window.AbuQuestionScope?.scopedKey(key)||null;
+const load=(k,f)=>{const key=questionKey(k);if(!key)return clone(f);try{return JSON.parse(localStorage.getItem(key)||'null')||clone(f)}catch(e){return clone(f)}};
+const save=(k,v)=>{const key=questionKey(k);if(!key)return false;try{localStorage.setItem(key,JSON.stringify(v));return true}catch(e){return false}};
 
 const DEFAULT_PROFILE={
   administration:'إدارة: .........................',school:'مدرسة القادسية الابتدائية',schoolType:'للبنين',teacher:'أكرم حاتم الغزالي',
@@ -136,7 +137,7 @@ function renderTemplates(){let spec=$('abuSubjectTemplates'),gen=$('abuGeneralTe
 function openTemplates(){renderSubjects();renderTemplates();$('abuQTemplateModal')?.classList.add('show')}
 function closeTemplates(){$('abuQTemplateModal')?.classList.remove('show')}
 function findTemplate(id,isCustom){return (isCustom?customTemplates:SYSTEM_TEMPLATES).find(t=>t.id===id)}
-function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{localStorage.setItem('abuLastQuestionTemplateV1',id)}catch(e){}}
+function applyTemplate(id,isCustom=false){let t=findTemplate(id,isCustom);if(!t)return;pushHistory(true);$('pages-container').innerHTML=t.html;lastSnapshot=currentHtml();afterDomRestore();closeTemplates();try{localStorage.setItem(questionKey('abuLastQuestionTemplateV1'),id)}catch(e){}}
 
 function openProfile(){closeTemplates();for(let [id,key] of [['qpfAdministration','administration'],['qpfSchool','school'],['qpfSchoolType','schoolType'],['qpfTeacher','teacher'],['qpfYear','year'],['qpfRole','role'],['qpfDay','day'],['qpfDate','date'],['qpfTitle','examTitle'],['qpfDuration','duration']])if($(id))$(id).value=profile[key]||'';$('abuQProfileModal')?.classList.add('show')}
 function closeProfile(){$('abuQProfileModal')?.classList.remove('show')}
