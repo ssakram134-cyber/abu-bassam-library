@@ -71,5 +71,8 @@ function init(){
  controls.appendChild(button)
 }
 window.AbuQuestionLegacyDraftRecovery=Object.freeze({importDraft});
+window.addEventListener('message',event=>{
+ if(event.source===window.parent&&event.data?.type==='abuBassamTabVisible')init()
+});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
