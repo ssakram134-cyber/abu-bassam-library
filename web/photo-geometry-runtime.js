@@ -1,7 +1,7 @@
 (()=>{
 'use strict';
 if(window.__ABU_PHOTO_GEOMETRY_V1__)return;window.__ABU_PHOTO_GEOMETRY_V1__=true;
-const $=id=>document.getElementById(id);let mode='crop',pts=null,drag=-1,drawToken=0;
+const $=id=>document.getElementById(id);let mode='crop',pts=null,drag=-1,drawToken=0,geoTarget=null,geoSourceAtOpen='',geometryBusy=false;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
 function item(){try{return selectedIndex>=0&&uploadedImages?.[selectedIndex]?uploadedImages[selectedIndex]:null}catch(_){return null}}
 function css(){if($('abuGeometryStyle'))return;let s=document.createElement('style');s.id='abuGeometryStyle';s.textContent=`
@@ -9,13 +9,33 @@ function css(){if($('abuGeometryStyle'))return;let s=document.createElement('sty
 `;document.head.appendChild(s)}
 function build(){css();let grid=document.querySelector('.panel .grid');if(grid&&!$('abuGeoLaunch')){let b=document.createElement('button');b.id='abuGeoLaunch';b.className='ctl abu-geo-launch';b.textContent='✂ قص حر / منظور';b.onclick=openGeo;let r=document.createElement('button');r.id='abuRulerLaunch';r.className='ctl abu-ruler-launch';r.textContent='📐 معاينة القياسات';r.onclick=openRuler;let extra=[...grid.children].find(x=>x.classList?.contains('extra'));grid.insertBefore(b,extra||null);grid.insertBefore(r,extra||null)}inject()}
 function inject(){if($('abuGeoModal'))return;document.body.insertAdjacentHTML('beforeend',`<div id="abuGeoModal" class="abu-geo-modal"><div class="abu-geo-card"><div class="abu-geo-head"><b>✂ القص المباشر وتصحيح المنظور</b><button onclick="AbuPhotoGeometry.close('abuGeoModal')">×</button></div><div class="abu-geo-modes"><button id="abuModeCrop" class="on" onclick="AbuPhotoGeometry.setMode('crop')">قص مستطيل حر</button><button id="abuModePerspective" onclick="AbuPhotoGeometry.setMode('perspective')">تصحيح منظور 4 زوايا</button></div><div id="abuGeoStage" class="abu-geo-stage"><canvas id="abuGeoCanvas"></canvas></div><div class="abu-geo-actions"><button onclick="AbuPhotoGeometry.reset()">إعادة الزوايا</button><button class="ok" onclick="AbuPhotoGeometry.apply()">اعتماد</button></div><div class="abu-geo-note">اسحب الدوائر الأربع مباشرة فوق الصورة. في القص المستطيل تبقى الحواف متوازية. في وضع المنظور تتحرك كل زاوية بحرية ثم تُسوّى المنطقة المحددة إلى مستطيل للطباعة.</div></div></div><div id="abuRulerModal" class="abu-geo-modal"><div class="abu-geo-card"><div class="abu-geo-head"><b>📐 معاينة الورقة والهوامش بالملم</b><button onclick="AbuPhotoGeometry.close('abuRulerModal')">×</button></div><div id="abuRulerCaption" class="abu-ruler-caption"></div><div id="abuRulerWrap" class="abu-ruler-wrap"><div class="abu-ruler-top"></div><div class="abu-ruler-left"></div><div id="abuRulerPaper" class="abu-ruler-paper"></div><div id="abuRulerSafe" class="abu-ruler-safe"></div></div><div class="abu-geo-note">الإطار الأحمر المتقطع يمثل الهامش المحدد. المقاس النهائي يأتي من إعداد الورقة الفعلي، وليس من حجم شاشة الهاتف.</div></div></div>`)}
-function openGeo(){let it=item();if(!it)return alert('أضف صورة وحددها أولاً');if(!it.__abuGeometryOriginal)it.__abuGeometryOriginal=it.src;mode='crop';$('abuModeCrop').classList.add('on');$('abuModePerspective').classList.remove('on');pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw();$('abuGeoModal').classList.add('show')}
-function close(id){$(id)?.classList.remove('show')}
+function openGeo(){if(geometryBusy)return;let it=item();if(!it)return alert('أضف صورة وحددها أولاً');if(!it.__abuGeometryOriginal)it.__abuGeometryOriginal=it.src;geoTarget=it;geoSourceAtOpen=it.src;mode='crop';$('abuModeCrop').classList.add('on');$('abuModePerspective').classList.remove('on');pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw();$('abuGeoModal').classList.add('show')}
+function close(id){$(id)?.classList.remove('show');if(id==='abuGeoModal'){geoTarget=null;geoSourceAtOpen='';drawToken++}}
 function setMode(m){mode=m==='perspective'?'perspective':'crop';$('abuModeCrop').classList.toggle('on',mode==='crop');$('abuModePerspective').classList.toggle('on',mode==='perspective');reset()}
 function reset(){pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw()}
-function draw(){let it=item(),cv=$('abuGeoCanvas'),stage=$('abuGeoStage');if(!it||!cv||!stage)return;let im=it.img,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,sc=Math.min(1,1000/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);let c=cv.getContext('2d');c.drawImage(im,0,0,cv.width,cv.height);stage.querySelectorAll('.abu-geo-handle,.abu-geo-line').forEach(n=>n.remove());const token=++drawToken;requestAnimationFrame(()=>{if(token!==drawToken||!stage.isConnected)return;let sr=stage.getBoundingClientRect(),cr=cv.getBoundingClientRect(),ox=cr.left-sr.left,oy=cr.top-sr.top;let local=pts.map(p=>({x:ox+p.x*cr.width,y:oy+p.y*cr.height}));local.forEach((p,i)=>{let h=document.createElement('span');h.className='abu-geo-handle';h.style.left=p.x+'px';h.style.top=p.y+'px';h.dataset.i=i;stage.appendChild(h);bind(h,i,cr,sr,ox,oy)});for(let i=0;i<4;i++){let a=local[i],b=local[(i+1)%4],line=document.createElement('span');line.className='abu-geo-line';let dx=b.x-a.x,dy=b.y-a.y;line.style.left=a.x+'px';line.style.top=a.y+'px';line.style.width=Math.hypot(dx,dy)+'px';line.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;stage.appendChild(line)}})}
-function bind(h,i,cr,sr,ox,oy){h.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(drag!==-1)return;drag=i;const pointerId=e.pointerId;let move=ev=>{if(ev.pointerId!==pointerId)return;let x=clamp((ev.clientX-cr.left)/cr.width,0,1),y=clamp((ev.clientY-cr.top)/cr.height,0,1);if(mode==='crop'){if(i===0){pts[0]={x,y};pts[1].y=y;pts[3].x=x}else if(i===1){pts[1]={x,y};pts[0].y=y;pts[2].x=x}else if(i===2){pts[2]={x,y};pts[1].x=x;pts[3].y=y}else{pts[3]={x,y};pts[0].x=x;pts[2].y=y}let l=Math.min(pts[0].x,pts[3].x),r=Math.max(pts[1].x,pts[2].x),t=Math.min(pts[0].y,pts[1].y),b=Math.max(pts[2].y,pts[3].y);pts=[{x:l,y:t},{x:r,y:t},{x:r,y:b},{x:l,y:b}]}else pts[i]={x,y};draw()};let up=ev=>{if(ev?.pointerId!=null&&ev.pointerId!==pointerId)return;drag=-1;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);window.removeEventListener('blur',up)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);window.addEventListener('blur',up)})}
-async function apply(){let it=item();if(!it)return;const originalSrc=it.src;try{if(typeof setBusy==='function')setBusy(true,mode==='crop'?'جاري القص...':'جاري تصحيح المنظور...');await new Promise(r=>setTimeout(r,30));let out=mode==='crop'?cropFull(it.img):warpFull(it.img),mime=String(it.src).startsWith('data:image/png')?'image/png':'image/jpeg',data=out.toDataURL(mime,mime==='image/png'?undefined:.98),im=new Image();await new Promise((res,rej)=>{im.onload=res;im.onerror=rej;im.src=data});if(item()!==it||it.src!==originalSrc)throw new Error('تغيّرت الصورة أثناء القص؛ ألغيت النتيجة المتأخرة حفاظًا على تعديلك');it.src=data;it.img=im;if(typeof refreshPeople==='function')refreshPeople();if(typeof renderPaper==='function')renderPaper();window.AbuPhotoAdvanced?.invalidatePosterPages?.();close('abuGeoModal')}catch(e){alert('تعذر تنفيذ العملية: '+(e.message||e))}finally{if(typeof setBusy==='function')setBusy(false)}}
+function draw(){let it=geoTarget,cv=$('abuGeoCanvas'),stage=$('abuGeoStage');if(!it||!cv||!stage)return;let im=it.img,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,sc=Math.min(1,1000/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);let c=cv.getContext('2d');c.drawImage(im,0,0,cv.width,cv.height);stage.querySelectorAll('.abu-geo-handle,.abu-geo-line').forEach(n=>n.remove());const token=++drawToken;requestAnimationFrame(()=>{if(token!==drawToken||!stage.isConnected)return;let sr=stage.getBoundingClientRect(),cr=cv.getBoundingClientRect(),ox=cr.left-sr.left,oy=cr.top-sr.top;let local=pts.map(p=>({x:ox+p.x*cr.width,y:oy+p.y*cr.height}));local.forEach((p,i)=>{let h=document.createElement('span');h.className='abu-geo-handle';h.style.left=p.x+'px';h.style.top=p.y+'px';h.dataset.i=i;stage.appendChild(h);bind(h,i,cr,sr,ox,oy)});for(let i=0;i<4;i++){let a=local[i],b=local[(i+1)%4],line=document.createElement('span');line.className='abu-geo-line';let dx=b.x-a.x,dy=b.y-a.y;line.style.left=a.x+'px';line.style.top=a.y+'px';line.style.width=Math.hypot(dx,dy)+'px';line.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;stage.appendChild(line)}})}
+function bind(h,i,cr,sr,ox,oy){h.addEventListener('pointerdown',e=>{if(geometryBusy)return;e.preventDefault();e.stopPropagation();if(drag!==-1)return;drag=i;const pointerId=e.pointerId;let move=ev=>{if(ev.pointerId!==pointerId)return;let x=clamp((ev.clientX-cr.left)/cr.width,0,1),y=clamp((ev.clientY-cr.top)/cr.height,0,1);if(mode==='crop'){if(i===0){pts[0]={x,y};pts[1].y=y;pts[3].x=x}else if(i===1){pts[1]={x,y};pts[0].y=y;pts[2].x=x}else if(i===2){pts[2]={x,y};pts[1].x=x;pts[3].y=y}else{pts[3]={x,y};pts[0].x=x;pts[2].y=y}let l=Math.min(pts[0].x,pts[3].x),r=Math.max(pts[1].x,pts[2].x),t=Math.min(pts[0].y,pts[1].y),b=Math.max(pts[2].y,pts[3].y);pts=[{x:l,y:t},{x:r,y:t},{x:r,y:b},{x:l,y:b}]}else pts[i]={x,y};draw()};let up=ev=>{if(ev?.pointerId!=null&&ev.pointerId!==pointerId)return;drag=-1;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);window.removeEventListener('blur',up)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);window.addEventListener('blur',up)})}
+async function apply(){
+ if(geometryBusy)return;
+ const it=geoTarget,originalSrc=geoSourceAtOpen;
+ if(!it||!uploadedImages.includes(it)||it.src!==originalSrc||item()!==it)return alert('تغيّرت الصورة منذ فتح المحرر؛ أعد فتح القص حتى لا تُعدل صورة أخرى.');
+ geometryBusy=true;
+ try{
+  if(typeof setBusy==='function')setBusy(true,mode==='crop'?'جاري القص...':'جاري تصحيح المنظور...');
+  await new Promise(r=>setTimeout(r,30));
+  if(geoTarget!==it||it.src!==originalSrc||item()!==it||!uploadedImages.includes(it))throw new Error('تغيّرت الصورة أثناء المعالجة؛ تم إلغاء النتيجة القديمة.');
+  const out=mode==='crop'?cropFull(it.img):await warpFull(it.img);
+  const mime=String(originalSrc).startsWith('data:image/png')?'image/png':'image/jpeg';
+  const data=out.toDataURL(mime,mime==='image/png'?undefined:.98),im=new Image();
+  await new Promise((res,rej)=>{im.onload=res;im.onerror=rej;im.src=data});
+  if(geoTarget!==it||it.src!==originalSrc||item()!==it||!uploadedImages.includes(it))throw new Error('تغيّرت الصورة قبل اعتماد القص؛ لم يتم استبدالها.');
+  it.src=data;it.img=im;geoSourceAtOpen=data;
+  if(typeof refreshPeople==='function')refreshPeople();
+  if(typeof renderPaper==='function')renderPaper();
+  window.AbuPhotoAdvanced?.invalidatePosterPages?.();close('abuGeoModal')
+ }catch(e){alert('تعذر تنفيذ العملية: '+(e.message||e))}
+ finally{geometryBusy=false;if(typeof setBusy==='function')setBusy(false)}
+}
 function cropFull(im){let w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,l=pts[0].x,t=pts[0].y,r=pts[2].x,b=pts[2].y,cv=document.createElement('canvas');let ow=Math.max(1,Math.round((r-l)*w)),oh=Math.max(1,Math.round((b-t)*h)),scale=Math.min(1,Math.sqrt(12_000_000/(ow*oh)),5200/Math.max(ow,oh));cv.width=Math.max(1,Math.round(ow*scale));cv.height=Math.max(1,Math.round(oh*scale));const ctx=cv.getContext('2d');if(!ctx)throw new Error('محرك القص غير متاح');ctx.drawImage(im,l*w,t*h,(r-l)*w,(b-t)*h,0,0,cv.width,cv.height);return cv}
 function dist(a,b,w,h){return Math.hypot((a.x-b.x)*w,(a.y-b.y)*h)}
 function projectiveCoefficients(corners){
@@ -37,7 +57,7 @@ function projectiveCoefficients(corners){
  if([1,1+g,1+h,1+g+h].some(z=>!Number.isFinite(z)||z<=1e-8))throw new Error('المنظور شديد التشوه؛ قرّب الزوايا من حواف الورقة.');
  return {a,b,c,d,e,f,g,h}
 }
-function warpFull(im){
+async function warpFull(im){
  const originalW=im.naturalWidth||im.width,originalH=im.naturalHeight||im.height;
  if(!originalW||!originalH)throw new Error('أبعاد الصورة غير صالحة');
  const coeff=projectiveCoefficients(pts);
@@ -65,6 +85,7 @@ function warpFull(im){
    const si=(iy*sw+ix)*4,di=(y*ow+x)*4;
    dst[di]=pixels[si];dst[di+1]=pixels[si+1];dst[di+2]=pixels[si+2];dst[di+3]=pixels[si+3]
   }
+  if((y&63)===63)await new Promise(resolve=>requestAnimationFrame(resolve));
  }
  outCtx.putImageData(img,0,0);return output
 }
