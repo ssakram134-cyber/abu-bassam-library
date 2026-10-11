@@ -6,6 +6,7 @@
   var MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   var ar = document.documentElement.lang !== 'en';
   var saveBusy = false;
+  var EXPECTED_KEY = 'abuQuestionExpectedTotalV1_' + (ar ? 'ar' : 'en');
   var zipPromise = null;
   var docIndex = 0;
   var $ = function (id) { return document.getElementById(id); };
@@ -49,6 +50,21 @@
       if (typeof window.scheduleQuestionDraft === 'function') window.scheduleQuestionDraft();
     });
     box.appendChild(input);
+    var level = document.createElement('select');
+    level.setAttribute('aria-label', ar ? 'صعوبة السؤال' : 'Question difficulty');
+    var values = ['', 'easy', 'medium', 'hard'];
+    var labels = ar ? ['الصعوبة', 'سهل', 'متوسط', 'صعب'] : ['Difficulty', 'Easy', 'Medium', 'Hard'];
+    values.forEach(function (v, i) {
+      var option = document.createElement('option');
+      option.value = v; option.textContent = labels[i]; level.appendChild(option);
+    });
+    level.value = q.getAttribute('data-abu-difficulty') || '';
+    level.onchange = function () {
+      if (level.value) q.setAttribute('data-abu-difficulty', level.value);
+      else q.removeAttribute('data-abu-difficulty');
+      if (typeof window.scheduleQuestionDraft === 'function') window.scheduleQuestionDraft();
+    };
+    box.appendChild(level);
     q.appendChild(box);
   }
   function ensureGrades() { questionNodes().forEach(addGrade); }
@@ -61,6 +77,7 @@
         body: textOf(q.querySelector('.text-area')),
         answer: textOf(q.querySelector('.abu-answer-box [contenteditable]')),
         grade: gradeOf(q),
+        difficulty: q.getAttribute('data-abu-difficulty') || '',
         images: Array.from(q.querySelectorAll('.text-area img, .draggable-item img')).map(function (img) {
           return String(img.getAttribute('src') || '');
         })
@@ -87,6 +104,27 @@
       overflow: document.querySelectorAll('.abu-question-overflow').length
     };
   }
+  function expectedGrade() {
+    try {
+      var value = localStorage.getItem(EXPECTED_KEY);
+      if (value === null || value === '') return null;
+      var n = Number(value);
+      return Number.isFinite(n) && n >= 0 && n <= 10000 ? n : null;
+    } catch (_) { return null; }
+  }
+  function setExpectedGrade() {
+    var old = expectedGrade();
+    var value = prompt(ar ? 'الدرجة النهائية المطلوبة (اتركه فارغاً لإلغاء المقارنة)' : 'Expected final marks (clear to disable)',
+      old === null ? '100' : String(old));
+    if (value === null) return;
+    var raw = value.trim(), num = Number(raw);
+    if (raw && (!Number.isFinite(num) || num < 0 || num > 10000)) return alert(ar ? 'الدرجة النهائية غير صالحة' : 'Invalid final marks');
+    try {
+      if (raw) localStorage.setItem(EXPECTED_KEY, String(num));
+      else localStorage.removeItem(EXPECTED_KEY);
+    } catch (error) { return alert(ar ? 'تعذر حفظ الدرجة النهائية' : 'Could not save final marks'); }
+    report();
+  }
   function report() {
     ensureGrades();
     var r = collect(true), lines = [
@@ -98,6 +136,15 @@
       (ar ? 'إجابات غير مدخلة: ' : 'Missing model answers: ') + (r.unanswered.join('، ') || (ar ? 'لا يوجد' : 'none')),
       (ar ? 'صفحات تتجاوز حدود الورقة: ' : 'Overflow pages: ') + r.overflow
     ];
+    var expected = expectedGrade();
+    if (expected !== null) {
+      lines.push((ar ? 'الدرجة النهائية المطلوبة: ' : 'Expected final marks: ') + expected);
+      if (r.graded !== r.questions.length)
+        lines.push(ar ? '⚠ درجات بعض الأسئلة غير محددة؛ المجموع غير مكتمل.' : '⚠ Some marks are unset.');
+      else if (Math.abs(r.total - expected) > 0.001)
+        lines.push((ar ? '⚠ اختلاف المجموع بمقدار ' : '⚠ Mark difference: ') + (r.total - expected));
+      else lines.push(ar ? '✓ مجموع الدرجات مطابق.' : '✓ Marks match.');
+    }
     alert(lines.join('\n'));
     return r;
   }
@@ -147,6 +194,7 @@
       body += paragraph(q.title || ((ar ? 'السؤال ' : 'Question ') + q.number), true, ar);
       if (q.body) body += paragraph(q.body, false, ar);
       if (q.grade !== null) body += paragraph((ar ? 'الدرجة: ' : 'Marks: ') + q.grade, false, ar);
+      if (q.difficulty) body += paragraph((ar ? 'مستوى الصعوبة: ' : 'Difficulty: ') + ({easy:ar?'سهل':'Easy',medium:ar?'متوسط':'Medium',hard:ar?'صعب':'Hard'}[q.difficulty]||q.difficulty), false, ar);
       for (var ii = 0; ii < q.images.length; ii++) {
         var match = /^data:image\/(png|jpeg);base64,([a-z0-9+/=]+)$/i.exec(q.images[ii]);
         if (!match || match[2].length > 8000000) continue;
@@ -183,6 +231,7 @@
     if (!r.questions.length) return alert(ar ? 'أضف سؤالاً أولاً' : 'Add a question first');
     if (r.missing.length && !confirm((ar ? 'يوجد سؤال ناقص النص، هل تريد المتابعة؟ ' : 'Some questions lack text. Continue? ') + r.missing.join(', '))) return;
     if (r.skippedImages && !confirm(ar ? 'بعض الصور غير مدعومة في تصدير Word، هل تريد متابعة التصدير دونها؟' : 'Some images cannot be included in Word. Export without them?')) return;
+    var expected = expectedGrade();if(expected!==null&&(r.graded!==r.questions.length||Math.abs(r.total-expected)>0.001)&&!confirm(ar?'تنبيه: مجموع الدرجات لا يطابق الدرجة النهائية أو توجد درجات غير محددة. هل تريد المتابعة؟':'Marks are missing or differ from final marks. Continue?'))return;
     saveBusy = true;
     var status = $('abuQuestionWordStatus');
     if (status) status.textContent = ar ? 'جاري تجهيز Word...' : 'Preparing Word...';
@@ -242,7 +291,7 @@
     if (!$('abuQuestionWordStyle')) {
       var style = document.createElement('style');
       style.id = 'abuQuestionWordStyle';
-      style.textContent = '.abu-question-grade{display:flex;align-items:center;gap:4px;padding:3px 7px;font-size:12px;color:#334155}.abu-question-grade input{width:85px;max-width:100%;min-height:32px;border:1px solid #94a3b8;border-radius:6px;font-size:13px}.abu-word-btn{background:#1d6f42!important;color:white!important}.abu-word-audit{background:#475569!important;color:white!important}#abuQuestionWordStatus{font-size:10px;margin:4px;color:#064e3b}@media print{.abu-question-grade{display:none!important}}';
+      style.textContent = '.abu-question-grade{display:flex;align-items:center;gap:4px;padding:3px 7px;font-size:12px;color:#334155}.abu-question-grade input{width:85px;max-width:100%;min-height:32px;border:1px solid #94a3b8;border-radius:6px;font-size:13px}.abu-question-grade select{min-height:32px;border:1px solid #94a3b8;border-radius:6px;background:white;font-size:12px}.abu-word-btn{background:#1d6f42!important;color:white!important}.abu-word-audit{background:#475569!important;color:white!important}#abuQuestionWordStatus{font-size:10px;margin:4px;color:#064e3b}@media print{.abu-question-grade{display:none!important}}';
       document.head.appendChild(style);
     }
     if (!$('abuQuestionWordStudent')) {
@@ -258,6 +307,7 @@
       v.type = 'button'; v.id = 'abuQuestionWordAudit'; v.className = 'btn abu-word-audit';
       v.textContent = ar ? '🔎 تدقيق / درجات' : '🔎 Audit / Marks';
       v.onclick = report; bar.appendChild(v);
+      var target = document.createElement('button');target.type='button';target.id='abuQuestionExpectedGrade';target.className='btn abu-word-audit';target.textContent=ar?'🎯 الدرجة النهائية':'🎯 Target Marks';target.onclick=setExpectedGrade;bar.appendChild(target);
       var abc = document.createElement('button');abc.type='button';abc.id='abuQuestionAbcExport';abc.className='btn abu-word-btn';abc.textContent=ar?'📚 نماذج أ ب ج':'📚 Models A B C';abc.onclick=exportVariants;bar.appendChild(abc);
       var info = document.createElement('span');
       info.id = 'abuQuestionWordStatus'; info.setAttribute('aria-live', 'polite'); bar.appendChild(info);
