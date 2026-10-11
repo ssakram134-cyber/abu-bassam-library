@@ -21,7 +21,7 @@ const api=new Function('Buffer','gunzipSync','stat','readFile','fetch','setTimeo
  async (url,options)=>{
    if(bodyDelay){
      const resolve=bodyDelay;bodyDelay=null;
-     return {ok:true,headers:{get:()=>null},body:{getReader(){return {read(){downloadReads++;return new Promise(done=>{responses.push(()=>done({done:false,value:validJs}));responses.push(()=>done({done:true}))})},releaseLock(){}}}}};
+     return {ok:true,headers:{get:()=>null},body:{getReader(){let sent=false;return {read(){downloadReads++;if(sent)return Promise.resolve({done:true});sent=true;return new Promise(done=>responses.push(()=>done({done:false,value:validJs})))},releaseLock(){}}}}};
    }
    const buf=url.includes('bad')?Buffer.from('<html>'+('ERROR '.repeat(300))+'</html>'):validJs;
    return {ok:true,headers:{get:()=>String(buf.length)},body:{getReader(){let read=false;return {read:async()=>{if(read)return {done:true};read=true;return {done:false,value:buf}},releaseLock(){}}}}};
