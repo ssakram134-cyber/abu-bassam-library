@@ -79,7 +79,7 @@ async function verifyCustomMigration(){
  const factory=new Function('all','put','legacyRows','localStorage','console','Date','confirm','window','inject',
   'const LEGACY="abuQuestionCustomTemplatesV1";let cache=[];const scope=()=>window.AbuQuestionScope.identity();const scopedId=id=>scope()+"|"+id;const unattributedRows=async()=>[];'
   +fragment+';return {migrate,importLegacy,getCache:()=>cache}');
- const win={AbuQuestionScope:{identity:()=> 'user-A:device-1'},parent:{AbuBassamSecurity:{role:()=> 'owner'}}};
+ const win={AbuQuestionScope:{identity:()=> 'user-A:device-1',scopedKey:k=>k+':user-A:device-1'},parent:{AbuBassamSecurity:{role:()=> 'owner'}}};
  const api=factory(async()=>rows.slice(),async row=>{inserted.push(row.id);if(fail&&row.id==='user-A:device-1|legacy-b')throw Error('QuotaExceeded');rows.push(row)},
   ()=>[{id:'a',html:'one'},{id:'b',html:'two'}],{removeItem:key=>store.delete(key)},{warn(){}},Date,()=>confirmed,win,async()=>{});
  await api.migrate();
