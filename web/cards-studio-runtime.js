@@ -181,6 +181,7 @@ window.AbuBassamNativeContactSelected=function(result){
  const pending=pendingContact;if(!pending||String(result?.requestId||'')!==pending.requestId||result?.target!==pending.field)return;
  pendingContact=null;
  if(pending.identity!==currentContactIdentity()||pending.type!==state.type||!canCard('cardsEditText'))return;
+ if(result.cancelled)return;
  if(result.error)return alert(String(result.error));
  const phone=normalizeContactPhone(result.phone);
  if(!phone)return alert('جهة الاتصال المختارة لا تحتوي على رقم هاتف.');
