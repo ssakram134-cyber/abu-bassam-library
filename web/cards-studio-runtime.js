@@ -245,7 +245,7 @@ function qrSvg(text){try{if(typeof qrcode!=='function')return '<div class="cs-ph
 
 const CODE128_PATTERNS=['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
 function code128Svg(text){
-  let value=String(text||'').trim();
+  let value=String(text??'');
   if(!value)return '<div class="cs-photo-empty">أدخل أرقامًا أو نصًا إنجليزيًا</div>';
   if(value.length>48)return '<div class="cs-photo-empty">Code 128 طويل؛ اختر QR</div>';
   if(!/^[\x20-\x7e]+$/.test(value))return '<div class="cs-photo-empty">Code 128 لا يدعم العربية؛ اختر QR</div>';
@@ -254,10 +254,26 @@ function code128Svg(text){
   let codes=[104,...values,checksum%103,106],x=10,bars='';
   codes.forEach(code=>{let pattern=CODE128_PATTERNS[code],bar=true;for(let digit of pattern){let width=Number(digit);if(bar)bars+=`<rect x="${x}" y="2" width="${width}" height="52" fill="#000"/>`;x+=width;bar=!bar}});
   let total=x+10;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} 70" preserveAspectRatio="none" role="img" aria-label="Code 128"><rect width="${total}" height="70" fill="#fff"/>${bars}<text x="${total/2}" y="66" text-anchor="middle" font-family="monospace" font-size="8" fill="#000">${esc(value)}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} 70" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%" role="img" aria-label="Code 128"><rect width="${total}" height="70" fill="#fff"/>${bars}<text x="${total/2}" y="66" text-anchor="middle" font-family="monospace" font-size="8" xml:space="preserve" fill="#000">${esc(value)}</text></svg>`;
 }
 function symbolSvg(model){return model.type==='qr'&&model.data.symbology==='code128'?code128Svg(payloadFor(model)):qrSvg(payloadFor(model))}
-function validateSymbols(jobs){if(state.sides==='front')return;for(const model of jobs){if(!symbolSvg(model).startsWith('<svg'))throw new Error('باركود غير قابل للقراءة ضمن هذا التصميم. قلل المعلومات أو اختر QR بدل Code 128 قبل الطباعة أو الحفظ.')}}
+function qrModuleSizeMm(model,svg){
+ const match=svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+ if(!match)return 0;
+ const modules=Number(match[1])/3;
+ if(!Number.isFinite(modules)||modules<29)return 0;
+ const widthPercent={personal:.26,child:.27,login:.31,wifi:.30,qr:.38}[model.type]||.30;
+ const physicalWidth=(Number(state.width)||85.6)*widthPercent-2*.7-2*(Number(state.width)||85.6)*.01;
+ return Math.max(0,physicalWidth)/modules
+}
+function validateSymbols(jobs){if(state.sides==='front')return;for(const model of jobs){
+ const svg=symbolSvg(model);
+ if(!svg.startsWith('<svg'))throw new Error('باركود غير قابل للقراءة ضمن هذا التصميم. قلل المعلومات أو اختر QR بدل Code 128 قبل الطباعة أو الحفظ.');
+ if(!(model.type==='qr'&&model.data.symbology==='code128')){
+  const mm=qrModuleSizeMm(model,svg);
+  if(mm>0&&mm<.20)throw new Error('رمز QR كثيف جدًا ضمن مقاس الكارت: '+mm.toFixed(2)+' ملم للوحدة. قلل النص أو كبّر مقاس الطباعة؛ لا يمكن ضمان قراءته بعد الطباعة.');
+ }
+}}
 
 function modelNow(){let type=state.type==='reader'?'qr':state.type;return {type,data:clone(state.forms[type]),brand:clone(state.brand),photo:state.photo,photoTransform:clone(state.photoTransform),textStyles:clone(state.textStyles[type]||{}),orientation:state.orientation,width:Number(state.width),height:Number(state.height),watermark:state.watermark,watermarkText:state.watermarkText,watermarkOpacity:state.watermarkOpacity,fromScannedQr:type==='qr'&&state.qrFromScan}}
 function cardHtml(model,side){let d=model.data,portrait=model.orientation==='portrait'?' portrait':'',wm=watermark(model),safe='<div class="cs-card-safe"></div>',geo='<div class="cs-geo"></div>';
