@@ -57,6 +57,7 @@ const ANDROID_BRIDGE = `
     openAppSettings: function () { send('openAppSettings'); },
     showPermissionGuide: function () { send('showPermissionGuide'); },
     pickContact: function (target, requestId) { send('pickContact', { target: target, requestId: requestId }); },
+    cancelContactChoice: function () { send('cancelContactChoice'); },
     getDeviceInfo: function () { send('getDeviceInfo'); },
     cleanCache: function () { send('cleanCache'); },
     security: function (action, requestId, payload) { send('security', { action: action, requestId: requestId, payload: payload || {} }); },
@@ -128,6 +129,7 @@ function App() {
   const [contactAccess, setContactAccess] = useState('unknown');
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [contactChoice, setContactChoice] = useState(null);
+  const contactPickerEpochRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -193,15 +195,18 @@ function App() {
     const field = String(target || '');
     const token = String(requestId || '');
     if (!['phone', 'guardianPhone', 'driverPhone'].includes(field) || !/^[1-9][0-9]{0,9}$/.test(token)) return;
+    const pickerEpoch = ++contactPickerEpochRef.current;
     try {
       let permission = await Contacts.getPermissionsAsync();
       if (!permission?.granted && permission?.canAskAgain === false) {
         throw new Error('إذن جهات الاتصال مرفوض. افتح إعدادات Android لتفعيله عند الحاجة.');
       }
       if (!permission?.granted) permission = await Contacts.requestPermissionsAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
       setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask');
       if (!permission?.granted) throw new Error('لم يُمنح إذن قراءة جهات الاتصال');
       const selected = await Contacts.presentContactPickerAsync();
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
       if (!selected) { inject('AbuBassamNativeContactSelected', { target: field, requestId: token, cancelled: true }); return; }
       const numbers = (selected.phoneNumbers || [])
         .filter(item => typeof item?.number === 'string' && item.number.trim())
@@ -213,6 +218,7 @@ function App() {
       }
       setContactChoice({ target: field, requestId: token, name: String(selected.name || '').slice(0,120), numbers });
     } catch (error) {
+      if (pickerEpoch !== contactPickerEpochRef.current) return;
       inject('AbuBassamNativeContactSelected', { target: field, requestId: token, error: String(error?.message || 'تعذر اختيار جهة الاتصال') });
     }
   }, [inject]);
@@ -492,6 +498,7 @@ function App() {
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'showPermissionGuide') { Contacts.getPermissionsAsync().then(p => setContactAccess(p?.granted ? 'granted' : p?.canAskAgain === false ? 'blocked' : 'ask')).catch(() => {}); setPermissionIntroVisible(true); return; }
     if (message.type === 'pickContact') return pickContact(message);
+    if (message.type === 'cancelContactChoice') { contactPickerEpochRef.current += 1; setContactChoice(null); return; }
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
     if (message.type === 'saveToGallery') return saveToGallery(message);
