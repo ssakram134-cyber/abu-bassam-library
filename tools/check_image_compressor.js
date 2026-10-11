@@ -12,10 +12,11 @@ scripts.forEach((src,i)=>{try{new vm.Script(src,{filename:`image-compressor.html
 for(const m of [
   'MAX_FILES=20','MAX_TOTAL_BYTES=80*1024*1024','SAFE_MAX_PIXELS=24_000_000',
   "addEventListener('drop'",'moveItem','removeItem','beforeImg','afterImg','maxDimension',
-  'cancelRequested','if(cancelRequested)break','catch(e){results.push','image/png','image/webp',
+  'cancelRequested','if(cancelRequested)break','results.push({id:item.id','image/png','image/webp',
   'namedDataUrl','encodeURIComponent(name)','_compressed_','ممتازة للطباعة','ضعيفة للطباعة الكبيرة',
   'blob.size>=file.size','imageSmoothingQuality','overflow-y:auto','currentBytes()+incomingBytes',
-  'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
+  'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile',
+  'const batch=selected.slice()','lockBatchControls(true)','lockBatchControls(false)','if(processing)return;const j=i+d','if(processing)return alert','if(cancelRequested)break'
 ])need(html,m,'image compressor');
 const index=read(path.join(root,'index.js'));
 for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(index,m,'canonical Android image saving');
