@@ -115,7 +115,7 @@ function nativeDeviceInfo(cameraPermission, contactAccess) {
 function App() {
   const webRef = useRef(null);
   const cameraRef = useRef(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission, refreshCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraBusy, setCameraBusy] = useState(false);
@@ -148,14 +148,19 @@ function App() {
     if (permissionBusy) return;
     setPermissionBusy(true);
     try {
-      const granted = await requestCameraPermission();
+      const status = await refreshCameraPermission();
+      if (!status?.granted && status?.canAskAgain === false) {
+        await Linking.openSettings();
+        return;
+      }
+      const granted = status?.granted ? status : await requestCameraPermission();
       if (!granted?.granted && granted?.canAskAgain === false) {
         Alert.alert('إذن الكاميرا', 'تم منع طلب الإذن. يمكنك تفعيله لاحقًا من إعدادات تطبيق Android.');
       }
     } catch (_) {
       Alert.alert('إذن الكاميرا', 'تعذر طلب الكاميرا. افتح إعدادات التطبيق للسماح بها.');
     } finally { setPermissionBusy(false); }
-  }, [permissionBusy, requestCameraPermission]);
+  }, [permissionBusy, refreshCameraPermission, requestCameraPermission]);
 
   const allowContactsFromIntro = useCallback(async () => {
     if (permissionBusy) return;
@@ -180,11 +185,14 @@ function App() {
     if (!['phone', 'guardianPhone', 'driverPhone'].includes(field) || !/^[1-9][0-9]{0,9}$/.test(token)) return;
     try {
       let permission = await Contacts.getPermissionsAsync();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        throw new Error('إذن جهات الاتصال مرفوض. افتح إعدادات Android لتفعيله عند الحاجة.');
+      }
       if (!permission?.granted) permission = await Contacts.requestPermissionsAsync();
       setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask');
       if (!permission?.granted) throw new Error('لم يُمنح إذن قراءة جهات الاتصال');
       const selected = await Contacts.presentContactPickerAsync();
-      if (!selected) return;
+      if (!selected) { inject('AbuBassamNativeContactSelected', { target: field, requestId: token, cancelled: true }); return; }
       const number = selected.phoneNumbers?.find(item => typeof item?.number === 'string' && item.number.trim())?.number || '';
       if (!number) throw new Error('جهة الاتصال المختارة لا تحتوي على رقم هاتف');
       inject('AbuBassamNativeContactSelected', { target: field, requestId: token, name: String(selected.name || ''), phone: String(number).slice(0,40) });
@@ -212,30 +220,41 @@ function App() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (cameraMode) { closeCamera(); return true; }
+      if (permissionIntroVisible) { finishPermissionIntro(); return true; }
       if (!webReady) return false;
       inject('AbuBassamNativeBackPress', { source: 'hardware', at: Date.now() });
       return true;
     });
     return () => subscription.remove();
-  }, [cameraMode, closeCamera, inject, webReady]);
+  }, [cameraMode, closeCamera, permissionIntroVisible, finishPermissionIntro, inject, webReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshCameraPermission().catch(() => {});
+        Contacts.getPermissionsAsync().then(permission =>
+          setContactAccess(permission?.granted ? 'granted' : permission?.canAskAgain === false ? 'blocked' : 'ask')
+        ).catch(() => {});
+      }
       if (webReady) inject('AbuBassamNativeAppState', { state, at: Date.now() });
     });
     return () => subscription.remove();
-  }, [inject, webReady]);
+  }, [inject, refreshCameraPermission, webReady]);
 
   const openCamera = useCallback(async (mode, frameKind = 'paper') => {
     try {
-      let permission = cameraPermission;
+      let permission = await refreshCameraPermission();
+      if (!permission?.granted && permission?.canAskAgain === false) {
+        cameraError('تم منع إذن الكاميرا. افتح إعدادات Android ← التطبيقات ← مكتبة أبو بسام ← الكاميرا.');
+        return;
+      }
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
     } catch (_) { cameraError('تعذر طلب إذن الكاميرا. افتح معلومات التطبيق وفعّل إذن الكاميرا.'); }
-  }, [cameraError, cameraPermission, requestCameraPermission]);
+  }, [cameraError, refreshCameraPermission, requestCameraPermission]);
 
   const captureDocument = useCallback(async () => {
     if (!cameraReady || cameraBusy || !cameraRef.current) return;
@@ -499,7 +518,7 @@ function App() {
             <View style={styles.permissionRow}>
               <Text style={styles.permissionLabel}>📷 الكاميرا</Text>
               <Text style={styles.permissionDescription}>لتصوير المستمسكات والهوية وقراءة الباركود. {cameraPermission?.granted ? 'مسموح ✓' : 'تُطلب أيضًا عند فتح الكاميرا.'}</Text>
-              <TouchableOpacity disabled={permissionBusy || cameraPermission?.granted} style={styles.permissionButton} onPress={allowCameraFromIntro}><Text style={styles.permissionButtonText}>{cameraPermission?.granted ? 'مسموح ✓' : 'السماح للكاميرا'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={permissionBusy || cameraPermission?.granted} style={styles.permissionButton} onPress={allowCameraFromIntro}><Text style={styles.permissionButtonText}>{cameraPermission?.granted ? 'مسموح ✓' : cameraPermission?.canAskAgain === false ? 'فتح إعدادات الكاميرا' : 'السماح للكاميرا'}</Text></TouchableOpacity>
             </View>
             <View style={styles.permissionRow}>
               <Text style={styles.permissionLabel}>👥 جهات الاتصال — اختياري</Text>
@@ -516,7 +535,7 @@ function App() {
               <TouchableOpacity style={styles.permissionSecondaryButton} onPress={() => Linking.openSettings().catch(() => Alert.alert('إعدادات Android', 'افتح معلومات التطبيق ← البطارية.'))}><Text style={styles.permissionSecondaryText}>فتح إعدادات التطبيق والبطارية</Text></TouchableOpacity>
             </View>
             <Text style={styles.permissionDescription}>إشعارات التطبيق الداخلية متاحة دون طلب إذن إشعارات Android؛ وسيُطلب الإذن عند تفعيل إشعارات النظام مستقبلًا إذا كانت مستخدمة. الإنترنت لا يُظهر نافذة سماح.</Text>
-            <TouchableOpacity style={styles.permissionContinue} onPress={finishPermissionIntro}><Text style={styles.permissionContinueText}>متابعة إلى تطبيق المكتبة</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.permissionContinue} disabled={permissionBusy} onPress={finishPermissionIntro}><Text style={styles.permissionContinueText}>متابعة إلى تطبيق المكتبة</Text></TouchableOpacity>
           </ScrollView>
         </View>
       )}
