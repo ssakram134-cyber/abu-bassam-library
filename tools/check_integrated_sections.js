@@ -41,13 +41,13 @@ const tests=[
  'check_android_permission_onboarding.js','check_integrated_sections.js'
 ];
 for(const name of tests)assert.ok(commands.includes('node tools/'+name),'Combined source must retain test '+name);
-const listeners={},requests=[],canceled=[];
+const listeners={},requests=[],canceled=[],selectedContacts=[];
 const document={getElementById:()=>null,addEventListener:(name,listener)=>{(listeners[name] ||= []).push(listener)}};
 const storage={getItem(){return null},setItem(){},removeItem(){}};
 const win={
  addEventListener(){},AbuBassamSecurity:{role:()=> 'owner'},
  AbuBassamCloud:{session:()=>({user:{id:'owner'}})},
- Android:{cancelContactChoice:()=>canceled.push(1)},
+ Android:{cancelContactChoice:()=>canceled.push(1),pickContact:(field,requestId)=>selectedContacts.push({field,requestId})},
  ReactNativeWebView:{postMessage:raw=>requests.push(JSON.parse(raw))}
 };
 new Function('window','document','localStorage','alert',national)(win,document,storage,()=>{});
@@ -94,9 +94,19 @@ mergedHandler({mode:'cardPhoto',requestId:secondPhoto.requestId,dataUrl:'duplica
 assert.equal(JSON.stringify(win.__photoCallbacks),JSON.stringify(['new-card-photo']),'Only matching camera photo should be imported once');
 win.CardsStudio.scanBarcode();
 const thirdScan=requests.filter(x=>x.mode==='barcode'&&x.type==='openCamera').at(-1);
+// Open a real pending contact request before logout: no-op logout should not call native cancellation.
+win.__integratedCardsState.type='child';
+win.CardsStudio.pickContact('guardianPhone');
+assert.equal(selectedContacts.length,1,'Guarded native contact picker must open for child guardian');
+const pendingContact=selectedContacts[0];
+assert.ok(pendingContact.requestId,'Contact picker must have request ID');
 for(const cb of listeners['abu-bassam-auth-changed']||[])cb();
 mergedHandler({mode:'barcode',requestId:thirdScan.requestId,data:'AFTER-LOGOUT'});
 assert.equal(win.__integratedCardsState.forms.reader.result,'','Logout must clear and reject scans');
-assert.equal(canceled.length,1,'Logout must cancel contacts');
+assert.equal(canceled.length,1,'Logout must cancel the active native contact request');
+win.AbuBassamNativeContactSelected({target:pendingContact.field,requestId:pendingContact.requestId,phone:'07811111111'});
+assert.equal(win.__integratedCardsState.forms.child.guardianPhone||'','','Late contact result must not overwrite user data');
+for(const cb of listeners['abu-bassam-auth-changed']||[])cb();
+assert.equal(canceled.length,1,'No outstanding contact request must not trigger unnecessary cancellation');
 assert.ok(requests.some(x=>x.type==='cancelCamera'),'Logout must cancel native camera');
 console.log('Integrated national-camera, cards reader, contact cancellation and all required test routes passed.');
