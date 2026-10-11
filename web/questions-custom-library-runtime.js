@@ -62,6 +62,16 @@ async function clearAll(){
  }finally{db.close?.()}
 }
 function legacyRows(){try{const value=JSON.parse(localStorage.getItem(LEGACY)||'[]');return Array.isArray(value)?value:[]}catch(_){return[]}}
+async function unattributedRows(){
+ const db=await openDb();
+ try{
+  return await new Promise((resolve,reject)=>{
+   const req=db.transaction(STORE,'readonly').objectStore(STORE).getAll();
+   req.onsuccess=()=>resolve((req.result||[]).filter(row=>row&&!row.scope));
+   req.onerror=()=>reject(req.error)
+  })
+ }finally{db.close?.()}
+}
 async function migrate(){
  // Unattributed records cannot safely be assigned to whichever user logs in next.
  // Keep all legacy records intact until an administrator explicitly claims them.
@@ -71,7 +81,7 @@ async function importLegacy(){
  const owner=scope();
  if(!owner||window.parent?.AbuBassamSecurity?.role?.()!=='owner')throw Error('OWNER_ACCOUNT_REQUIRED');
  if(!confirm('استيراد النماذج القديمة غير المنسوبة إلى هذا الحساب؟ استخدم هذا فقط إذا كنت المسؤول عن بياناتها. لن تُحذف النسخة القديمة.'))return false;
- const legacy=legacyRows(),already=new Set((await all()).map(row=>row.id));
+ const legacy=[...legacyRows(),...await unattributedRows()],already=new Set((await all()).map(row=>row.id));
  for(const old of legacy){
   if(!old?.id)continue;
   const id=scopedId('legacy-'+String(old.id));
@@ -94,7 +104,7 @@ async function openManage(){
  try{cache=await all()}catch(e){alert('تعذر قراءة نماذج هذا الحساب.');return}
  $('abuQManageModal')?.remove();
  document.body.insertAdjacentHTML('beforeend',`<div id="abuQManageModal" class="abu-qmodal show"><div class="abu-qsheet"><div class="abu-qhead"><div><b>إدارة نماذجي</b><div style="font-size:8px;color:#64748b">نماذج هذا الحساب وهذا الفرع فقط</div></div><button onclick="document.getElementById('abuQManageModal')?.remove()">×</button></div>${managerHtml()}</div></div>`);
- if(legacyRows().length&&window.parent?.AbuBassamSecurity?.role?.()==='owner'&&scope()){
+ if(scope()&&window.parent?.AbuBassamSecurity?.role?.()==='owner'&&(legacyRows().length||(await unattributedRows()).length)){
   const b=document.createElement('button');
   b.type='button';b.textContent='استيراد النماذج القديمة يدويًا (للمسؤول فقط)';
   b.onclick=async()=>{try{if(await importLegacy())await openManage()}catch(e){alert('تعذر استيراد النماذج القديمة: '+String(e?.message||e))}};
