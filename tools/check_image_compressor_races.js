@@ -30,6 +30,7 @@ const URL={createObjectURL:()=> 'blob:mock-'+(++seq),revokeObjectURL:v=>revoked.
 const sandbox={window,document,URL,crypto:{randomUUID:()=> 'id-'+(++seq)},alert:m=>warnings.push(String(m)),
  setTimeout:f=>{queueMicrotask(f);return 1},console,Promise,Math,Number,String,Array,Date};
 vm.runInNewContext(script+`
+const showResult=window.showResult;
 compressOne=window.__fakeCompress;
 window.__audit={acceptFiles,processAll,read:()=>({processing,selected:selected.slice(),results:results.slice(),cancelRequested})};
 `,sandbox);
