@@ -27,7 +27,7 @@ const window={addEventListener(){},AbuBassamCloud:{session:()=>({user:{id:curren
 const document={addEventListener:(name,fn)=>events.set(name,[...(events.get(name)||[]),fn]),getElementById:()=>null};
 const emit=name=>(events.get(name)||[]).forEach(listener=>listener());
 const localStorage={getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)};
-const exposed=cards.replace('window.CardsStudio={','renderForm=()=>{};renderPreview=()=>{};window.__contactAudit={state};window.CardsStudio={');
+const exposed=cards.replace('window.CardsStudio={','renderForm=()=>{};renderPreview=()=>{};renderAll=()=>{};window.__contactAudit={state};window.CardsStudio={');
 assert.notEqual(exposed,cards);
 const warnings=[];
 new Function('window','document','localStorage','alert',exposed)(window,document,localStorage,x=>warnings.push(String(x)));
@@ -54,6 +54,25 @@ assert.equal(state.forms.child.driverPhone,'','Reject other account callbacks');
 current='owner-one';window.CardsStudio.pickContact('driverPhone');const id=messages.at(-1).requestId;
 emit('abu-bassam-auth-changed');assert.equal(cancelSignals.length,1,'Account switch must revoke native contact chooser');window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:id,phone:'07812345678'});
 assert.equal(state.forms.child.driverPhone,'','Logout must invalidate pending contact');
+// Same user/type, but a different edited badge: reject the callback.
+window.CardsStudio.pickContact('driverPhone');
+const changedBadge=messages.at(-1);
+state.forms.child.name='هاجر — بطاقة جديدة';
+window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:changedBadge.requestId,phone:'07811111111'});
+assert.equal(state.forms.child.driverPhone,'','Old contact selection must not overwrite a newly edited badge');
+// Replacing the form with identical data still indicates another card draft.
+window.CardsStudio.pickContact('driverPhone');
+const replacedBadge=messages.at(-1);
+state.forms.child={...state.forms.child};
+window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:replacedBadge.requestId,phone:'07822222222'});
+assert.equal(state.forms.child.driverPhone,'','Old contact selection must not overwrite a replaced card object');
+// Switching badge type actively closes the native chooser.
+window.CardsStudio.pickContact('driverPhone');
+const switchedBadge=messages.at(-1);
+window.CardsStudio.selectType('personal');
+assert.equal(cancelSignals.length,2,'Switching badge type must cancel native contact selection');
+window.AbuBassamNativeContactSelected({target:'driverPhone',requestId:switchedBadge.requestId,phone:'07833333333'});
+assert.equal(state.forms.child.driverPhone,'','Type-switch callbacks must be discarded');
 state.type='personal';state.forms.personal.name='';window.CardsStudio.pickContact('phone');
 const personal=messages.at(-1);
 window.AbuBassamNativeContactSelected({target:'phone',requestId:personal.requestId,phone:'07829781753',name:'اسم من جهة الاتصال'});
