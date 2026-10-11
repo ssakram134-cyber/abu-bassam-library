@@ -70,17 +70,18 @@ state.history=state.history.filter(entry=>entry&&typeof entry==='object'&&Array.
 state.history.forEach(entry=>{entry.models=entry.models.filter(model=>model&&typeof model==='object'&&model.data&&typeof model.data==='object');entry.models.forEach(model=>{if(model.type==='login'||model.type==='wifi')model.data.password=''})});
 state.brand=Object.assign({},DEFAULT_BRAND,state.brand||{});
 const PRINT_FIELDS=['output','sides','orientation','copies','width','height','gap','marginX','marginY','bleed','flip','watermark','watermarkOpacity','watermarkText'];
-function restorePrintSettings(){
- const saved=loadJson(PRINT_SETTINGS_KEY,{});
+function applyPrintSettings(settings){
+ if(!settings||typeof settings!=='object'||Array.isArray(settings))return;
+ const options={output:['cr80','a4-pairs','a4-duplex'],sides:['front','back','both'],orientation:['landscape','portrait'],flip:['horizontal','vertical'],watermark:['none','text','logo']};
+ const ranges={copies:[1,MAX_CARDS],width:[20,190],height:[20,280],gap:[0,20],marginX:[0,30],marginY:[0,30],bleed:[0,3],watermarkOpacity:[3,45]};
  for(const key of PRINT_FIELDS){
-  const value=saved[key];if(value==null)continue;
-  const options={output:['cr80','a4-pairs','a4-duplex'],sides:['front','back','both'],orientation:['landscape','portrait'],flip:['horizontal','vertical'],watermark:['none','text','logo']};
-  const ranges={copies:[1,MAX_CARDS],width:[20,190],height:[20,280],gap:[0,20],marginX:[0,30],marginY:[0,30],bleed:[0,3],watermarkOpacity:[3,45]};
+  const value=settings[key];if(value==null)continue;
   if(options[key]?.includes(value))state[key]=value;
-  else if(ranges[key]&&Number.isFinite(value)&&value>=ranges[key][0]&&value<=ranges[key][1])state[key]=value;
-  else if(key==='watermarkText'&&typeof value==='string')state[key]=value.slice(0,180)
+  else if(ranges[key]&&typeof value==='number'&&Number.isFinite(value)&&value>=ranges[key][0]&&value<=ranges[key][1])state[key]=value;
+  else if(key==='watermarkText'&&typeof value==='string')state[key]=value.slice(0,180);
  }
 }
+function restorePrintSettings(){applyPrintSettings(loadJson(PRINT_SETTINGS_KEY,{}))}
 function savePrintSettings(){
  try{localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(Object.fromEntries(PRINT_FIELDS.map(key=>[key,state[key]]))))}catch(e){}
 }
@@ -356,7 +357,7 @@ function printDocument(){let jobs=expandedJobs();if(!jobs.length)throw new Error
   }
   return `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body>${pages}</body></html>`
 }
-function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';if(copy.type==='qr'&&copy.fromScannedQr&&copy.data)copy.data.content='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output};state.history.unshift(entry);state.history=state.history.slice(0,12);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(_){}}}
+function recordHistory(action){let models=expandedJobs().slice(0,MAX_CARDS).map(model=>{let copy=clone(model);if((copy.type==='login'||copy.type==='wifi')&&copy.data)copy.data.password='';if(copy.type==='qr'&&copy.fromScannedQr&&copy.data)copy.data.content='';return copy}),entry={id:Date.now(),time:new Date().toISOString(),action,models,mode:state.output,printSettings:Object.fromEntries(PRINT_FIELDS.map(key=>[key,state[key]]))};state.history.unshift(entry);state.history=state.history.slice(0,12);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(e){state.history=state.history.slice(0,5);try{accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history))}catch(_){}}}
 function renderHistory(){let el=$('csHistory');if(!el)return;el.innerHTML=state.history.length?state.history.map((item,index)=>`<div class="cs-hitem"><div><b>${esc(item.action)} — ${item.models.length} كارت</b><small>${new Date(item.time).toLocaleString('ar-IQ')} • ${esc(item.mode)}</small></div><div class="cs-hitem-actions"><button onclick="CardsStudio.loadHistory(${index})">إعادة</button><button onclick="CardsStudio.deleteHistory(${index})">حذف</button></div></div>`).join(''):'<div class="cs-empty">لا توجد عمليات طباعة محفوظة بعد.</div>'}
 
 async function domCardPng(side){let model=modelNow();validateSymbols([model]);let ratio=Math.max(.1,Number(model.height)||53.98)/Math.max(.1,Number(model.width)||85.6),w=Math.max(1,Math.floor(Math.min(2022,8192/ratio,Math.sqrt(12_000_000/ratio)))),h=Math.max(1,Math.floor(w*ratio)),css=fullPrintCss()+freeLayoutCss(),markup=`<div xmlns="http://www.w3.org/1999/xhtml" class="root"><style>${css}.root{margin:0;width:${w}px;height:${h}px;background:transparent}.box{width:${w}px;height:${h}px}</style><div class="box">${cardHtml(model,side)}</div></div>`,svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`,url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),image=new Image();try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('تعذر رسم الباج بصيغة SVG'));image.src=url});let canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;let context=canvas.getContext('2d');if(!context)throw new Error('تعذر إنشاء لوحة الباج');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0);return canvas.toDataURL('image/png')}finally{URL.revokeObjectURL(url)}}
@@ -381,7 +382,7 @@ function resetBrand(){if(!requireCard('cardsEdit'))return;state.brand=clone(DEFA
 function pickBrandLogo(){if(!requireCard('cardsImportImage'))return;$('csBrandLogoInput').click()}
 function openHistory(){if(!requireCard('cardsView'))return;renderHistory();openModal('csHistoryModal')}
 function deleteHistory(index){if(!requireCard('cardsDelete'))return;state.history.splice(index,1);accountStorageKey(HISTORY_KEY)&&localStorage.setItem(accountStorageKey(HISTORY_KEY),JSON.stringify(state.history));renderHistory()}
-function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;state.queue=item.models.map(model=>({model:clone(model),copies:1}));state.output=item.mode||'a4-pairs';savePrintSettings();renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
+function loadHistory(index){if(!requireCard('cardsView'))return;let item=state.history[index];if(!item)return;state.queue=item.models.map(model=>({model:clone(model),copies:1}));const legacy=item.models[0]||{};applyPrintSettings(item.printSettings&&typeof item.printSettings==='object'?item.printSettings:{output:item.mode,width:legacy.width,height:legacy.height,orientation:legacy.orientation});savePrintSettings();renderPrintSettings();renderQueue();closeModal('csHistoryModal');previewPrint()}
 function pickPhoto(){if(!requireCard('cardsImportImage'))return;$('csPhotoInput').click()}
 function cameraPhoto(){if(!requireCard('cardsImportImage'))return;if(!requestNative('cardPhoto')){pendingCardPhoto=false;$('csPhotoCameraInput').click()}}
 function removePhoto(){if(!requireCard('cardsEditImage'))return;state.photo='';renderForm();renderPreview()}
