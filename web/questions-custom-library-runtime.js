@@ -73,9 +73,31 @@ async function unattributedRows(){
  }finally{db.close?.()}
 }
 async function migrate(){
- // Unattributed records cannot safely be assigned to whichever user logs in next.
- // Keep all legacy records intact until an administrator explicitly claims them.
- cache=await all();return cache
+ // Global unattributed rows remain quarantined; only previously account-scoped rows
+ // can be migrated automatically into the account-scoped IndexedDB library.
+ const owner=scope(),sourceKey=window.AbuQuestionScope?.scopedKey(LEGACY);
+ cache=await all();
+ if(!owner||!sourceKey)return cache;
+ let scopedLegacy=[];
+ try{
+  const raw=JSON.parse(localStorage.getItem(sourceKey)||'[]');
+  scopedLegacy=Array.isArray(raw)?raw:[]
+ }catch(e){return cache}
+ if(!scopedLegacy.length)return cache;
+ const existing=new Set(cache.map(row=>row.id));
+ let complete=true;
+ for(const old of scopedLegacy){
+  if(!old?.id){complete=false;continue}
+  const id=scopedId('scoped-'+String(old.id));
+  if(existing.has(id))continue;
+  const row={id,scope:owner,name:String(old.name||'نموذج'),subject:String(old.subject||'general'),html:String(old.html||''),createdAt:Date.now(),updatedAt:Date.now()};
+  try{await put(row);existing.add(id)}catch(e){complete=false;console.warn('Scoped template migration failed',e)}
+ }
+ cache=await all();
+ if(complete&&owner===scope()&&scopedLegacy.every(old=>old?.id&&cache.some(row=>row.id===scopedId('scoped-'+String(old.id))))){
+  try{localStorage.removeItem(sourceKey)}catch(_){}
+ }
+ return cache
 }
 async function importLegacy(){
  const owner=scope();
