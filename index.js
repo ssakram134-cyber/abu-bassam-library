@@ -502,7 +502,7 @@ function App() {
             <View style={styles.permissionRow}>
               <Text style={styles.permissionLabel}>👥 جهات الاتصال — اختياري</Text>
               <Text style={styles.permissionDescription}>لاختيار رقم هاتف ولي الأمر أو سائق الخط أو الباج التعريفي. نستخدم جهة الاتصال التي تختارها فقط، ولا نعدّل دفتر الهاتف.</Text>
-              <TouchableOpacity disabled={permissionBusy || contactAccess === 'granted'} style={styles.permissionButton} onPress={allowContactsFromIntro}><Text style={styles.permissionButtonText}>{contactAccess === 'granted' ? 'مسموح ✓' : contactAccess === 'blocked' ? 'فعّل من الإعدادات' : 'السماح بقراءة الأرقام'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={permissionBusy || contactAccess === 'granted'} style={styles.permissionButton} onPress={() => contactAccess === 'blocked' ? Linking.openSettings().catch(() => {}) : allowContactsFromIntro()}><Text style={styles.permissionButtonText}>{contactAccess === 'granted' ? 'مسموح ✓' : contactAccess === 'blocked' ? 'فعّل من الإعدادات' : 'السماح بقراءة الأرقام'}</Text></TouchableOpacity>
             </View>
             <View style={styles.permissionRow}>
               <Text style={styles.permissionLabel}>🗂 الصور والملفات</Text>
