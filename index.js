@@ -41,9 +41,12 @@ const MAX_NATIVE_PAGE_COUNT = 20;
 const ANDROID_BRIDGE = `
 (function () {
   var messageLimit = 48 * 1024 * 1024;
+  var exportSequence = 0;
+  var exportTypes = /^(saveBase64|saveToGallery|savePagesToGallery|savePdfHtml|printPages|printBase64|printHtml|shareBase64)$/;
   function send(type, payload) {
     try {
       var estimated = 0, data = payload || {};
+      if (exportTypes.test(type)) data.requestId = 'abu-export-' + Date.now().toString(36) + '-' + (++exportSequence);
       for (var key in data) {
         if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
         var item = data[key];
@@ -56,23 +59,28 @@ const ANDROID_BRIDGE = `
         }
         if (estimated > messageLimit) throw new Error('حجم الصور كبير. احفظ أو اطبع دفعات أصغر لتجنب توقف التطبيق.');
       }
-      var serialized = JSON.stringify(Object.assign({ type: type }, data));
+      var serialized = JSON.stringify(Object.assign(exportTypes.test(type) ? { type: type, requestId: data.requestId } : { type: type }, data));
       if (serialized.length > messageLimit) throw new Error('الملف أكبر من الحد الآمن للنقل إلى Android.');
       window.ReactNativeWebView.postMessage(serialized);
+      return data.requestId || '';
     } catch (error) {
       try { window.alert('تعذر إرسال الملف إلى Android: ' + String(error.message || error)); } catch (_) {}
     }
   }
+  window.AbuBassamNativeExportResult = function (result) {
+    if (!result || typeof result !== 'object' || !/^abu-export-[a-z0-9-]{1,80}$/.test(String(result.requestId || ''))) return;
+    try { window.dispatchEvent(new CustomEvent('abu-bassam-native-export-result', { detail: result })); } catch (_) {}
+  };
   window.Android = {
-    saveBase64: function (name, mime, data, shareAfter) { send('saveBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
-    saveToGallery: function (name, mime, data, shareAfter) { send('saveToGallery', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
-    savePagesToGallery: function (prefix, pages, mime, shareIndex) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime, shareIndex: Number.isInteger(shareIndex) ? shareIndex : -1 }); },
-    printPages: function (pages, paper, dpi, shareAfter) { send('printPages', { pages: pages, paper: paper, dpi: dpi, shareAfter: !!shareAfter }); },
-    printBase64: function (name, mime, data, shareAfter) { send('printBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
+    saveBase64: function (name, mime, data, shareAfter) { return send('saveBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
+    saveToGallery: function (name, mime, data, shareAfter) { return send('saveToGallery', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
+    savePagesToGallery: function (prefix, pages, mime, shareIndex) { return send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime, shareIndex: Number.isInteger(shareIndex) ? shareIndex : -1 }); },
+    printPages: function (pages, paper, dpi, shareAfter) { return send('printPages', { pages: pages, paper: paper, dpi: dpi, shareAfter: !!shareAfter }); },
+    printBase64: function (name, mime, data, shareAfter) { return send('printBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
     scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
-    printHtml: function (html) { send('printHtml', { html: html }); },
-    savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
-    shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
+    printHtml: function (html) { return send('printHtml', { html: html }); },
+    savePdfHtml: function (name, html) { return send('savePdfHtml', { name: name, html: html }); },
+    shareBase64: function (name, mime, data) { return send('shareBase64', { name: name, mime: mime, data: data }); },
     openExternal: function (url) { send('openExternal', { url: url }); },
     openAppSettings: function () { send('openAppSettings'); },
     getDeviceInfo: function () { send('getDeviceInfo'); },
