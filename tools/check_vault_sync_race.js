@@ -3,6 +3,13 @@ const fs=require('node:fs');
 const assert=require('node:assert/strict');
 
 const source=fs.readFileSync('web/document-vault-runtime.js','utf8');
+const advanced=fs.readFileSync('web/document-vault-advanced-runtime.js','utf8');
+const hardened=fs.readFileSync('web/document-vault-hardening-runtime.js','utf8');
+assert.ok(advanced.includes("itemRevision(item)!==itemRevision(st.item)"),'Replacing a photo must reject changes since editor opened');
+assert.ok(advanced.includes("await putItem(next,choice==='2'?item:null)"),'Advanced photo save must check current revision');
+assert.ok(advanced.includes('_localWriteRev:newWriteRevision()'),'Advanced photo editor must change the revision token');
+assert.ok(hardened.includes("for(const item of items)store.put({...item,_localWriteRev:newWriteRevision()})"),'Restoring a backup must invalidate prior sync snapshots');
+
 for(const marker of [
  "if(hasPending())return true",
  "function localWriteVersion(item)",
@@ -49,7 +56,7 @@ function verify(ok,message){assert.ok(ok,message);checks++}
 async function main(){
  await dbPut({id:'a',name:'old',syncState:'pending'});
  const original=clone(rows.get('a'));
- verify(original._localWriteRev===1,'Writes receive a monotonic revision');
+ verify(typeof original._localWriteRev==='string'&&original._localWriteRev.length>4,'Writes receive a unique revision token');
  await dbPut({...original,name:'newer local edit'});
  const stale=await dbAckPending(original,'remote-v1');
  verify(!stale&&rows.get('a').name==='newer local edit'&&rows.get('a').syncState==='pending'&&rows.get('a').remoteUpdatedAt==='remote-v1','Delayed upload cannot erase a new local edit');
