@@ -10,6 +10,7 @@ const element=(text,title,disabled=false,opacity='',pointerEvents='')=>({
 });
 function scenario(){
  const grants=new Set(['questionsView','compressUse']);
+ const events={};
  const operations=element('سجل العمليات','افتح السجل',false,'.92');
  const notifications=element('','الإشعارات',true,'.7');
  const customers=element('مستمسكات الزبائن','ملفات العملاء');
@@ -20,11 +21,11 @@ function scenario(){
  const label=element('أضف صورة','',false,'.77','auto');
  const controls={operations,notifications,customers,plain,imageInput,paperSize,photoSize,label};
  const inputs={imageInput,paperSize,photoSize};
- const document={readyState:'complete',getElementById:id=>inputs[id]||null,addEventListener(){},
+ const document={readyState:'complete',getElementById:id=>inputs[id]||null,addEventListener(type,listener){events[type]=listener;},
   querySelectorAll:selector=>selector==='button'?[operations,notifications,customers,plain]:selector==='label[for="imageInput"]'?[label]:[]};
  const window={AbuBassamPermissions:{can:key=>grants.has(key)}};
  vm.runInNewContext(source,{window,document,alert(){},requestAnimationFrame:fn=>fn()});
- return{grants,controls,refresh:()=>window.AbuPermissionSectionGuards.tick()};
+ return{grants,controls,events,refresh:()=>window.AbuPermissionSectionGuards.tick()};
 }
 const a=scenario(),c=a.controls;
 for(const [item,expect,label] of [
@@ -65,4 +66,29 @@ equal(c.operations.disabled,true,'second revoke locks operations');equal(c.image
 a.grants.add('logsViewOwn');a.grants.add('imageExport');a.refresh();
 equal(c.operations.disabled,false,'second grant unlocks operations');equal(c.operations.title,'افتح السجل','second grant restores title');equal(c.imageInput.disabled,false,'second grant enables picker');equal(c.label.style.pointerEvents,'auto','second grant restores label');
 a.refresh();equal(c.operations.disabled,false,'repeated updates idempotent');equal(c.imageInput.disabled,false,'repeated picker updates idempotent');
+function clickCheck(text,cardHost,genericCard,expected,label){
+ const target={
+  textContent:text,title:'',
+  closest(selector){
+   if(selector==='button,a,label,[role="button"]')return this;
+   if(selector==='#cardsCenter,.cs-modal,.ds-sheet,#abuRecoveryModal')return cardHost?{}:null;
+   if(selector.includes('[id*="card"'))return genericCard?{}:null;
+   if(selector==='section,div')return null;
+   return null;
+  }
+ };
+ let denied=false;
+ const event={target,preventDefault(){denied=true},stopImmediatePropagation(){}};
+ a.events.click(event);
+ equal(denied,expected,label);
+}
+a.grants.add('securityBiometric');
+clickCheck('تفعيل البصمة',false,true,false,'settings card must not be mistaken for design card');
+clickCheck('تعديل الباج',true,false,true,'actual card editor operation denied');
+clickCheck('حفظ PDF',true,false,true,'actual card PDF export denied');
+clickCheck('فتح الأرشيف',false,true,false,'ordinary UI card does not trigger card edit permissions');
+a.grants.add('cardsEdit');
+clickCheck('تعديل الباج',true,false,false,'card edit permitted only when granted');
+a.grants.delete('securityBiometric');
+clickCheck('تفعيل البصمة',false,true,true,'settings biometric stays independently guarded');
 console.log('Permission touch recovery: '+checks+'/'+checks+' checks passed');
