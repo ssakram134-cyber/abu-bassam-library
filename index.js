@@ -417,7 +417,7 @@ function App() {
       const root = FileSystem.cacheDirectory;
       if (!root) throw new Error('مجلد الملفات المؤقتة غير متاح');
       const entries = await FileSystem.readDirectoryAsync(root);
-      const generated = entries.filter((name) => name.startsWith('abu_bassam_') && !name.includes('/') && !name.includes('\\'));
+      const generated = entries.filter((name) => (name.startsWith('abu_bassam_') || name.startsWith('abu_barcode_gallery_')) && !name.includes('/') && !name.includes('\\'));
       // Keep each deletion independent so the displayed result matches reality.
       const outcomes = await Promise.allSettled(generated.map((name) => FileSystem.deleteAsync(`${root}${name}`, { idempotent: true })));
       const removed = outcomes.filter((result) => result.status === 'fulfilled').length;
