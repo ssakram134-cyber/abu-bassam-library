@@ -10,7 +10,7 @@ function css(){if($('abuGeometryStyle'))return;let s=document.createElement('sty
 function build(){css();let grid=document.querySelector('.panel .grid');if(grid&&!$('abuGeoLaunch')){let b=document.createElement('button');b.id='abuGeoLaunch';b.className='ctl abu-geo-launch';b.textContent='✂ قص حر / منظور';b.onclick=openGeo;let r=document.createElement('button');r.id='abuRulerLaunch';r.className='ctl abu-ruler-launch';r.textContent='📐 معاينة القياسات';r.onclick=openRuler;let extra=[...grid.children].find(x=>x.classList?.contains('extra'));grid.insertBefore(b,extra||null);grid.insertBefore(r,extra||null)}inject()}
 function inject(){if($('abuGeoModal'))return;document.body.insertAdjacentHTML('beforeend',`<div id="abuGeoModal" class="abu-geo-modal"><div class="abu-geo-card"><div class="abu-geo-head"><b>✂ القص المباشر وتصحيح المنظور</b><button onclick="AbuPhotoGeometry.close('abuGeoModal')">×</button></div><div class="abu-geo-modes"><button id="abuModeCrop" class="on" onclick="AbuPhotoGeometry.setMode('crop')">قص مستطيل حر</button><button id="abuModePerspective" onclick="AbuPhotoGeometry.setMode('perspective')">تصحيح منظور 4 زوايا</button></div><div id="abuGeoStage" class="abu-geo-stage"><canvas id="abuGeoCanvas"></canvas></div><div class="abu-geo-actions"><button onclick="AbuPhotoGeometry.reset()">إعادة الزوايا</button><button class="ok" onclick="AbuPhotoGeometry.apply()">اعتماد</button></div><div class="abu-geo-note">اسحب الدوائر الأربع مباشرة فوق الصورة. في القص المستطيل تبقى الحواف متوازية. في وضع المنظور تتحرك كل زاوية بحرية ثم تُسوّى المنطقة المحددة إلى مستطيل للطباعة.</div></div></div><div id="abuRulerModal" class="abu-geo-modal"><div class="abu-geo-card"><div class="abu-geo-head"><b>📐 معاينة الورقة والهوامش بالملم</b><button onclick="AbuPhotoGeometry.close('abuRulerModal')">×</button></div><div id="abuRulerCaption" class="abu-ruler-caption"></div><div id="abuRulerWrap" class="abu-ruler-wrap"><div class="abu-ruler-top"></div><div class="abu-ruler-left"></div><div id="abuRulerPaper" class="abu-ruler-paper"></div><div id="abuRulerSafe" class="abu-ruler-safe"></div></div><div class="abu-geo-note">الإطار الأحمر المتقطع يمثل الهامش المحدد. المقاس النهائي يأتي من إعداد الورقة الفعلي، وليس من حجم شاشة الهاتف.</div></div></div>`)}
 function openGeo(){if(geometryBusy)return;let it=item();if(!it)return alert('أضف صورة وحددها أولاً');if(!it.__abuGeometryOriginal)it.__abuGeometryOriginal=it.src;geoTarget=it;geoSourceAtOpen=it.src;mode='crop';$('abuModeCrop').classList.add('on');$('abuModePerspective').classList.remove('on');pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw();$('abuGeoModal').classList.add('show')}
-function close(id){$(id)?.classList.remove('show');if(id==='abuGeoModal'){stopDrag?.();geoTarget=null;geoSourceAtOpen='';drawToken++;geoOperationId++}}
+function close(id){$(id)?.classList.remove('show');if(id==='abuGeoModal'){stopDrag?.();geoTarget=null;geoSourceAtOpen='';drawToken++;geoOperationId++}if(id==='abuRulerModal'){const paper=$('abuRulerPaper');if(paper)paper.style.backgroundImage='none'}}
 function setMode(m){if(geometryBusy)return;mode=m==='perspective'?'perspective':'crop';$('abuModeCrop').classList.toggle('on',mode==='crop');$('abuModePerspective').classList.toggle('on',mode==='perspective');reset()}
 function reset(){if(geometryBusy)return;pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw()}
 function draw(){
@@ -159,7 +159,41 @@ async function warpFull(im,shouldCancel=()=>false){
   if(!finished&&output){output.width=0;output.height=0}
  }
 }
-function openRuler(){if(!pageCanvases?.length)return alert('أنشئ معاينة للطباعة أولاً');let pd=pagePrintMeta?.paper||(typeof getPaperSize==='function'?getPaperSize():{w:210,h:297}),margin=Math.max(0,Number(pagePrintMeta?.kind==='poster'?pagePrintMeta?.margin:$('marginInput')?.value)||0),wrap=$('abuRulerWrap'),paper=$('abuRulerPaper'),safe=$('abuRulerSafe'),caption=$('abuRulerCaption'),maxW=Math.min(560,window.innerWidth-70),ratio=pd.h/pd.w,w=maxW,h=w*ratio;if(h>window.innerHeight*.65){h=window.innerHeight*.65;w=h/ratio}wrap.style.width=w+'px';wrap.style.height=h+'px';paper.style.backgroundImage=`url(${pageCanvases[currentPage||0].toDataURL('image/png')})`;let pxX=w/pd.w,pxY=h/pd.h;safe.style.left=margin*pxX+'px';safe.style.right=margin*pxX+'px';safe.style.top=margin*pxY+'px';safe.style.bottom=margin*pxY+'px';let dpi=typeof currentDpi==='function'?currentDpi():0;caption.textContent=`ورقة ${pd.w} × ${pd.h} ملم • هامش ${margin} ملم • ${Math.round(dpi)} DPI • الإطار الأحمر = منطقة آمنة تقريبية`;$('abuRulerModal')?.classList.add('show')}
+function rulerPreviewData(source){
+ const width=Number(source?.width)||0,height=Number(source?.height)||0;
+ if(!(width>0&&height>0))throw new Error('أبعاد ورقة الطباعة غير صالحة');
+ const factor=Math.min(1,880/Math.max(width,height));
+ const preview=document.createElement('canvas');
+ try{
+  preview.width=Math.max(1,Math.round(width*factor));
+  preview.height=Math.max(1,Math.round(height*factor));
+  const ctx=preview.getContext('2d');
+  if(!ctx)throw new Error('تعذر تجهيز مصغّر ورقة الطباعة');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,preview.width,preview.height);
+  ctx.drawImage(source,0,0,preview.width,preview.height);
+  return preview.toDataURL('image/jpeg',.82)
+ }finally{preview.width=0;preview.height=0}
+}
+function openRuler(){
+ if(!pageCanvases?.length)return alert('أنشئ معاينة للطباعة أولاً');
+ const source=pageCanvases[currentPage||0]||pageCanvases[0];
+ const pd=pagePrintMeta?.paper||(typeof getPaperSize==='function'?getPaperSize():{w:210,h:297});
+ const margin=Math.max(0,Number(pagePrintMeta?.kind==='poster'?pagePrintMeta?.margin:$('marginInput')?.value)||0);
+ const wrap=$('abuRulerWrap'),paper=$('abuRulerPaper'),safe=$('abuRulerSafe'),caption=$('abuRulerCaption');
+ if(!wrap||!paper||!safe||!caption)return;
+ const maxW=Math.min(560,window.innerWidth-70),ratio=pd.h/pd.w;
+ let w=maxW,h=w*ratio;
+ if(h>window.innerHeight*.65){h=window.innerHeight*.65;w=h/ratio}
+ try{paper.style.backgroundImage=`url("${rulerPreviewData(source)}")`}
+ catch(e){return alert('تعذرت معاينة قياسات الورقة: '+String(e?.message||e))}
+ wrap.style.width=w+'px';wrap.style.height=h+'px';
+ const pxX=w/pd.w,pxY=h/pd.h;
+ safe.style.left=margin*pxX+'px';safe.style.right=margin*pxX+'px';
+ safe.style.top=margin*pxY+'px';safe.style.bottom=margin*pxY+'px';
+ const dpi=typeof currentDpi==='function'?currentDpi():0;
+ caption.textContent=`ورقة ${pd.w} × ${pd.h} ملم • هامش ${margin} ملم • ${Math.round(dpi)} DPI • الإطار الأحمر = منطقة آمنة تقريبية`;
+ $('abuRulerModal')?.classList.add('show')
+}
 window.AbuPhotoGeometry={close,setMode,reset,apply};
 window.openAbuPhotoRuler=openRuler;
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',build,{once:true});else build();
