@@ -30,7 +30,7 @@ async function scenario(name){
    if(name==='failed-upsert')throw Error('RPC could not commit');
    return remote
   },
-  uploadVault:async()=>{uploaded.push('new-revision');return 'new-revision'},
+  uploadVault:async()=>{if(name==='cas-unavailable')throw Error('VAULT_CAS_NOT_READY: server migration missing');uploaded.push('new-revision');return 'new-revision'},
   removeVault:async path=>{removed.push(path)},
   list:async()=>[remote],
   downloadVault:async()=>({size:4})
@@ -76,5 +76,10 @@ async function scenario(name){
   assert.equal(missing.local.syncState,'pending',kind+' must preserve the pending local record');
   assert.deepEqual(missing.removed,[],kind+' must not delete previous cloud Storage revisions');
  }
- console.log('Vault cloud upload safety passed: 6 scenarios; missing server revisions preserve pending state and prevent old Storage deletion.');
+ const blockedServer=await scenario('cas-unavailable');
+ assert.equal(blockedServer.result,false,'Missing CAS service must not complete sync');
+ assert.equal(blockedServer.local.syncState,'pending','CAS preflight failures preserve local changes');
+ assert.deepEqual(blockedServer.removed,[],'CAS preflight failure must never prune cloud revisions');
+ assert.match(blockedServer.status,/الخادم يحتاج تحديث CAS/,'Automatic sync must display an actionable CAS server warning');
+ console.log('Vault cloud upload safety passed: 7 scenarios; absent CAS is clearly reported, data remains pending.');
 })().catch(e=>{console.error(e);process.exitCode=1});
