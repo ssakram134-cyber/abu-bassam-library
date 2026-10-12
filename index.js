@@ -34,11 +34,33 @@ const BARCODE_TYPES = [
 ];
 const SECURE_KEY = /^abu_bassam_[a-z0-9_]{3,80}$/i;
 
+const MAX_NATIVE_MESSAGE_CHARS = 48 * 1024 * 1024;
+const MAX_NATIVE_PAGE_CHARS = 40 * 1024 * 1024;
+const MAX_NATIVE_PAGE_COUNT = 20;
 const ANDROID_BRIDGE = `
 (function () {
+  var messageLimit = 48 * 1024 * 1024;
   function send(type, payload) {
-    try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {}))); }
-    catch (error) {}
+    try {
+      var estimated = 0, data = payload || {};
+      for (var key in data) {
+        if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+        var item = data[key];
+        if (typeof item === 'string') estimated += item.length;
+        else if (Array.isArray(item)) {
+          if (item.length > 20) throw new Error('الدفعة تحتوي أكثر من 20 صفحة');
+          for (var i = 0; i < item.length; i++) {
+            if (typeof item[i] === 'string') estimated += item[i].length;
+          }
+        }
+        if (estimated > messageLimit) throw new Error('حجم الصور كبير. احفظ أو اطبع دفعات أصغر لتجنب توقف التطبيق.');
+      }
+      var serialized = JSON.stringify(Object.assign({ type: type }, data));
+      if (serialized.length > messageLimit) throw new Error('الملف أكبر من الحد الآمن للنقل إلى Android.');
+      window.ReactNativeWebView.postMessage(serialized);
+    } catch (error) {
+      try { window.alert('تعذر إرسال الملف إلى Android: ' + String(error.message || error)); } catch (_) {}
+    }
   }
   window.Android = {
     saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
@@ -268,8 +290,18 @@ function App() {
 
   const printPages = useCallback(async ({ pages, paper }) => {
     try {
+      if (typeof pages === 'string' && pages.length > MAX_NATIVE_PAGE_CHARS) throw new Error('حجم الصور كبير؛ اطبع دفعات أصغر');
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صفحات للطباعة');
+      if (imagePages.length > MAX_NATIVE_PAGE_COUNT) throw new Error('عدد صفحات الطباعة يتجاوز 20 ورقة؛ اطبع دفعات أصغر');
+      let totalCharacters = 0;
+      for (const source of imagePages) {
+        if (typeof source !== 'string' || !/^data:image\/(png|jpeg|webp)(?:;[^,]*)?;base64,/i.test(source))
+          throw new Error('إحدى صفحات الطباعة ليست صورة صالحة');
+        totalCharacters += source.length;
+        if (source.length > 11_200_000 || totalCharacters > MAX_NATIVE_PAGE_CHARS)
+          throw new Error('حجم الصور كبير؛ اطبع دفعات أصغر');
+      }
       const size = printDimensions(paper);
       const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
@@ -419,7 +451,15 @@ function App() {
   }, [inject]);
 
   const onWebMessage = useCallback(async (event) => {
-    let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
+    const raw = event?.nativeEvent?.data;
+    if (typeof raw !== 'string') return;
+    // Reject large messages before JSON.parse creates another copy in memory.
+    if (raw.length > MAX_NATIVE_MESSAGE_CHARS) {
+      Alert.alert('الملف كبير جداً', 'قسّم الصور إلى دفعات أصغر أو استخدم ملفاً مضغوطاً للطباعة.');
+      return;
+    }
+    let message; try { message = JSON.parse(raw); } catch (_) { return; }
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
