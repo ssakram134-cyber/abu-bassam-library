@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = resolve(projectRoot, 'web');
@@ -52,6 +53,16 @@ const DOCUMENT_ASSETS = [
   ['xlsx.full.min.js',pair('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'),100000],
 ];
 
+// AAPT strips .gz when packaging assets. Prepare the exact filenames requested
+// by the local OCR worker, and remove compressed copies to avoid duplicate paths.
+async function unpackLanguage(relative){
+  const compressed=resolve(vendorRoot,relative);
+  const data=gunzipSync(await readFile(compressed));
+  if(data.length<500000)throw new Error(`Offline OCR language is incomplete: ${relative}`);
+  const unpacked=compressed.slice(0,-3);
+  await writeFile(unpacked,data);
+  await rm(compressed);
+}
 async function existsEnough(path,minBytes){try{return (await stat(path)).size>=minBytes}catch{return false}}
 async function fetchWithTimeout(url){
   const controller=new AbortController();
@@ -96,6 +107,9 @@ for(const [relative,urls,minBytes] of OCR_ASSETS){
 for(const [relative,,minBytes] of OCR_ASSETS){
   const path=resolve(vendorRoot,relative);
   if(!(await existsEnough(path,minBytes)))throw new Error(`Required offline OCR asset is missing or incomplete: ${relative}`);
+}
+for(const relative of ['lang/ara.traineddata.gz','lang/eng.traineddata.gz']){
+  await unpackLanguage(relative);
 }
 for(const [relative,urls,minBytes] of DOCUMENT_ASSETS){
   await download(urls,resolve(documentVendorRoot,relative),minBytes);

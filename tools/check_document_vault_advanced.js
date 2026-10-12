@@ -53,6 +53,39 @@ for(const token of ['function clearVaultPrivateView()','handleVaultAuthChanged',
 for(const marker of ["TRASH_RETENTION_MS=30*24*60*60*1000","data-filter=\"trash\"","function restoreTrash(","function purgeTrash(","function purgeExpiredTrash(","deletedAt:now","await dbAckPending(item,remoteVersion,false,sessionValid)","function render("] )need(canonicalVault,marker,'30-day trash and sync preservation');
 if(canonicalVault.includes("blob:null,syncState:'pending',deleted:true"))throw new Error('Legacy destructive vault deletion returned');
 (async()=>{
+ const assert=require('node:assert/strict');
+ const workerSource=offline.slice(offline.indexOf('async function worker(){'),offline.indexOf('\nasync function recognize('));
+ const ocrCalls=[],ocrInstance={terminate:async()=>{}};
+ const tesseract={createWorker:async(...args)=>{ocrCalls.push(args);return ocrInstance}};
+ const createOcr=new Function('window','Tesseract','loadLocalScript','setProgress',
+  'let idleTimer=0,workerPromise=null;'+workerSource+';return worker;')(
+  {Tesseract:tesseract},tesseract,async()=>{},()=>{});
+ assert.equal(await createOcr(),ocrInstance);
+ assert.equal(await createOcr(),ocrInstance);
+ assert.equal(ocrCalls.length,1,'Reuse the initialized local OCR worker');
+ assert.equal(ocrCalls[0][2].gzip,false,'APK language assets are unpacked .traineddata; worker must not request .gz');
+ for(const language of ['ara','eng']){
+  const options=ocrCalls[0][2];
+  const requested=options.langPath+'/'+language+'.traineddata'+(options.gzip===false?'':'.gz');
+  assert.equal(requested,'vendor/tesseract/lang/'+language+'.traineddata');
+ }
+ const io=require('node:fs/promises'),path=require('node:path'),zlib=require('node:zlib');
+ const temp=await io.mkdtemp(path.join(require('node:os').tmpdir(),'abu-ocr-assets-'));
+ try{
+  const unpackSource=assets.match(/async function unpackLanguage\([\s\S]*?\n\}/)?.[0];
+  assert.ok(unpackSource,'Build must explicitly unpack language assets before Android packaging');
+  const unpack=new Function('resolve','vendorRoot','gunzipSync','readFile','writeFile','rm',
+   unpackSource+';return unpackLanguage;')(path.resolve,temp,zlib.gunzipSync,io.readFile,io.writeFile,io.rm);
+  const payload=Buffer.alloc(600000,65);
+  await io.writeFile(path.join(temp,'eng.traineddata.gz'),zlib.gzipSync(payload));
+  await unpack('eng.traineddata.gz');
+  assert.deepEqual(await io.readFile(path.join(temp,'eng.traineddata')),payload);
+  await assert.rejects(io.stat(path.join(temp,'eng.traineddata.gz')), {code:'ENOENT'});
+  await io.writeFile(path.join(temp,'bad.traineddata.gz'),'corrupt gzip');
+  await assert.rejects(unpack('bad.traineddata.gz'));
+  await io.writeFile(path.join(temp,'small.traineddata.gz'),zlib.gzipSync(Buffer.from('tiny')));
+  await assert.rejects(unpack('small.traineddata.gz'),/incomplete/);
+ }finally{await io.rm(temp,{recursive:true,force:true})}
  const store=new Map(),window={addEventListener(){},AbuBassamSecurity:{role:()=> 'owner',device:()=>({device_id:'test-device'})},AbuBassamBranchVault:{localScopeOk:()=>true},AbuBassamCloud:{session:()=>({user:{id:'test-user'}})}},document={getElementById(){return null}},warnings=[];
  const record={id:'test-record',name:'test-document.pdf',category:'file',mime:'application/pdf',size:32,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),blob:{size:32},syncState:'synced',deleted:false};
  store.set(record.id,record);
@@ -85,5 +118,5 @@ if(canonicalVault.includes("blob:null,syncState:'pending',deleted:true"))throw n
  await window.__vaultTest.deleteItem(record.id);store.set(record.id,{...store.get(record.id),deletedAt:'2020-01-01T00:00:00Z',syncState:'synced'});
  await window.__vaultTest.purgeExpiredTrash();if(store.has(record.id))throw Error('expired trash was not purged');
  if(warnings.length)throw Error('unexpected warning during vault trash test: '+warnings.join(';'));
- console.log('Document vault advanced checks passed: image editor, offline OCR, encrypted vault and tested 30-day trash retention/restore/purge');
+ console.log('Document vault advanced checks passed: local OCR worker paths, real language gunzip and invalid-language rejection, image editor, encrypted vault and tested 30-day trash retention/restore/purge');
 })().catch(err=>{console.error(err);process.exitCode=1});
