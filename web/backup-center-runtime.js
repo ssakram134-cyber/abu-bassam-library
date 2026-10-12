@@ -31,7 +31,37 @@ function auto(){return stateGet(AUTO)!=='0'}
 function due(){if(!auto()||cadence()==='manual'||!navigator.onLine||!cloud()?.isConnected?.()||!can('backupCreate'))return false;const retryAt=Number(stateGet(RETRY)||0);if(retryAt&&Date.now()<retryAt)return false;const last=Number(stateGet(LAST)||0),ms=cadence()==='weekly'?7*86400000:86400000;return !last||Date.now()-last>=ms}
 async function backupNow(kind='manual',force=false){if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');const required=kind==='pre_restore'?'backupRestore':'backupCreate';if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');busy=true;status('جاري فحص التغييرات...');try{const fp=await fingerprint();if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){stateSet(LAST,String(Date.now()));stateRemove(LASTERR);status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');return{skipped:true}}status('جاري إنشاء Snapshot...');const pkg=await packageBytes(),sha=await digest(pkg.bytes),parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK)),plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});for(let i=0;i<plan.uploads.length;i++){status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK),blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob)}status('التحقق من اكتمال النسخة...');await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);stateRemove(LASTERR);stateRemove(RETRY);log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} عنصر • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');await refreshList();return{ok:true,backup_id:plan.backup_id}}
 catch(e){const m=String(e?.message||e);stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000));status('فشل النسخ: '+m);log('backup','فشل النسخ الاحتياطي',m);throw e}finally{busy=false;paint()}}
-async function downloadBytes(id){const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`),arrays=[],total=Number(d.backup?.size_bytes)||0;let got=0;for(let i=0;i<d.parts.length;i++){status(`تنزيل الجزء ${i+1} من ${d.parts.length}...`);const res=await retry(async()=>{const x=await fetch(d.parts[i].url,{cache:'no-store'});if(!x.ok)throw Error('تعذر تنزيل جزء النسخة');return x});const a=new Uint8Array(await res.arrayBuffer());arrays.push(a);got+=a.length}if(got!==total)throw Error('حجم النسخة المستعادة لا يطابق السجل');const out=new Uint8Array(got);let off=0;for(const a of arrays){out.set(a,off);off+=a.length}const sha=await digest(out);if(sha!==String(d.backup.sha256||''))throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');return{bytes:out,backup:d.backup}}
+async function downloadBytes(id){
+ const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`);
+ const total=Number(d.backup?.size_bytes),parts=d.parts;
+ const branch=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');
+ if(!branch||d.backup?.branch_device_id!==branch)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن تنزيلها لهذا الفرع');
+ if(!Number.isSafeInteger(total)||total<=0||total>MAX_ZIP)throw Error('حجم النسخة السحابية غير صالح أو أكبر من 120MB؛ أُلغي التنزيل لحماية ذاكرة الهاتف');
+ if(!Array.isArray(parts)||parts.length<1||parts.length>Math.ceil(MAX_ZIP/CHUNK))throw Error('عدد أجزاء النسخة غير صالح أو يتجاوز حد الأمان');
+ if(!/^[0-9a-f]{64}$/i.test(String(d.backup.sha256||'')))throw Error('بصمة التحقق من النسخة غير صالحة');
+ const arrays=[];let got=0;
+ for(let i=0;i<parts.length;i++){
+  const url=String(parts[i]?.url||'');
+  if(!/^https:\/\//i.test(url))throw Error('رابط تنزيل أحد الأجزاء غير آمن');
+  status(`تنزيل الجزء ${i+1} من ${parts.length}...`);
+  const res=await retry(async()=>{
+   const x=await fetch(url,{cache:'no-store'});
+   if(!x.ok)throw Error('تعذر تنزيل جزء النسخة');
+   return x
+  });
+  const declaredSize=Number(res.headers?.get?.('content-length'));
+  if(Number.isFinite(declaredSize)&&declaredSize>CHUNK)throw Error('حجم الجزء المعلن أكبر من الحد الآمن');
+  const a=new Uint8Array(await res.arrayBuffer());
+  if(!a.length||a.length>CHUNK||got+a.length>total)throw Error('حجم أحد أجزاء النسخة غير مطابق أو يتجاوز الحد الآمن');
+  arrays.push(a);got+=a.length
+ }
+ if(got!==total)throw Error('حجم النسخة المستعادة لا يطابق السجل');
+ const out=new Uint8Array(got);let off=0;
+ for(const a of arrays){out.set(a,off);off+=a.length}
+ const sha=await digest(out);
+ if(sha!==String(d.backup.sha256).toLowerCase())throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');
+ return{bytes:out,backup:d.backup}
+}
 async function restoreCloud(id){if(busy)return false;if(!can('backupRestore')){alert('الأدمن عطّل الاستعادة لهذا الفرع.');return false}if(!confirm('سيتم تنزيل النسخة المختارة والتحقق من سلامتها أولًا، ثم إنشاء Snapshot أمان للحالة الحالية قبل الاستعادة. متابعة؟'))return false;busy=true;try{const d=await downloadBytes(id),cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');if(d.backup.branch_device_id!==cur)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن استعادتها داخل هذا الفرع');const file=new File([d.bytes],`Abu_Bassam_Cloud_${id}.zip`,{type:'application/zip'});status('تم التحقق من النسخة المختارة • إنشاء Snapshot أمان للحالة الحالية...');busy=false;await backupNow('pre_restore',true);busy=true;const restore=window.AbuDocumentVaultHardening?.restore;if(typeof restore!=='function')throw Error('خدمة الاستعادة الآمنة غير جاهزة');status('جاري الاستعادة الآمنة...');const restored=await restore(file,{mode:'snapshot',silentConfirm:true});if(restored!==true){status('تم إلغاء الاستعادة أو لم تكتمل');return false}await api('cleanup','POST',{retention:retention()}).catch(()=>{});log('restore','استعادة نسخة سحابية',id);status('تمت الاستعادة بنجاح ✓');await refreshList();return true}catch(e){alert('تعذرت الاستعادة: '+String(e?.message||e));status('تعذرت الاستعادة');return false}finally{busy=false;paint()}}
 async function deleteCloud(id){if(!can('backupDelete'))return alert('الأدمن عطّل حذف النسخ.');if(!confirm('حذف هذه النسخة السحابية نهائيًا؟'))return;try{await api('delete','DELETE',{backup_id:id});log('backup','حذف نسخة سحابية',id);await refreshList()}catch(e){alert(String(e?.message||e))}}
 function status(t){const e=$('abuBackupStatus');if(e)e.textContent=t||''}
