@@ -155,7 +155,7 @@ function App() {
   useEffect(() => {
     if (webReady || webFailure) return undefined;
     const timer = setTimeout(() => {
-      setWebFailure('لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. تحقق من اتصالك ثم أعد المحاولة.');
+      setWebFailure('لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. اضغط إعادة المحاولة؛ لا يُشترط اتصال بالإنترنت لتشغيل التطبيق.');
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
   }, [webReady, webFailure, webAttempt]);
