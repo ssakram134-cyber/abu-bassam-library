@@ -154,7 +154,49 @@ async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true){
   tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة الجهاز الآخر'))
  })
 }
-async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function dbDisposeTrashIfCurrent(snapshot,permanent=false,isCurrent=()=>true){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(snapshot.id);
+  let result='skipped';
+  read.onsuccess=()=>{
+   const current=read.result;
+   if(!isCurrent()||!current?.deleted||localWriteVersion(current)!==localWriteVersion(snapshot))return;
+   if(permanent){
+    if(current.syncState==='pending')return;
+    store.delete(current.id);result='deleted';return
+   }
+   const deleted=Date.parse(current.deletedAt||current.updatedAt||0);
+   if(!Number.isFinite(deleted)||Date.now()-deleted<TRASH_RETENTION_MS)return;
+   if(current.syncState==='pending'){
+    if(current.blob){store.put({...current,blob:null,size:0,_localWriteRev:newWriteRevision()});result='cleared'}
+   }else{store.delete(current.id);result='deleted'}
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=()=>resolve(result);
+  tx.onerror=()=>reject(tx.error||new Error('تعذر تنظيف سلة المحذوفات'));
+  tx.onabort=()=>reject(tx.error||new Error('تم إلغاء تنظيف سلة المحذوفات'))
+ })
+}
+async function dbRestoreTrashIfCurrent(snapshot,isCurrent=()=>true){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();
+  let result='changed';
+  read.onsuccess=()=>{
+   if(!isCurrent())return;
+   const rows=read.result||[],current=rows.find(row=>String(row.id)===String(snapshot.id));
+   if(!current?.deleted||!current.blob||localWriteVersion(current)!==localWriteVersion(snapshot))return;
+   if(rows.filter(row=>!row.deleted).length>=MAX_ITEMS){result='full';return}
+   store.put({...current,deleted:false,deletedAt:'',updatedAt:new Date().toISOString(),syncState:'pending',_localWriteRev:newWriteRevision()});
+   result='restored'
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=()=>resolve(result);
+  tx.onerror=()=>reject(tx.error||new Error('تعذرت استعادة الملف من السلة'));
+  tx.onabort=()=>reject(tx.error||new Error('تم إلغاء استعادة الملف من السلة'))
+ })
+}
 
 function addCss(){
   let style=document.createElement('style');style.id='vaultStyle';style.textContent=`
@@ -316,26 +358,33 @@ async function deleteItem(id){if(!requireVault('vaultDelete'))return;
   await refresh();logOperation('delete','نقل إلى سلة المحذوفات: '+item.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
 }
 async function purgeExpiredTrash(){
-  const now=Date.now(),rows=await dbAll();
-  for(const item of rows){
-    if(!item.deleted)continue;
-    const at=Date.parse(item.deletedAt||item.updatedAt||0);
-    if(!Number.isFinite(at)||now-at<TRASH_RETENTION_MS)continue;
-    if(item.syncState==='pending'){if(item.blob)await dbPut({...item,blob:null,size:0});continue}
-    await dbDelete(item.id)
-  }
+ const epoch=vaultSessionEpoch,scope=syncScope();
+ const isCurrent=()=>epoch===vaultSessionEpoch&&scope===syncScope()&&vaultScopeOk(false)&&vaultAllowed('vaultView');
+ const rows=await dbAll();
+ for(const item of rows){
+  if(!isCurrent())return;
+  if(item.deleted)await dbDisposeTrashIfCurrent(item,false,isCurrent)
+ }
 }
 async function restoreTrash(id){if(!requireVault('vaultDelete'))return;
-  const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);if(!item?.blob)return alert('لا يمكن استعادة ملف بلا محتوى محلي. ربما حُذف قبل تفعيل السلة.');if((await dbAll()).filter(x=>!x.deleted).length>=MAX_ITEMS)return alert('الأرشيف ممتلئ (1000 ملف)؛ لا يمكن استعادة هذا الملف قبل إخلاء مكان. سيبقى في السلة دون تغيير.');
-  const now=new Date().toISOString();await dbPut({...item,deleted:false,deletedAt:'',updatedAt:now,syncState:'pending'});
-  state.filter='all';await refresh();logOperation('restore','استعادة من سلة المحذوفات: '+item.name);
-  if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
+ const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);
+ if(!item?.blob)return alert('لا يمكن استعادة ملف بلا محتوى محلي. ربما حُذف قبل تفعيل السلة.');
+ const epoch=vaultSessionEpoch,scope=syncScope();
+ const isCurrent=()=>epoch===vaultSessionEpoch&&scope===syncScope()&&vaultScopeOk(false)&&vaultAllowed('vaultDelete');
+ const result=await dbRestoreTrashIfCurrent(item,isCurrent);
+ if(result==='full')return alert('الأرشيف ممتلئ (1000 ملف)؛ لا يمكن استعادة هذا الملف قبل إخلاء مكان. سيبقى في السلة دون تغيير.');
+ if(result!=='restored')return alert('تغيّر الملف أو الحساب أثناء الاستعادة؛ أعد فتح السلة للتأكد من أحدث نسخة.');
+ state.filter='all';await refresh();logOperation('restore','استعادة من سلة المحذوفات: '+item.name);
+ if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
 }
 async function purgeTrash(id){if(!requireVault('vaultDelete'))return;
-  const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);if(!item)return;
-  if(item.syncState==='pending')return alert('الحذف ما زال بانتظار المزامنة. زامن السجل قبل الحذف النهائي لتجنب عودة الملف من السحابة.');
-  if(!confirm('حذف «'+item.name+'» نهائيًا؟ لا يمكن استعادته بعد ذلك.'))return;
-  await dbDelete(item.id);await refresh();logOperation('delete','حذف نهائي من السلة: '+item.name)
+ const item=state.items.find(x=>String(x.id)===String(id)&&x.deleted);if(!item)return;
+ if(item.syncState==='pending')return alert('الحذف ما زال بانتظار المزامنة. زامن السجل قبل الحذف النهائي لتجنب عودة الملف من السحابة.');
+ if(!confirm('حذف «'+item.name+'» نهائيًا؟ لا يمكن استعادته بعد ذلك.'))return;
+ const epoch=vaultSessionEpoch,scope=syncScope();
+ const removed=await dbDisposeTrashIfCurrent(item,true,()=>epoch===vaultSessionEpoch&&scope===syncScope()&&vaultScopeOk(false)&&vaultAllowed('vaultDelete'));
+ if(removed!=='deleted')return alert('تغيّرت حالة الملف أثناء الحذف؛ أعد فتح السلة قبل المحاولة.');
+ await refresh();logOperation('delete','حذف نهائي من السلة: '+item.name)
 }
 
 async function editItem(id){if(!requireVault('vaultImageEdit'))return;
