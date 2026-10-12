@@ -46,14 +46,54 @@ function renderSelected(){$('selectedList').innerHTML=selected.map((x,i)=>`<div 
 window.moveItem=(i,d)=>{if(processing||saving)return;const j=i+d;if(j<0||j>=selected.length)return;[selected[i],selected[j]]=[selected[j],selected[i]];resetResults();renderSelected()};
 window.removeItem=i=>{if(processing||saving)return;revoke(selected[i]);selected.splice(i,1);resetResults();renderSelected()};
 window.previewOriginal=i=>{const x=selected[i];if(!x)return;$('beforeImg').src=x.url;$('afterImg').removeAttribute('src');$('previewText').textContent=`${x.file.name} • ${fmt(x.file.size)}`;$('preview').classList.add('show')};
-function readDataUrl(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error||new Error('تعذر قراءة الملف'));r.readAsDataURL(file)})}
 function loadImage(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('تعذر فك الصورة'));im.src=src})}
 function blobUrlData(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(blob)})}
 function outType(file){const t=String(file.type||'').toLowerCase(),n=String(file.name||'').toLowerCase();if(t==='image/png'||n.endsWith('.png'))return'image/png';if(t==='image/webp'||n.endsWith('.webp'))return'image/webp';return'image/jpeg'}
 function extFor(mime){return mime==='image/png'?'png':mime==='image/webp'?'webp':'jpg'}
 function assess(w,h,q){const min=Math.min(w,h);if(min>=2400&&q>=.72)return{label:'ممتازة للطباعة',cls:'q-good'};if(min>=1600&&q>=.58)return{label:'جيدة للطباعة',cls:'q-good'};if(min>=1000&&q>=.42)return{label:'متوسطة — راجع المعاينة',cls:'q-mid'};return{label:'ضعيفة للطباعة الكبيرة',cls:'q-bad'}}
 function calcSize(w,h){const maxDim=Number($('maxDimension').value)||0,target=Number($('enhanceTarget')?.value)||0,long=Math.max(w,h);let scale=target>long?Math.min(8,target/long):1;if(maxDim>0)scale=Math.min(scale,maxDim/long);if(w*h*scale*scale>SAFE_MAX_PIXELS)scale=Math.min(scale,Math.sqrt(SAFE_MAX_PIXELS/(w*h)));return{w:Math.max(1,Math.floor(w*scale)),h:Math.max(1,Math.floor(h*scale)),scale}}
-async function compressOne(item,index){const file=item.file,img=await loadImage(item.url),sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;if(!sw||!sh)throw new Error('أبعاد الصورة غير صالحة');if(sw*sh>48_000_000)throw new Error('عدد بكسلات الصورة يتجاوز 48 ميغابكسل؛ صغّر الصورة قبل المعالجة');const size=calcSize(sw,sh),mime=outType(file),canvas=document.createElement('canvas');canvas.width=size.w;canvas.height=size.h;const ctx=canvas.getContext('2d',{alpha:mime!=='image/jpeg'});if(!ctx)throw new Error('تعذر تشغيل محرر الصور');if(mime==='image/jpeg'){ctx.fillStyle='#fff';ctx.fillRect(0,0,size.w,size.h)}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(img,0,0,size.w,size.h);const encode=q=>new Promise((res,rej)=>canvas.toBlob(b=>b?res(b):rej(new Error('تعذر إنشاء النسخة المضغوطة')),mime,mime==='image/png'?undefined:q));let q=Math.max(.2,Math.min(1,Number($('quality').value)/100||.75)),blob=await encode(q);if(mime==='image/jpeg'||mime==='image/webp'){while(blob.size>=file.size&&q>.3){q=Math.max(.3,Number((q-.1).toFixed(2)));blob=await encode(q)}}let unchanged=false;if(blob.size>=file.size&&size.scale===1){unchanged=true;blob=file}if(blob.size>MAX_OUTPUT_BYTES)throw new Error('الملف الناتج يتجاوز 24MB؛ قلل الجودة أو الأبعاد');const enlarged=size.scale>1.001,quality=enlarged?{label:`تكبير ×${size.scale.toFixed(1)} بالاستيفاء فقط — تفاصيل المصدر محدودة`,cls:'q-mid'}:assess(size.w,size.h,mime==='image/png'?1:q),base=safeBase(file.name),name=`${base}_${enlarged?'upscaled':'compressed'}_${index+1}.${extFor(mime)}`;return{id:item.id,name,mime,blob,url:URL.createObjectURL(blob),originalName:file.name,originalBytes:file.size,compressedBytes:blob.size,width:size.w,height:size.h,originalWidth:sw,originalHeight:sh,quality:quality.label,qualityClass:quality.cls,unchanged}}
+async function compressOne(item,index){
+ const file=item.file,img=await loadImage(item.url);
+ const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+ if(!sw||!sh)throw new Error('أبعاد الصورة غير صالحة');
+ if(sw*sh>48_000_000)throw new Error('عدد بكسلات الصورة يتجاوز 48 ميغابكسل؛ صغّر الصورة قبل المعالجة');
+ const size=calcSize(sw,sh),mime=outType(file),canvas=document.createElement('canvas');
+ try{
+  canvas.width=size.w;canvas.height=size.h;
+  const ctx=canvas.getContext('2d',{alpha:mime!=='image/jpeg'});
+  if(!ctx)throw new Error('تعذر تشغيل محرر الصور');
+  if(mime==='image/jpeg'){ctx.fillStyle='#fff';ctx.fillRect(0,0,size.w,size.h)}
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(img,0,0,size.w,size.h);
+  const encode=q=>new Promise((res,rej)=>canvas.toBlob(
+   blob=>blob?res(blob):rej(new Error('تعذر إنشاء النسخة المضغوطة')),
+   mime,mime==='image/png'?undefined:q
+  ));
+  let q=Math.max(.2,Math.min(1,Number($('quality').value)/100||.75)),blob=await encode(q);
+  if(mime==='image/jpeg'||mime==='image/webp'){
+   while(blob.size>=file.size&&q>.3){
+    q=Math.max(.3,Number((q-.1).toFixed(2)));
+    blob=await encode(q)
+   }
+  }
+  let unchanged=false;
+  if(blob.size>=file.size&&size.scale===1){unchanged=true;blob=file}
+  if(blob.size>MAX_OUTPUT_BYTES)throw new Error('الملف الناتج يتجاوز 24MB؛ قلل الجودة أو الأبعاد');
+  const enlarged=size.scale>1.001;
+  const quality=enlarged?{
+   label:`تكبير ×${size.scale.toFixed(1)} بالاستيفاء فقط — تفاصيل المصدر محدودة`,cls:'q-mid'
+  }:assess(size.w,size.h,mime==='image/png'?1:q);
+  const base=safeBase(file.name),name=`${base}_${enlarged?'upscaled':'compressed'}_${index+1}.${extFor(mime)}`;
+  return{id:item.id,name,mime,blob,url:URL.createObjectURL(blob),
+   originalName:file.name,originalBytes:file.size,compressedBytes:blob.size,
+   width:size.w,height:size.h,originalWidth:sw,originalHeight:sh,
+   quality:quality.label,qualityClass:quality.cls,unchanged}
+ }finally{
+  // Free canvas backing-store after success, failed encoding, or cancellation.
+  canvas.width=0;canvas.height=0;
+  img.onload=null;img.onerror=null;img.src=''
+ }
+}
 function renderResults(){$('results').innerHTML=results.map((r,i)=>{if(r.error)return`<div class="item"><div style="font-size:25px">⚠️</div><div class="meta"><b>${esc(r.originalName)}</b><small class="q-bad">${esc(r.error)}</small></div></div>`;const saved=r.originalBytes-r.compressedBytes,pct=r.originalBytes?Math.round(saved/r.originalBytes*100):0;return`<div class="item"><img src="${r.url}" onclick="showResult(${i})"><div class="meta"><b>${esc(r.name)}</b><small>${fmt(r.originalBytes)} ← ${fmt(r.compressedBytes)} ${saved>=0?`• توفير ${pct}%`:''}<br>${r.width}×${r.height}</small><div class="quality ${r.qualityClass}">${esc(r.quality)}${r.unchanged?' • الأصل أصغر فتم الإبقاء عليه':''}</div></div><div class="actions"><button onclick="showResult(${i})">👁</button><button onclick="saveOneResult(${i})">💾</button></div></div>`}).join('');$('saveBar').classList.toggle('show',results.some(r=>!r.error));if(results.some(r=>!r.error))window.showResult(results.findIndex(r=>!r.error));}
 window.showResult=i=>{const r=results[i];if(!r||r.error)return;const src=selected.find(x=>x.id===r.id);$('beforeImg').src=src?.url||'';$('afterImg').src=r.url;$('previewText').textContent=`${r.originalName}: ${fmt(r.originalBytes)} → ${fmt(r.compressedBytes)} • ${r.width}×${r.height} • ${r.quality}`;$('preview').classList.add('show')};
 async function processAll(){if(!selected.length||processing)return;processing=true;cancelRequested=false;resetResults();lockProcessingControls(true);$('processBtn').disabled=true;$('cancelWrap').style.display='grid';$('cancelBtn').textContent='إلغاء المعالجة';let ok=0,fail=0,orig=0,out=0;for(let i=0;i<selected.length;i++){if(cancelRequested)break;$('progress').textContent=`معالجة ${i+1} من ${selected.length}...`;try{const r=await compressOne(selected[i],i);if(out+r.compressedBytes>MAX_TOTAL_OUTPUT_BYTES){revoke(r);throw new Error('النتائج تتجاوز 96MB؛ احفظ هذه المجموعة وابدأ مجموعة أخرى')}results.push(r);ok++;orig+=r.originalBytes;out+=r.compressedBytes}catch(e){results.push({id:selected[i].id,originalName:selected[i].file.name,error:String(e?.message||e)});fail++}await new Promise(r=>setTimeout(r,0))}processing=false;lockProcessingControls(false);$('cancelWrap').style.display='none';$('processBtn').disabled=!selected.length;renderResults();$('summary').textContent=cancelRequested?`تم الإلغاء. أُنجزت ${ok} صورة قبل الإلغاء.`:`نجح: ${ok}${fail?` • تعذر: ${fail}`:''} • قبل: ${fmt(orig)} • بعد: ${fmt(out)}${orig?` • التوفير: ${Math.max(0,Math.round((orig-out)/orig*100))}%`:''}`;$('summary').classList.add('show');$('progress').textContent=''}
