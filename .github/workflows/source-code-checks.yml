@@ -3,7 +3,7 @@ name: Source code checks (no APK build)
 on:
   push:
     branches: [main]
-    paths: &source_paths
+    paths:
       - '.github/workflows/**'
       - 'web/**'
       - 'tools/**'
@@ -18,9 +18,9 @@ on:
       - 'eas.json'
       - 'AGENTS.md'
       - 'docs/PROJECT-MASTER-SPEC.md'
+  # All PRs must receive source verification, regardless of modified paths.
   pull_request:
     branches: [main]
-    paths: *source_paths
   workflow_dispatch:
 
 permissions:
