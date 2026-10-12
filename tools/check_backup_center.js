@@ -20,4 +20,18 @@ for(const m of ['ready boolean not null default false','committed_at timestamptz
 for(const m of ['abu_bassam_backups_direct_deny','as restrictive','for all','using (false)','with check (false)'])need(deny,m,'direct deny '+m);
 forbid(runtime,'service_role','client service role marker');
 forbid(runtime,'SUPABASE_SERVICE_ROLE_KEY','client server key');
+
+need(runtime,'MAX_ITEMS=1000,MAX_BACKUP_RECORDS=2000','active archive capacity must be distinct from trash snapshot capacity');
+need(edge,'MAX_BACKUP_RECORDS=2000','backup server must accept trash-inclusive 2000-record snapshots');
+need(edge,'count>MAX_BACKUP_RECORDS','backup server must enforce its explicit total-record cap');
+const capRule=runtime.match(/if\((items\.filter\(item=>!item\.deleted\)\.length>MAX_ITEMS\|\|items\.length>MAX_BACKUP_RECORDS)\)throw Error/);
+if(!capRule)throw new Error('backup center check failed: expected canonical trash-aware active and total count checks');
+const tooLarge=new Function('items','MAX_ITEMS','MAX_BACKUP_RECORDS','return '+capRule[1]);
+const live=Array.from({length:1000},(_,i)=>({id:'active-'+i,deleted:false}));
+const trash=Array.from({length:1000},(_,i)=>({id:'deleted-'+i,deleted:true}));
+if(tooLarge([...live,trash[0]],1000,2000))throw new Error('backup center check failed: 1000 active plus one trash record must be backed up');
+if(tooLarge([...live,...trash],1000,2000))throw new Error('backup center check failed: 2000 records must be backed up');
+if(!tooLarge([...live,{id:'live-over-limit',deleted:false}],1000,2000))throw new Error('backup center check failed: 1001 active files must be refused');
+if(!tooLarge([...live,...trash,{id:'trash-over-limit',deleted:true}],1000,2000))throw new Error('backup center check failed: more than 2000 records must be refused');
+
 console.log('backup center checks passed: scoped state, real blob validation, SecureStore-only identity, server-side multipart SHA-256 commit verification, safe pre-restore ordering, branch scope, retention after successful restore, and direct metadata/storage denial.');
