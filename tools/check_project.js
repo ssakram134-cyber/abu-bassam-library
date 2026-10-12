@@ -51,7 +51,9 @@ const native=readRoot('index.js');for(const t of [
   'if (imagePages.length > 20)','const encodedNameMatch = raw.match(/;name=([^;]+);base64,/i);'
 ])has(native,t,'index.js');
 for(const t of ["originWhitelist={['*']}",'mixedContentMode="always"'])forbid(native,t,'index.js');
-for(const t of ['Print.printAsync','Print.printToFileAsync','StorageAccessFramework.createFileAsync'])has(native,t,'native print/export');
+for(const t of ['Print.printAsync','Print.printToFileAsync','writeSafFile('])has(native,t,'native print/export');
+const safWriter=native.match(/async function writeSafFile\([\s\S]*?\n\}/)?.[0]||'';
+for(const t of ['const saf = FileSystem.StorageAccessFramework;','await saf.createFileAsync(','await saf.writeAsStringAsync(','await saf.deleteAsync('])has(safWriter,t,'native SAF write/rollback');
 const workflow=readRoot('.github/workflows/android.yml');for(const t of ['npm ci --no-audit --no-fund','npm run check:web','assembleRelease','assets/index.android.bundle','apksigner','sha256sum'])has(workflow,t,'android workflow');
 const deviceLimit=readRoot('supabase/migrations/202609240009_strict_device_registration_identity.sql');for(const t of ['pg_advisory_xact_lock','DEVICE_LIMIT_REACHED',"v_role:=case when v_count=0 then 'owner' else 'secondary' end","if v_row.active=false then raise exception 'DEVICE_DISABLED'"])has(deviceLimit,t,'strict device migration');
 const configurable=readRoot('supabase/migrations/202609240001_configurable_device_limit.sql');for(const t of ['device_limit between 1 and 50','abu_bassam_set_device_limit','DEVICE_LIMIT_BELOW_CURRENT_COUNT'])has(configurable,t,'device limit migration');
