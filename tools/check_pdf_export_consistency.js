@@ -10,7 +10,9 @@ for(const marker of [
  'const unchanged=()=>pagePrintMeta===revision',
  'pages.every((cv,i)=>pageCanvases[i]===cv',
  'ensureCurrent();',
- 'if(imageBytes>28*1024*1024)'
+ 'if(imageBytes>28*1024*1024)',
+ 'if(makePdfDataAsync.busy)throw new Error(',
+ '}finally{makePdfDataAsync.busy=false}'
 ])assert.ok(source.includes(marker),'PDF revision or size contract missing: '+marker);
 
 let cases=0;
@@ -82,6 +84,31 @@ function harness(first,second,{onYield=()=>{},scaledLimit=false}={}){
  const afterChange=await short.run();
  check(afterChange==='pdf'&&short.images.map(v=>String.fromCharCode(v)).join('')==='C',
   'Rebuilding before export begins must use the fresh snapshot normally');
+
+ let releaseExport=null;
+ const delayed={
+  width:100,height:120,
+  toBlob(done){releaseExport=()=>done({arrayBuffer:async()=>Uint8Array.of(255,216,65,255,217).buffer})}
+ };
+ const serial=harness(delayed,canvas('B'));
+ const ongoing=serial.run();
+ await assert.rejects(serial.run(),/يُنشأ PDF حالياً/);
+ check(serial.images.length===0&&!serial.events.includes('output'),
+  'Second request must fail while the previous PDF has a pending JPEG callback');
+ releaseExport();
+ await ongoing;
+ check(serial.images.map(v=>String.fromCharCode(v)).join('')==='AB',
+  'Original export must complete normally after rejecting a duplicate request');
+ await assert.rejects(serial.run(),/يُنشأ PDF حالياً/).catch(()=>{});
+ // The first call has completed: the exporter must not remain stuck as busy.
+ const released=harness(canvas('C'),canvas('D'));
+ await released.run();
+ check(released.events.includes('output'),'A completed export must allow subsequent generation');
+ const failures=harness({width:100,height:120,toBlob:done=>done(null)},canvas('B'));
+ await assert.rejects(failures.run(),/تعذر ترميز إحدى صفحات PDF/);
+ await assert.rejects(failures.run(),/تعذر ترميز إحدى صفحات PDF/);
+ check(!failures.events.includes('output'),
+  'After a JPEG encoding failure, a subsequent attempt must fail on encoding, not a stale busy lock');
  console.log('PDF export revision checks passed: '+cases+
   ' cases; mixed generations, paper mutation, freed canvases and size limit fail closed.')
 })().catch(e=>{console.error(e);process.exitCode=1});
