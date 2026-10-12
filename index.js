@@ -493,7 +493,7 @@ function App() {
     if (message.type === 'openExternal') return openExternal(message);
     if (message.type === 'openAppSettings') return openAppSettings();
     if (message.type === 'getDeviceInfo') return getDeviceInfo();
-    if (message.type === 'cleanCache') return cleanCache();
+    if (message.type === 'cleanCache') return runNativeExport(nativeExportBusyRef, () => cleanCache());
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
   }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
