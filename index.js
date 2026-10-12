@@ -369,12 +369,13 @@ function App() {
       const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
+      return { status: 'submitted' };
+    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, []);
 
   const printHtml = useCallback(async ({ html }) => {
-    try { if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة'); await Print.printAsync({ html: String(html) }); }
-    catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
+    try { if (!String(html || '').trim()) throw new Error('لا توجد كروت للطباعة'); await Print.printAsync({ html: String(html) }); return { status: 'submitted' }; }
+    catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
@@ -421,7 +422,7 @@ function App() {
       if (finalMime.startsWith('image/')) {
         if (!parsed.mime.startsWith('image/')) throw new Error('نوع الصورة لا يطابق بيانات الملف');
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
-        await Print.printAsync({ html }); return;
+        await Print.printAsync({ html }); return { status: 'submitted' };
       }
       // expo-print accepts a URI only for PDF files, never for DOCX/XLSX/ZIP or text.
       // Fail before writing a temporary file, so unsupported print requests cannot
@@ -430,8 +431,8 @@ function App() {
         throw new Error('الطباعة المباشرة متاحة لملفات PDF والصور فقط. احفظ ملف Word أو Excel وافتحه في التطبيق المناسب للطباعة.');
       }
       const file = await writeTemporaryFile(name, finalMime, data);
-      try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
+      try { await Print.printAsync({ uri: file.uri }); return { status: 'submitted' }; } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
+    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, [writeTemporaryFile]);
 
   const openExternal = useCallback(async ({ url }) => {
