@@ -1,5 +1,6 @@
 'use strict';
 const fs=require('node:fs'),assert=require('node:assert/strict'),{TextEncoder}=require('node:util');
+const ActualJSZip=require('../web/jszip.min.js');
 const source=fs.readFileSync('web/document-vault-hardening-runtime.js','utf8');
 for(const token of [
  'function validateZipCatalog(zip)',
@@ -89,5 +90,29 @@ async function rejectIntegrity(label){
   'Generating a ZIP must reject filename collisions caused by sanitizing IDs');
  checks++;
  window.records=[];
- console.log('Vault ZIP integrity checks passed: '+checks+' cases (sizes, CRC32, paths, encrypted header, manifest, settings, backup path collision).')
+ 
+ const crcStart=source.indexOf('const CRC32_TABLE=');
+ const crcEnd=source.indexOf('async function readValidatedBackupSettings(',crcStart);
+ assert.ok(crcStart>=0&&crcEnd>crcStart,'Cannot isolate actual ZIP CRC checker');
+ const verifyCRC=new Function('setTimeout',source.slice(crcStart,crcEnd)+';return verifyZipEntryCrc')(callback=>Promise.resolve().then(callback));
+ const actualZip=new ActualJSZip();
+ const payload='UNIQUE_ARCHIVE_PAYLOAD_FOR_CRC_2026';
+ actualZip.file(entryPath,payload);
+ const packed=await actualZip.generateAsync({type:'uint8array',compression:'STORE'});
+ const goodZip=await ActualJSZip.loadAsync(packed);
+ const actualEntry=goodZip.file(entryPath);
+ await verifyCRC(await actualEntry.async('blob'),actualEntry);
+ checks++;
+ const altered=packed.slice(),pattern=new TextEncoder().encode(payload);
+ let located=-1;
+ for(let i=0;i<=altered.length-pattern.length;i++){
+  if(pattern.every((x,j)=>altered[i+j]===x)){located=i;break}
+ }
+ assert.ok(located>=0,'Unable to locate uncompressed payload in actual JSZip archive');
+ altered[located+3]^=1;
+ const badZip=await ActualJSZip.loadAsync(altered,{checkCRC32:false});
+ const badEntry=badZip.file(entryPath);
+ await assert.rejects(async()=>verifyCRC(await badEntry.async('blob'),badEntry),/CRC32/,'Modified ZIP payload must fail CRC verification');
+ checks++;
+console.log('Vault ZIP integrity checks passed: '+checks+' cases (sizes, CRC32, paths, encrypted header, manifest, settings, backup path collision).')
 })().catch(error=>{console.error(error);process.exitCode=1});
