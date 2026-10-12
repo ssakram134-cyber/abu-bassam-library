@@ -6,7 +6,7 @@ const native=fs.readFileSync(path.join(__dirname,'..','index.js'),'utf8');
 const bridge=native.match(/const ANDROID_BRIDGE = \x60([\s\S]*?)\x60;/)?.[1];
 const printSource=native.match(/  const printPages = useCallback\([\s\S]*?\n  \}, \[\]\);/)?.[0];
 const inbox=native.match(/  const onWebMessage = useCallback\([\s\S]*?\n  \}, \[[^\n]+\]\);/)?.[0];
-const mutexSource=native.match(/async function runNativeExportOnce\(inFlight, kind, execute\) \{[\s\S]*?\n\}/)?.[0];
+const mutexSource=native.match(/async function runNativeExportOnce\(inFlight, kind, execute, message, report\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(mutexSource,'Native export re-entry guard exists');
 const runNativeExportOnce=new Function(mutexSource+'\nreturn runNativeExportOnce')();
 assert.ok(bridge&&printSource&&inbox,'Native WebView functions exist');
