@@ -40,9 +40,13 @@ function fixture(){
   'savePagesToGallery','printPages','printBase64','printHtml','savePdfHtml','shareBase64',
   'openExternal','openAppSettings','getDeviceInfo','cleanCache','handleSecurity','BackHandler'];
  const parameters={useCallback:x=>x,Alert,MAX_NATIVE_MESSAGE_CHARS:256,nativeExportBusyRef:busy,runNativeExport,...callback};
- const onWebMessage=new Function(...args,inbox+';return onWebMessage')(...args.map(x=>parameters[x]));
+ let parses=0;
+ const parser={parse:text=>{parses++;return JSON.parse(text)}};
+ // Reduce the large-message threshold only inside the test fixture.
+ const testInbox=inbox.replace('raw.length > 1024','raw.length > 96');
+ const onWebMessage=new Function('JSON',...args,testInbox+';return onWebMessage;')(parser,...args.map(x=>parameters[x]));
  return {dispatch:(type)=>onWebMessage({nativeEvent:{data:JSON.stringify({type})}}),
-  dispatchRaw:raw=>onWebMessage({nativeEvent:{data:raw}}),activities,alerts,pending,busy};
+  dispatchRaw:raw=>onWebMessage({nativeEvent:{data:raw}}),parseCount:()=>parses,activities,alerts,pending,busy};
 }
 async function check(){
  const f=fixture();
@@ -53,12 +57,17 @@ async function check(){
  assert.deepEqual(f.activities,['printPages'],'Rejected request must not call other exporter');
  const destructiveCleanup=await f.dispatch('cleanCache');
  assert.equal(destructiveCleanup,false,'Cache cleanup must not delete a PDF while printing');
+ const beforeRejectedParse=f.parseCount();
+ const earlyRejected=await f.dispatchRaw(JSON.stringify({type:'saveBase64',data:'x'.repeat(140)}));
+ assert.equal(earlyRejected,false,'Overlapping large file must fail before parsing');
+ assert.equal(f.parseCount(),beforeRejectedParse,'A second large export must not allocate parsed JSON while busy');
  assert.ok(!f.activities.includes('cleanCache'),'No cleanup is allowed before print releases temporary files');
  assert.ok(f.alerts.some(a=>a[0].includes('عملية حفظ أو طباعة جارية')));
  await f.dispatch('getDeviceInfo');
  await f.dispatch('security');
+ await f.dispatchRaw(JSON.stringify({type:'security',payload:{requestId:'r',note:'a'.repeat(140)}}));
  await f.dispatch('webBootReady');
- assert.deepEqual(f.activities,['printPages','device','security','ready'],
+ assert.deepEqual(f.activities,['printPages','device','security','security','ready'],
   'Lightweight device and security messages must stay responsive');
  f.pending[0].resolve('printed');
  assert.equal(await first,'printed');
