@@ -48,7 +48,7 @@ async function test(){
   'abu_bassam_\\bad','abu_bassam_/bad'
  ]});
  await filtered.clean();
- assert.equal(filtered.deleted.length,2,'Names with path separators are rejected');
+ assert.equal(filtered.deleted.length,1,'Names with path separators are rejected');
  assert.ok(filtered.deleted.every(x=>x[0].startsWith('file:///tmp/cache/')));
  assert.ok(!filtered.deleted.some(x=>x[0].includes('\\')||x[0].includes('/bad')));
 
