@@ -48,8 +48,69 @@ function retention(){return Math.max(1,Math.min(30,Number(stateGet(KEEP)||7)||7)
 function cadence(){return['daily','weekly','manual'].includes(stateGet(CAD)||'daily')?stateGet(CAD)||'daily':'daily'}
 function auto(){return stateGet(AUTO)!=='0'}
 function due(){if(!auto()||cadence()==='manual'||!navigator.onLine||!cloud()?.isConnected?.()||!can('backupCreate'))return false;const retryAt=Number(stateGet(RETRY)||0);if(retryAt&&Date.now()<retryAt)return false;const last=Number(stateGet(LAST)||0),ms=cadence()==='weekly'?7*86400000:86400000;return !last||Date.now()-last>=ms}
-async function backupNow(kind='manual',force=false){if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');const required=kind==='pre_restore'?'backupRestore':'backupCreate';if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');busy=true;status('جاري فحص التغييرات...');try{const fp=await fingerprint();if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){stateSet(LAST,String(Date.now()));stateRemove(LASTERR);status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');return{skipped:true}}status('جاري إنشاء Snapshot...');const pkg=await packageBytes(),sha=await digest(pkg.bytes),parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK)),plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});for(let i=0;i<plan.uploads.length;i++){status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK),blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob)}status('التحقق من اكتمال النسخة...');await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);stateRemove(LASTERR);stateRemove(RETRY);log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',`${pkg.count} عنصر • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');await refreshList();return{ok:true,backup_id:plan.backup_id}}
-catch(e){const m=String(e?.message||e);stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000));status('فشل النسخ: '+m);log('backup','فشل النسخ الاحتياطي',m);throw e}finally{busy=false;paint()}}
+async function backupNow(kind='manual',force=false){
+ if(busy)throw Error('توجد عملية نسخ احتياطي قيد التنفيذ');
+ const required=kind==='pre_restore'?'backupRestore':'backupCreate';
+ if(!can(required))throw Error(kind==='pre_restore'?'الأدمن عطّل الاستعادة لهذا الفرع':'الأدمن عطّل إنشاء النسخ لهذا الفرع');
+ const initialScope=stateScope();
+ const requireScope=()=>{
+  if(stateScope()!==initialScope||!can(required))
+   throw Error('تغيّر الحساب أو الفرع أو الصلاحيات أثناء النسخ؛ أُلغي الرفع حفاظًا على البيانات.')
+ };
+ busy=true;status('جاري فحص التغييرات...');
+ let committed=false;
+ try{
+  requireScope();
+  const fp=await fingerprint();
+  requireScope();
+  if(!force&&kind==='automatic'&&fp===stateGet(LASTFP)){
+   stateSet(LAST,String(Date.now()));stateRemove(LASTERR);
+   status('لا تغييرات منذ آخر نسخة • تم تحديث الفحص');
+   return{skipped:true}
+  }
+  status('جاري إنشاء Snapshot...');
+  const pkg=await packageBytes();
+  requireScope();
+  // File edits during ZIP compression must not be recorded under the earlier
+  // fingerprint, otherwise future automatic backups can be skipped incorrectly.
+  const confirmedFp=await fingerprint();
+  requireScope();
+  if(confirmedFp!==fp)throw Error('تغيّرت ملفات الأرشيف أثناء تجهيز النسخة؛ أعد المحاولة بعد اكتمال التعديل.');
+  const sha=await digest(pkg.bytes);
+  requireScope();
+  const parts=Math.max(1,Math.ceil(pkg.bytes.byteLength/CHUNK));
+  const plan=await api('plan','POST',{sha256:sha,size_bytes:pkg.bytes.byteLength,item_count:pkg.count,part_count:parts,backup_kind:kind,encrypted:false,app_version:APP});
+  requireScope();
+  for(let i=0;i<plan.uploads.length;i++){
+   requireScope();
+   status(`رفع الجزء ${i+1} من ${plan.uploads.length}...`);
+   const start=i*CHUNK,end=Math.min(pkg.bytes.byteLength,start+CHUNK);
+   const blob=new Blob([pkg.bytes.slice(start,end)],{type:'application/octet-stream'});
+   await uploadPart(plan.uploads[i].path,plan.uploads[i].token,blob);
+   requireScope()
+  }
+  status('التحقق من اكتمال النسخة...');
+  await api('commit','POST',{backup_id:plan.backup_id,retention:retention()});
+  committed=true;
+  requireScope();
+  stateSet(LAST,String(Date.now()));stateSet(LASTFP,fp);
+  stateRemove(LASTERR);stateRemove(RETRY);
+  log('backup',kind==='automatic'?'نسخة سحابية تلقائية':'نسخة سحابية يدوية',
+   `${pkg.count} عنصر • ${fmt(pkg.bytes.byteLength)} • SHA-256 ${sha.slice(0,12)}…`);
+  status('اكتملت النسخة السحابية وتحقق الخادم منها ✓');
+  await refreshList();
+  return{ok:true,backup_id:plan.backup_id}
+ }catch(e){
+  const m=String(e?.message||e);
+  // Never write a previous user's error/retry deadline into the new scope.
+  if(stateScope()===initialScope){
+   if(!committed){stateSet(LASTERR,m);stateSet(RETRY,String(Date.now()+30*60000))}
+   status(committed?'اكتملت نسخة على الخادم؛ تعذرت خطوات ما بعد التحقق':'فشل النسخ: '+m);
+   log('backup',committed?'ملاحظة بعد اكتمال النسخ':'فشل النسخ الاحتياطي',m)
+  }
+  throw e
+ }finally{busy=false;paint()}
+}
 async function downloadBytes(id){
  const d=await api('download','GET',null,`&backup_id=${encodeURIComponent(id)}`);
  const total=Number(d.backup?.size_bytes),parts=d.parts;
