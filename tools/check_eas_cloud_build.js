@@ -9,6 +9,7 @@ const pkg=JSON.parse(read('package.json'));
 const app=JSON.parse(read('app.json'));
 const ignored=read('.gitignore').split(/\r?\n/);
 const prepare=read('scripts/prepare-android-assets.mjs');
+const native=read('index.js');
 const actions=read('.github/workflows/android.yml');
 const pinned=read('config/release-signing-certificate.sha256').trim();
 const verifier=read('scripts/verify-eas-android-apk.mjs');
@@ -29,6 +30,8 @@ for(const marker of ['--print-certs','assets/index.android.bundle','fingerprints
  'APK was signed with a different key','APK SHA-256: ']) {
   assert.ok(verifier.includes(marker),'EAS production verification missing '+marker);
 }
+assert.ok(native.includes("const APP_URL = 'file:///android_asset/library/index.html';"),
+  'Android WebView must open the exact offline index path that is copied to the APK');
 assert.ok(prepare.includes("resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library')"),'Assets must be bundled in Android');
 assert.ok(prepare.includes('await cp(source, destination, { recursive: true, force: true });'),'Copy canonical web assets');
 assert.ok(prepare.includes('Offline OCR assets (Arabic + English) are embedded'),'Offline OCR must remain bundled');
