@@ -11,6 +11,7 @@ const ignored=read('.gitignore').split(/\r?\n/);
 const prepare=read('scripts/prepare-android-assets.mjs');
 const actions=read('.github/workflows/android.yml');
 const pinned=read('config/release-signing-certificate.sha256').trim();
+const verifier=read('scripts/verify-eas-android-apk.mjs');
 const profile=eas.build?.['production-apk'];
 assert.ok(profile,'Only explicit production-apk profile should be used for existing installations');
 assert.equal(profile.credentialsSource,'local','Do not auto-generate a new EAS signing key');
@@ -21,6 +22,11 @@ assert.equal(eas.cli?.appVersionSource,'local');
 assert.equal(app.expo.android.package,'com.abubassam.librarycamera3');
 assert.equal(app.expo.android.versionCode,432);
 assert.equal(pkg.scripts['eas-build-post-install'],'node scripts/prepare-android-assets.mjs');
+assert.equal(pkg.scripts['eas-build-on-success'],'node scripts/verify-eas-android-apk.mjs');
+for(const marker of ['--print-certs','assets/index.android.bundle','fingerprints[0] !== baseline',
+ 'APK was signed with a different key','APK SHA-256: ']) {
+  assert.ok(verifier.includes(marker),'EAS production verification missing '+marker);
+}
 assert.ok(prepare.includes("resolve(projectRoot, 'android', 'app', 'src', 'main', 'assets', 'library')"),'Assets must be bundled in Android');
 assert.ok(prepare.includes('await cp(source, destination, { recursive: true, force: true });'),'Copy canonical web assets');
 assert.ok(prepare.includes('Offline OCR assets (Arabic + English) are embedded'),'Offline OCR must remain bundled');
