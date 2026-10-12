@@ -9,7 +9,28 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('تعذر فتح الأرشيف'))})}
 function permitted(key){const branch=window.AbuBassamBranchVault;if(branch?.localScopeOk?.(false)!==true)return false;return window.AbuBassamSecurity?.role?.()==='owner'||branch.allowed?.(key)===true}
 async function getItem(id){const db=await openDb();return new Promise((resolve,reject)=>{const r=db.transaction(STORE,'readonly').objectStore(STORE).get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
-async function putItem(item){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+function itemRevision(item){return String(item?._localWriteRev??'')}
+function newWriteRevision(){return globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
+async function putItem(item,expected=null){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  let conflict=null;
+  const read=store.get(item.id);
+  read.onsuccess=()=>{
+   const current=read.result;
+   if(expected?(!current||itemRevision(current)!==itemRevision(expected)):!!current){
+    conflict=new Error('تم تعديل الملف أثناء التحرير؛ لم يُستبدل التعديل الأحدث. افتح الملف مجددًا أو احفظ نسخة مستقلة.');
+    tx.abort();return
+   }
+   store.put({...item,_localWriteRev:newWriteRevision()})
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(conflict||tx.error||new Error('تعذر حفظ الصورة المتقدمة'));
+  tx.onabort=()=>reject(conflict||tx.error||new Error('تم إلغاء حفظ الصورة المتقدمة'))
+ })
+}
 function addCss(){if($('abuVaultAdvancedCss'))return;const s=document.createElement('style');s.id='abuVaultAdvancedCss';s.textContent=`
 .abu-vault-advanced-btn{background:#5b43d6!important;color:#fff!important}.ava-modal{position:fixed;z-index:37000;inset:0;background:#000d;display:none;align-items:center;justify-content:center;padding:8px}.ava-modal.show{display:flex}.ava-dialog{width:min(900px,100%);max-height:96vh;overflow:auto;background:#f8f5ef;border-radius:18px;color:#211c18}.ava-head{position:sticky;top:0;z-index:9;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#075b4d;color:#fff}.ava-head b{font-size:12px}.ava-head small{display:block;font-size:8px;margin-top:2px;opacity:.9}.ava-close{width:36px;height:36px;border:0;border-radius:50%;background:#fff2;color:#fff;font-size:22px}.ava-body{padding:10px}.ava-modes,.ava-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:8px 0}.ava-modes button,.ava-actions button{min-height:40px;border:0;border-radius:10px;background:#087f72;color:#fff;font-weight:900;font-size:9px}.ava-modes button.active{background:#5b43d6}.ava-actions button.alt{background:#695548}.ava-actions button.warn{background:#a45d19}.ava-stage-wrap{display:flex;justify-content:center;overflow:auto;background:#171717;border-radius:13px;padding:8px}.ava-stage{position:relative;display:inline-block;line-height:0;max-width:100%}.ava-stage canvas{display:block;max-width:100%;height:auto;border-radius:7px;background:#fff}.ava-crop{position:absolute;border:2px solid #ff8a00;box-shadow:0 0 0 9999px #0007;touch-action:none;cursor:move}.ava-crop .h,.ava-point{position:absolute;width:18px;height:18px;border-radius:50%;background:#ff8a00;border:2px solid #fff;touch-action:none;z-index:5}.ava-crop .nw{left:-9px;top:-9px}.ava-crop .ne{right:-9px;top:-9px}.ava-crop .se{right:-9px;bottom:-9px}.ava-crop .sw{left:-9px;bottom:-9px}.ava-perspective{position:absolute;inset:0;display:none;pointer-events:none}.ava-perspective svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}.ava-perspective polygon{fill:#0ea5e922;stroke:#38bdf8;stroke-width:1.2;vector-effect:non-scaling-stroke}.ava-point{transform:translate(-50%,-50%);background:#0ea5e9;pointer-events:auto}.ava-controls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}.ava-controls label{font-size:8px;font-weight:900;color:#62564d}.ava-controls input,.ava-controls select{width:100%;margin-top:4px}.ava-hint{font-size:8px;line-height:1.7;color:#72665e;background:#fff;border-radius:10px;padding:8px;margin-top:8px}.ava-status{text-align:center;font-size:9px;font-weight:900;color:#087f72;min-height:18px;margin-top:6px}@media(max-width:430px){.ava-controls{grid-template-columns:1fr}.ava-modes,.ava-actions{grid-template-columns:1fr 1fr}}
 `;document.head.appendChild(s)}
@@ -52,12 +73,13 @@ async function save(){
   const blob=await new Promise(res=>out.toBlob(res,'image/png'));
   if(!blob)throw new Error('تعذر إنشاء الصورة المعدلة');
   const item=await getItem(st.id);if(!item||item.deleted)throw new Error('تعذر العثور على الملف الأصلي');
+   if(choice==='2'&&itemRevision(item)!==itemRevision(st.item))throw new Error('تغيّر الملف الأصلي منذ فتح محرر الصور. أعد فتحه أو اختر حفظ نسخة مستقلة.');
   const now=new Date().toISOString(),name=String(item.name||'صورة').replace(/\.[^.]+$/,'');
   const next=choice==='1'
    ? {...item,id:globalThis.crypto?.randomUUID?.()||'edited-'+Date.now()+'-'+Math.random().toString(36).slice(2),name:name+' (نسخة معدلة).png',createdAt:now,lastOpenedAt:'',deleted:false,deletedAt:'',remoteUpdatedAt:'',blob,mime:'image/png',size:blob.size,updatedAt:now,syncState:'pending',advancedEditedAt:now}
    : {...item,name:name+'.png',blob,mime:'image/png',size:blob.size,updatedAt:now,syncState:'pending',advancedEditedAt:now};
   if(epoch!==sessionEpoch||!permitted(choice==='1'?'vaultAdd':'vaultImageEdit'))throw new Error('تغير الحساب أو انتهت صلاحية حفظ الملف');
-  await putItem(next);
+  await putItem(next,choice==='2'?item:null);
   try{window.AbuBassamOps?.add?.({type:'edit',title:choice==='1'?'نسخة معدلة مع الحفاظ على الأصل':'استبدال صورة بعد التأكيد',details:next.name,section:'الحفظ والمستندات'})}catch(e){}
   close();await window.DocumentVault?.onShow?.();alert(choice==='1'?'تم حفظ نسخة جديدة مع الاحتفاظ بالأصل ✓':'تم استبدال الصورة وفق اختيارك ✓')
  }catch(e){status('تعذر الحفظ: '+(e.message||e));alert(e.message||'تعذر حفظ التعديل')}finally{btn.disabled=false}
