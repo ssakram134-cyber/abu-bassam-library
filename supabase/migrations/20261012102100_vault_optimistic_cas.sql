@@ -108,6 +108,25 @@ revoke all on function public.abu_bassam_vault_upsert_cas(text,text,text,jsonb,t
 grant execute on function public.abu_bassam_vault_upsert_cas(text,text,text,jsonb,timestamptz)
   to authenticated;
 
+-- The client can check capability before issuing a signed Storage upload.
+-- This is deployed in the same migration transaction as the CAS writer.
+create or replace function public.abu_bassam_vault_cas_ready(
+  p_device_id text,
+  p_device_secret text
+) returns boolean
+language sql
+stable
+security definer
+set search_path to 'pg_catalog', 'extensions'
+as $function$
+  select public._abu_bassam_vault_authorized(p_device_id, p_device_secret, 'vaultSync');
+$function$;
+
+revoke all on function public.abu_bassam_vault_cas_ready(text,text)
+  from public, anon, authenticated;
+grant execute on function public.abu_bassam_vault_cas_ready(text,text)
+  to authenticated;
+
 -- Fail closed for older clients that do not transmit a base revision.
 -- Deployment must be coordinated with a client update; no silent fallback to last-writer-wins.
 revoke execute on function public.abu_bassam_vault_upsert(text,text,text,jsonb)
