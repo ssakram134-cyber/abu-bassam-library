@@ -91,7 +91,7 @@ async function compressOne(item,index){
  }finally{
   // Free canvas backing-store after success, failed encoding, or cancellation.
   canvas.width=0;canvas.height=0;
-  img.onload=null;img.onerror=null;img.src=''
+  img.onload=null;img.onerror=null;img.removeAttribute('src')
  }
 }
 function renderResults(){$('results').innerHTML=results.map((r,i)=>{if(r.error)return`<div class="item"><div style="font-size:25px">⚠️</div><div class="meta"><b>${esc(r.originalName)}</b><small class="q-bad">${esc(r.error)}</small></div></div>`;const saved=r.originalBytes-r.compressedBytes,pct=r.originalBytes?Math.round(saved/r.originalBytes*100):0;return`<div class="item"><img src="${r.url}" onclick="showResult(${i})"><div class="meta"><b>${esc(r.name)}</b><small>${fmt(r.originalBytes)} ← ${fmt(r.compressedBytes)} ${saved>=0?`• توفير ${pct}%`:''}<br>${r.width}×${r.height}</small><div class="quality ${r.qualityClass}">${esc(r.quality)}${r.unchanged?' • الأصل أصغر فتم الإبقاء عليه':''}</div></div><div class="actions"><button onclick="showResult(${i})">👁</button><button onclick="saveOneResult(${i})">💾</button></div></div>`}).join('');$('saveBar').classList.toggle('show',results.some(r=>!r.error));if(results.some(r=>!r.error))window.showResult(results.findIndex(r=>!r.error));}
