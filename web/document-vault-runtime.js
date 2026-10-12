@@ -97,12 +97,13 @@ async function dbPut(item){
   tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ تعديل الأرشيف'))
  })
 }
-async function dbAckPending(snapshot,remoteVersion,keepPending=false){
+async function dbAckPending(snapshot,remoteVersion,keepPending=false,isCurrent=()=>true){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
   const read=store.get(snapshot.id);let acked=false;
   read.onsuccess=()=>{
+   if(!isCurrent())return;
    const current=read.result;
    if(!current||current.syncState!=='pending')return;
    const unchanged=localWriteVersion(current)===localWriteVersion(snapshot);
@@ -114,12 +115,13 @@ async function dbAckPending(snapshot,remoteVersion,keepPending=false){
   tx.onerror=()=>reject(tx.error||new Error('تعذر تثبيت نتيجة المزامنة'))
  })
 }
-async function dbStoreSyncConflict(snapshot,replacement,copy){
+async function dbStoreSyncConflict(snapshot,replacement,copy,isCurrent=()=>true){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
   const read=store.get(snapshot.id);let done=false;
   read.onsuccess=()=>{
+   if(!isCurrent())return;
    const current=read.result;
    if(!current||current.syncState!=='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return;
    store.put({...replacement,_localWriteRev:localWriteVersion(current)+1});
@@ -131,12 +133,13 @@ async function dbStoreSyncConflict(snapshot,replacement,copy){
   tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة تعارض المزامنة'))
  })
 }
-async function dbStoreRemoteIfCurrent(snapshot,replacement){
+async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
   const read=store.get(replacement?.id||snapshot?.id);let applied=false;
   read.onsuccess=()=>{
+   if(!isCurrent())return;
    const current=read.result;
    if(snapshot){
     if(!current||current.syncState==='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return
@@ -432,32 +435,32 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const remoteChanged=!!row&&(knownVersion?remoteVersion!==knownVersion:String(remote?.updatedAt||'')!==String(item.updatedAt||''));
       if(remoteChanged){
         if(item.deleted){
-          if(remote?.deleted){await dbAckPending(item,remoteVersion);continue}
+          if(remote?.deleted){await dbAckPending(item,remoteVersion,false,sessionValid);continue}
           if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
           const remoteBlob=await service.downloadVault(remote.storagePath);ensureSyncSession();
           const conflict=remoteItem(remote,remoteBlob,'');
            conflict.id=uuid();conflict.name=niceName(String(remote.name||item.name).replace(/(\.[^.]+)?$/,' (تعديل من جهاز آخر)$1'));
            conflict.syncState='pending';conflict.remoteUpdatedAt='';conflict.updatedAt=new Date().toISOString();
-           await dbStoreSyncConflict(item,{...item,remoteUpdatedAt:remoteVersion,syncState:'pending'},conflict);
+           await dbStoreSyncConflict(item,{...item,remoteUpdatedAt:remoteVersion,syncState:'pending'},conflict,sessionValid);
           continue
         }
         if(remote?.deleted){
           const copy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية بعد حذف جهاز آخر)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-          await dbStoreSyncConflict(item,{...item,deleted:true,deletedAt:remote?.deletedAt||remote?.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion},copy);continue
+          await dbStoreSyncConflict(item,{...item,deleted:true,deletedAt:remote?.deletedAt||remote?.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion},copy,sessionValid);continue
         }
         if(!remote?.storagePath)throw new Error('بيانات سحابية ناقصة لمسار الملف: '+String(remote?.name||item.name));
         const remoteBlob=await service.downloadVault(remote.storagePath);ensureSyncSession();
         const localCopy=Object.assign({},item,{id:uuid(),name:niceName(String(item.name||'ملف').replace(/(\.[^.]+)?$/,' (نسخة محلية)$1')),remoteUpdatedAt:'',updatedAt:new Date().toISOString(),syncState:'pending'});
-        await dbStoreSyncConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy);
+        await dbStoreSyncConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy,sessionValid);
         continue
       }
 
       if(item.deleted){
-        if(!row){await dbAckPending(item,item.remoteUpdatedAt);continue}
+        if(!row){await dbAckPending(item,item.remoteUpdatedAt,false,sessionValid);continue}
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         const saved=await service.upsert('vault',item.id,data);ensureSyncSession();
-        await dbAckPending(item,String(saved?.updated_at||''));
+        await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
         if(oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -469,7 +472,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
       ensureSyncSession();
-      await dbAckPending(item,String(saved?.updated_at||''));
+      await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
       if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
 
@@ -479,11 +482,11 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const data=row?.data;if(!data?.id)continue;
       const id=String(data.id),here=local.get(id),remoteVersion=String(row.updated_at||'');
       if(here?.syncState==='pending')continue;
-      if(data.deleted){if(here)await dbStoreRemoteIfCurrent(here,here.blob?{...here,deleted:true,deletedAt:here.deletedAt||data.deletedAt||data.updatedAt||new Date().toISOString(),updatedAt:data.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion}:null);continue}
+      if(data.deleted){if(here)await dbStoreRemoteIfCurrent(here,here.blob?{...here,deleted:true,deletedAt:here.deletedAt||data.deletedAt||data.updatedAt||new Date().toISOString(),updatedAt:data.updatedAt||new Date().toISOString(),syncState:'synced',remoteUpdatedAt:remoteVersion}:null,sessionValid);continue}
       if(here&&String(here.remoteUpdatedAt||'')===remoteVersion)continue;
       if(!data.storagePath)throw new Error('السجل السحابي موجود لكن ملف Storage مفقود: '+String(data.name||id));
       const blob=await service.downloadVault(data.storagePath);ensureSyncSession();
-      await dbStoreRemoteIfCurrent(here||null,remoteItem(data,blob,remoteVersion))
+      await dbStoreRemoteIfCurrent(here||null,remoteItem(data,blob,remoteVersion),sessionValid)
     }
     ensureSyncSession();await refresh();ensureSyncSession();const remaining=state.items.filter(item=>item.syncState==='pending').length;
      if(remaining){setSyncStatus('مزامنة جزئية • '+remaining+' سجل بانتظار إعادة المحاولة؛ لم تُفقد البيانات');if(manual)alert('تم حفظ تعارضات المزامنة بأمان، ولا تزال '+remaining+' تغييرات بانتظار المزامنة. أعد المحاولة لإكمالها.');return false}
