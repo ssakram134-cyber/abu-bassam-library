@@ -6,6 +6,9 @@ const native=fs.readFileSync(path.join(__dirname,'..','index.js'),'utf8');
 const bridge=native.match(/const ANDROID_BRIDGE = \x60([\s\S]*?)\x60;/)?.[1];
 const printSource=native.match(/  const printPages = useCallback\([\s\S]*?\n  \}, \[\]\);/)?.[0];
 const inbox=native.match(/  const onWebMessage = useCallback\([\s\S]*?\n  \}, \[[^\n]+\]\);/)?.[0];
+const mutexSource=native.match(/async function runNativeExportOnce\(inFlight, kind, execute\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(mutexSource,'Native export re-entry guard exists');
+const runNativeExportOnce=new Function(mutexSource+'\nreturn runNativeExportOnce')();
 assert.ok(bridge&&printSource&&inbox,'Native WebView functions exist');
 assert.ok(bridge.includes('var messageLimit = 48 * 1024 * 1024;'));
 assert.ok(inbox.includes('raw.length > MAX_NATIVE_MESSAGE_CHARS'));
@@ -37,11 +40,12 @@ async function check(){
  assert.equal(jobs.length,1);assert.ok(alerts.length>=3);
  const events=[],nativeAlerts=[],noop=()=>{};
  const receiver=new Function('useCallback','Alert','MAX_NATIVE_MESSAGE_CHARS',
+ 'runNativeExportOnce','exportInFlightRef','setWebFailure',
  'setWebReady','openCamera','scanBarcodeImage','saveBase64','saveToGallery','savePagesToGallery',
  'printPages','printBase64','printHtml','savePdfHtml','shareBase64','openExternal',
  'openAppSettings','getDeviceInfo','cleanCache','handleSecurity','BackHandler',
  inbox+';return onWebMessage;')(
- fn=>fn,{alert:(...x)=>nativeAlerts.push(x)},128,
+ fn=>fn,{alert:(...x)=>nativeAlerts.push(x)},128,runNativeExportOnce,{current:new Set()},()=>{},
  ()=>events.push('ready'),noop,noop,()=>events.push('save'),noop,noop,
  noop,noop,noop,noop,noop,noop,noop,noop,noop,noop,{exitApp:noop});
  await receiver({nativeEvent:{data:'{"type":"webBootReady"}'}});
