@@ -141,38 +141,82 @@ async function dbStoreSyncConflict(snapshot,replacement,copy,isCurrent=()=>true)
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
-  const read=store.get(snapshot.id);let done=false;
+  const read=store.get(snapshot.id);let done=false,failure=null;
   read.onsuccess=()=>{
    if(!isCurrent())return;
    const current=read.result;
    if(!current||current.syncState!=='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return;
-   store.put({...replacement,_localWriteRev:newWriteRevision()});
-   store.put({...copy,_localWriteRev:newWriteRevision()});
-   done=true
+   if(!replacement||replacement.id!==snapshot.id||!copy||!copy.id||copy.id===snapshot.id){
+    failure=new Error('معرف نسخة تعارض المزامنة غير صالح');tx.abort();return
+   }
+   // Both replacements and the capacity scan run in one readwrite transaction.
+   // A cloud conflict cannot bypass the 1000-active-file limit.
+   const updated=new Map([[replacement.id,replacement],[copy.id,copy]]);
+   const activeNew=[...updated.values()].filter(item=>!item.deleted).length;
+   let activeExisting=0;
+   const scan=store.openCursor();
+   scan.onsuccess=()=>{
+    const cursor=scan.result;
+    if(cursor){
+     if(cursor.value?.id===copy.id){
+      failure=new Error('معرف نسخة تعارض المزامنة مستخدم مسبقاً');tx.abort();return
+     }
+     if(!updated.has(cursor.value?.id)&&!cursor.value?.deleted)activeExisting++;
+     if(activeExisting+activeNew>MAX_ITEMS){
+      failure=new Error('الأرشيف ممتلئ (1000 ملف نشط). لم تُحفظ نسخة التعارض، وبقي الملف المحلي دون تغيير.');tx.abort();return
+     }
+     cursor.continue();return
+    }
+    if(!isCurrent())return;
+    store.put({...replacement,_localWriteRev:newWriteRevision()});
+    store.put({...copy,_localWriteRev:newWriteRevision()});
+    done=true
+   };
+   scan.onerror=()=>tx.abort()
   };
-  read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
+  read.onerror=()=>tx.abort();
+  tx.onabort=()=>reject(failure||tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
   tx.oncomplete=()=>resolve(done);
-  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة تعارض المزامنة'))
+  tx.onerror=()=>reject(failure||tx.error||new Error('تعذر حفظ نسخة تعارض المزامنة'))
  })
 }
 async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
-  const read=store.get(replacement?.id||snapshot?.id);let applied=false;
+  const read=store.get(replacement?.id||snapshot?.id);let applied=false,failure=null;
   read.onsuccess=()=>{
    if(!isCurrent())return;
    const current=read.result;
    if(snapshot){
     if(!current||current.syncState==='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return
    }else if(current)return;
-   if(replacement)store.put({...replacement,_localWriteRev:newWriteRevision()});
-   else store.delete(snapshot.id);
-   applied=true
+   if(!replacement){
+    store.delete(snapshot.id);applied=true;return
+   }
+   if(replacement.deleted||(current&&!current.deleted)){
+    store.put({...replacement,_localWriteRev:newWriteRevision()});applied=true;return
+   }
+   // Receiving a new or restored active remote item also consumes local capacity.
+   let active=0;
+   const scan=store.openCursor();
+   scan.onsuccess=()=>{
+    const cursor=scan.result;
+    if(cursor){
+     if(!cursor.value?.deleted&&++active>=MAX_ITEMS){
+      failure=new Error('الأرشيف ممتلئ (1000 ملف نشط). لم يتم استيراد الملف السحابي، ويمكن إعادة المزامنة بعد إخلاء مساحة.');tx.abort();return
+     }
+     cursor.continue();return
+    }
+    if(!isCurrent())return;
+    store.put({...replacement,_localWriteRev:newWriteRevision()});applied=true
+   };
+   scan.onerror=()=>tx.abort()
   };
-  read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
+  read.onerror=()=>tx.abort();
+  tx.onabort=()=>reject(failure||tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
   tx.oncomplete=()=>resolve(applied);
-  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة الجهاز الآخر'))
+  tx.onerror=()=>reject(failure||tx.error||new Error('تعذر حفظ نسخة الجهاز الآخر'))
  })
 }
 async function dbDisposeTrashIfCurrent(snapshot,permanent=false,isCurrent=()=>true){
