@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
 const native=fs.readFileSync('index.js','utf8');
-const f=native.match(/  const captureDocument = useCallback\([\s\S]*?\n  \}, \[cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject\]\);/)?.[0];
+const f=native.match(/  const captureDocument = useCallback\([\s\S]*?\n  \}, \[cameraError, cameraMode, cameraReady, closeCamera, inject\]\);/)?.[0];
 assert.ok(f,'Capture callback exists');
 assert.ok(native.includes('const MAX_NATIVE_CAMERA_CHARS = 32 * 1024 * 1024;'));
 assert.ok(f.includes('picture.base64.length > MAX_NATIVE_CAMERA_CHARS'),
@@ -16,10 +16,10 @@ function makeCapture(options={}){
   return{base64:options.data}
  }}};
  const cameraError=msg=>events.push('error:'+msg);
- const capture=new Function('useCallback','cameraRef','cameraReady','cameraBusy',
+ const capture=new Function('useCallback','cameraRef','cameraReady','cameraCaptureLockRef','cameraSessionEpochRef',
    'setCameraBusy','cameraError','cameraMode','closeCamera','inject',
    'MAX_NATIVE_CAMERA_CHARS',f+';return captureDocument')(
-  fn=>fn,ref,true,false,flag=>events.push('busy:'+flag),
+  fn=>fn,ref,true,{current:false},{current:0},flag=>events.push('busy:'+flag),
   cameraError,'scan',()=>events.push('close'),
   (event,data)=>events.push({event,data}),100
  );
