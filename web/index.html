@@ -145,7 +145,10 @@ function makePdfData(){let pd=pagePrintMeta?.paper||getPaperSize(),fmt=[pd.w,pd.
 // Export JPEG bytes page by page to avoid creating a Base64 copy of every page.
 // Preserve makePdfData() as the synchronous compatibility API for older callers.
 async function makePdfDataAsync(){
+ if(makePdfDataAsync.busy)throw new Error('يُنشأ PDF حالياً؛ لا يمكن بدء تصدير ثانٍ قبل اكتمال الأول.');
  if(!pageCanvases.length)throw new Error('لا توجد صفحات لتصدير PDF');
+ makePdfDataAsync.busy=true;
+ try{
  const pages=pageCanvases.slice(),revision=pagePrintMeta;
  const pd=revision?.paper||getPaperSize(),fmt=[pd.w,pd.h],
   orientation=pd.w>pd.h?'landscape':'portrait';
@@ -180,6 +183,7 @@ async function makePdfDataAsync(){
  }
  ensureCurrent();
  return doc.output('datauristring')
+ }finally{makePdfDataAsync.busy=false}
 }
 function tgCaption(action){let ps=getPhotoSize(),pd=getPaperSize(),d=new Date().toLocaleString('ar-IQ');return `مكتبة أبو بسام للقرطاسية والتصوير\n${action}\n${d}\nالورق: ${pd.w/10}×${pd.h/10} سم | الصورة: ${ps.w/10}×${ps.h/10} سم${dpiIsEnabled()?' | '+manualDpi()+' DPI':''}`}
 function telegramReady(){return $('tgEnabled')&&$('tgEnabled').checked}
