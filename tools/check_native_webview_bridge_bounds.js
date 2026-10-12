@@ -40,12 +40,12 @@ async function check(){
  assert.equal(jobs.length,1);assert.ok(alerts.length>=3);
  const events=[],nativeAlerts=[],noop=()=>{};
  const receiver=new Function('useCallback','Alert','MAX_NATIVE_MESSAGE_CHARS',
- 'runNativeExportOnce','exportInFlightRef','setWebFailure',
+ 'runNativeExportOnce','exportInFlightRef','reportExport','setWebFailure',
  'setWebReady','openCamera','scanBarcodeImage','saveBase64','saveToGallery','savePagesToGallery',
  'printPages','printBase64','printHtml','savePdfHtml','shareBase64','openExternal',
  'openAppSettings','getDeviceInfo','cleanCache','handleSecurity','BackHandler',
  inbox+';return onWebMessage;')(
- fn=>fn,{alert:(...x)=>nativeAlerts.push(x)},128,runNativeExportOnce,{current:new Set()},()=>{},
+ fn=>fn,{alert:(...x)=>nativeAlerts.push(x)},128,runNativeExportOnce,{current:new Map()},()=>{},()=>{},
  ()=>events.push('ready'),noop,noop,()=>events.push('save'),noop,noop,
  noop,noop,noop,noop,noop,noop,noop,noop,noop,noop,{exitApp:noop});
  await receiver({nativeEvent:{data:'{"type":"webBootReady"}'}});
@@ -56,34 +56,34 @@ async function check(){
  assert.equal(nativeAlerts[0][0],'الملف كبير جداً');
  await receiver({nativeEvent:{data:'not-json'}});
  assert.equal(events.length,2);
- const pending=new Map(),calls=[],busy={current:new Set()};
+ const pending=new Map(),calls=[],busy={current:new Map()};
  const mk=kind=>()=>new Promise((resolve,reject)=>{
    calls.push(kind);pending.set(kind,{resolve,reject});
  });
  const noopExport=()=>Promise.resolve();
  const build=new Function('useCallback','Alert','MAX_NATIVE_MESSAGE_CHARS',
-   'runNativeExportOnce','exportInFlightRef','setWebFailure',
+   'runNativeExportOnce','exportInFlightRef','reportExport','setWebFailure',
    'setWebReady','openCamera','scanBarcodeImage','saveBase64','saveToGallery','savePagesToGallery',
    'printPages','printBase64','printHtml','savePdfHtml','shareBase64','openExternal',
    'openAppSettings','getDeviceInfo','cleanCache','handleSecurity','BackHandler',
    inbox+';return onWebMessage;');
  const active=build(fn=>fn,{alert:(...args)=>nativeAlerts.push(args)},128,
-   runNativeExportOnce,busy,noop,noop,noop,noop,
+   runNativeExportOnce,busy,noop,noop,noop,noop,noop,
    mk('saveBase64'),mk('saveToGallery'),mk('savePagesToGallery'),
    mk('printPages'),mk('printBase64'),mk('printHtml'),
    mk('savePdfHtml'),mk('shareBase64'),
    noop,noop,noop,noop,noop,{exitApp:noop});
- const request=type=>active({nativeEvent:{data:JSON.stringify({type})}});
+ const request=(type,more={})=>active({nativeEvent:{data:JSON.stringify({type,...more})}});
  let checked=0;
  for(const type of ['saveBase64','saveToGallery','savePagesToGallery','printPages','printBase64','printHtml','savePdfHtml','shareBase64']){
-   const first=request(type),repeat=request(type);
+   const first=request(type,{name:'x'}),repeat=request(type,{name:'x'});
    assert.equal(await repeat,false,'repeat '+type+' must not start another Android operation');checked++;
    assert.equal(calls.filter(x=>x===type).length,1,type+' started once');checked++;
    assert.ok(busy.current.has(type),'operation still protected while active');checked++;
    pending.get(type).resolve(false); // Even if the SAF picker was cancelled.
    assert.equal(await first,true,'native task returned and released');checked++;
    assert.equal(busy.current.has(type),false,'cancel/completion clears guard');checked++;
-   const again=request(type);
+   const again=request(type,{name:'x'});
    assert.equal(calls.filter(x=>x===type).length,2,'same export can retry after cancel');checked++;
    pending.get(type).resolve();
    assert.equal(await again,true,'retry finishes');checked++;
