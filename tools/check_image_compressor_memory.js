@@ -11,7 +11,8 @@ assert.ok(!source.includes("window.parent.postMessage({type:'abuCompressionReady
 assert.ok(!/dataUrl\s*=\s*await\s+(readDataUrl|blobUrlData)/.test(source),
   'Encoding all image results eagerly as Base64 would exhaust WebView memory');
 
-const elements=new Map(),revoked=[],created=[],native=[],alerts=[],downloads=[];
+const elements=new Map(),revoked=[],created=[],native=[],alerts=[],downloads=[],canvases=[];
+let failEncode=false;
 const element=id=>{
  if(!elements.has(id)){
   const classes=new Set();
@@ -28,11 +29,11 @@ const document={
  getElementById:element,
  querySelectorAll:()=>[],
  createElement(tag){
-  if(tag==='canvas')return{
+  if(tag==='canvas'){const cv={
    width:0,height:0,
    getContext:()=>({fillRect(){},drawImage(){},imageSmoothingEnabled:false,imageSmoothingQuality:''}),
-   toBlob:(done,mime)=>done({size:600,type:mime})
-  };
+   toBlob:(done,mime)=>done(failEncode?null:{size:600,type:mime})
+  };canvases.push(cv);return cv}
   return{download:'',href:'',click(){downloads.push(this.href)},remove(){}}
  },
  body:{appendChild(){}}
@@ -44,6 +45,7 @@ const URL={
 let imageLoads=0,fileReads=0;
 class ImageMock{
  naturalWidth=100;naturalHeight=90;
+ removeAttribute(name){if(name==='src')this.released=true}
  set src(_){imageLoads++;Promise.resolve().then(()=>this.onload?.())}
 }
 class FileReaderMock{
@@ -66,6 +68,11 @@ let passed=0;function check(v,s){assert.ok(v,s);passed++}
  const result=await api.compressOne(input,0);
  check(result.blob?.size===600&&result.url.startsWith('blob:'),'Image encoding must keep Blob and small preview URL');
  check(fileReads===0&&imageLoads===1,'Processing must not allocate Base64 strings for preview');
+ check(canvases[0].width===0&&canvases[0].height===0,'Successful compression releases canvas memory immediately');
+ failEncode=true;
+ await assert.rejects(()=>api.compressOne(input,1),/تعذر إنشاء النسخة المضغوطة/);
+ check(canvases[1].width===0&&canvases[1].height===0,'Failed encoding releases canvas backing store as well');
+ failEncode=false;
  api.setState([input],[result]);api.renderResults();
  check(element('afterImg').src===result.url&&element('results').innerHTML.includes(result.url),
    'Preview and result thumbnails must reuse the Blob URL');
