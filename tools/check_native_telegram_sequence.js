@@ -109,7 +109,10 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
  check(calls[0].kind==='gallery'&&calls[0].args[3]===1&&calls[1].args[3]===true&&
    calls[2].args[3]===true,'Native exports must convey optional share preference');
 
- const actualPrint=native.match(/  const printPages = useCallback\\([\\s\\S]*?\\n  \\}, \\[\\]\\);/)?.[0];
+ const actualPrintStart=native.indexOf('  const printPages = useCallback(');
+ const actualPrintEnd=native.indexOf('\n  }, []);',actualPrintStart);
+ const actualPrint=actualPrintStart>=0&&actualPrintEnd>actualPrintStart
+  ?native.slice(actualPrintStart,actualPrintEnd+'\n  }, []);'.length):'';
  assert.ok(actualPrint,'Cannot extract canonical native print handler');
  function printerMock({enabled=true,printerError=false,sharingError=false}={}){
   const sequence=[],notices=[];
@@ -146,7 +149,10 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
    failedShare.notices.some(parts=>String(parts[0]).includes('تعذرت المشاركة')),
   'After printing, failed sharing must not report printing failed or leave a temp PDF');
 
- const actualSave=native.match(/  const saveBase64 = useCallback\\([\\s\\S]*?\\n  \\}, \\[\\]\\);/)?.[0];
+ const actualSaveStart=native.indexOf('  const saveBase64 = useCallback(');
+ const actualSaveEnd=native.indexOf('\n  }, []);',actualSaveStart);
+ const actualSave=actualSaveStart>=0&&actualSaveEnd>actualSaveStart
+  ?native.slice(actualSaveStart,actualSaveEnd+'\n  }, []);'.length):'';
  assert.ok(actualSave,'Cannot extract canonical save-to-SAF handler');
  function saf({grant=true,failWrite=false}={}){
   const calls=[],notices=[];
