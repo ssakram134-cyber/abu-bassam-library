@@ -13,9 +13,10 @@ for(const m of [
   'MAX_FILES=20','MAX_TOTAL_BYTES=80*1024*1024','SAFE_MAX_PIXELS=24_000_000',
   "addEventListener('drop'",'moveItem','removeItem','beforeImg','afterImg','maxDimension',
   'cancelRequested','if(cancelRequested)break','catch(e){results.push','image/png','image/webp',
-  'namedDataUrl','encodeURIComponent(name)',"'upscaled':'compressed'",'ممتازة للطباعة','ضعيفة للطباعة الكبيرة',
+  'namedDataUrl','encodeURIComponent(name)','MAX_ANDROID_BRIDGE_BYTES=24*1024*1024',"'upscaled':'compressed'",'ممتازة للطباعة','ضعيفة للطباعة الكبيرة',
   'blob.size>=file.size','imageSmoothingQuality','overflow-y:auto','currentBytes()+incomingBytes',
-  'window.parent?.Android?.savePagesToGallery','browserSave(r.name,r.dataUrl)','isImageFile'
+  'bridge?.savePagesToGallery','bridge.savePagesToGallery(', 'browserSave(r.name,r.url)','isImageFile',
+  'results.forEach(revoke)', 'url:URL.createObjectURL(blob)', 'window.saveOneResult=async i=>', 'blobUrlData(r.blob)'
 ])need(html,m,'image compressor');
 const index=read(path.join(root,'index.js'));
 for(const m of ['encodedNameMatch','decodeURIComponent(encodedNameMatch[1])','itemMime','imagePages.length > 20','requestedName || fallbackName','const finalName = safeName(requestedName || fallbackName);'])need(index,m,'canonical Android image saving');
@@ -36,4 +37,4 @@ try{
  if(capped.w*capped.h>24_000_000)throw new Error('enhancement exceeded pixel budget');
 }catch(e){errors.push('image enhancement functional regression: '+String(e?.message||e))}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Image compressor checks passed: cumulative batch limits, drag/drop, reorder/delete, before/after preview, cancellation, failure isolation, memory-safe dimensions, PNG/WebP preservation, print-quality guidance, original-derived names, browser fidelity and Android named mixed-format saving.\n');
+process.stdout.write('Image compressor checks passed: cumulative batch limits, drag/drop, reorder/delete, before/after preview, cancellation, failure isolation, memory-safe dimensions, PNG/WebP preservation, Blob URL lifetime cleanup, deferred Base64, and direct bounded Android named mixed-format saving.\n');
