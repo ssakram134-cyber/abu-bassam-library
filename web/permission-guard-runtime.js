@@ -6,7 +6,7 @@ window.__ABU_PERMISSION_GUARD_V1__=true;
 const security=()=>window.AbuBassamSecurity;
 let toastTimer=null;
 function secondary(){return security()?.role?.()==='secondary'}
-function allowed(permission){return !secondary()||security()?.can?.(permission)!==false}
+function allowed(permission){return !secondary()||security()?.can?.(permission)===true}
 function textOf(el){return `${el?.id||''} ${el?.className||''} ${el?.getAttribute?.('onclick')||''} ${el?.getAttribute?.('title')||''} ${el?.textContent||''}`.toLowerCase()}
 function exempt(el){return !!el?.closest?.('#abuSecurityGate,#abuSecuritySettings,#abuSecurityExtrasSettings,#abuDeviceModal')}
 function permissionFor(el){
