@@ -477,6 +477,15 @@ function App() {
       Alert.alert('الملف كبير جداً', 'قسّم الصور إلى دفعات أصغر أو استخدم ملفاً مضغوطاً للطباعة.');
       return;
     }
+    // The app bridge writes "type" as the first property. Reject duplicate
+    // heavy payloads before allocating a parsed copy of their Base64 data.
+    // The action lock below remains authoritative for other property orders.
+    const earlyType = raw.match(/^\s*\{\s*"type"\s*:\s*"([A-Za-z]+)"\s*[,}]/);
+    if (nativeExportBusyRef.current && earlyType &&
+      /^(?:scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/.test(earlyType[1])) {
+      Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل طلب طباعة أو حفظ ملف آخر، لتجنب تجمّد الهاتف.');
+      return false;
+    }
     let message; try { message = JSON.parse(raw); } catch (_) { return; }
     if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
     if (message.type === 'webBootReady') { setWebReady(true); return; }
