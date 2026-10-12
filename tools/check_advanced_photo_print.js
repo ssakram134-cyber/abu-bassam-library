@@ -30,7 +30,7 @@ for(const marker of [
   "if(iw+2*margin>pw||ih+2*margin>ph)",
   "if(totalCopies>maxJobs)",
   "else if(selectedIndex===i)selectedIndex=Math.min(i,uploadedImages.length-1)",
-  "if(pageCanvases.length>20){let pdf=makePdfData()"
+  "if(pageCanvases.length>20){", "const pdf=await makePdfDataAsync()"
 ])need(home,marker,'main photo/print regression');
 const presetRuntime=read('print-presets-runtime.js');
 for(const marker of ['Array.isArray(stored)','presets=presets.slice(0,30)','function restoreDefaults(){const defaults=','dpiModeChanged()'])need(presetRuntime,marker,'print presets regression');
