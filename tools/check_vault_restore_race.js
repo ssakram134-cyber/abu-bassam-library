@@ -25,12 +25,12 @@ assert.ok(src.includes("if(restoreIdentity()!==initialRestoreIdentity||!allowed(
 
 const rows=new Map(),clone=v=>v==null?v:{...v};
 const micro=fn=>Promise.resolve().then(fn);
-let sequence=0,tail=Promise.resolve();
+let sequence=0,tail=Promise.resolve(),abortOnPut=0;
 const database={transaction(){
  const prev=tail;
  let unlock;
  tail=new Promise(resolve=>{unlock=resolve});
- let working,completed=false;
+ let working,completed=false,writes=0;
  const ready=prev.then(()=>{working=new Map([...rows].map(([id,item])=>[id,clone(item)]))});
  const tx={oncomplete:null,onabort:null,onerror:null,error:null,abort(){
   if(completed)return;
@@ -54,7 +54,7 @@ const database={transaction(){
    return request
   },
   clear(){working.clear()},
-  put(item){working.set(String(item.id),clone(item))}
+  put(item){working.set(String(item.id),clone(item));if(abortOnPut&&++writes>=abortOnPut){abortOnPut=0;tx.error=new Error('SIMULATED_TRANSACTION_INTERRUPTION');tx.abort()}}
  });
  return tx
 }};
@@ -129,5 +129,22 @@ function pass(condition,message){assert.ok(condition,message);count++}
  pass(rows.size===0,'Oversized replacement snapshot does not partially overwrite archive');
  await assert.rejects(()=>applyAtomic([{id:'x',deleted:false}],{replaceAll:true}),/يلزم فحص حالة الأرشيف/);
  pass(rows.size===0,'Calling restore without original snapshot fails closed');
+
+ rows.clear();put('protected','old before crash');
+ const beforeCrash=saved(),beforeState=[...rows];
+ abortOnPut=2;
+ await assert.rejects(()=>applyAtomic([
+  {id:'other',name:'first staged',deleted:false},
+  {id:'later',name:'second staged',deleted:false}
+ ],{replaceAll:true,expectedBefore:beforeCrash}),/SIMULATED_TRANSACTION_INTERRUPTION/);
+ pass(unchanged(beforeState)&&rows.get('protected').name==='old before crash',
+  'Interrupted snapshot replacement must roll back earlier clear and staged writes');
+ abortOnPut=2;
+ await assert.rejects(()=>applyAtomic([
+  {id:'one',name:'first staged',deleted:false},
+  {id:'two',name:'second staged',deleted:false}
+ ],{replaceAll:false,expectedBefore:saved()}),/SIMULATED_TRANSACTION_INTERRUPTION/);
+ pass(unchanged(beforeState)&&!rows.has('one')&&!rows.has('two'),
+  'Interrupted merge must roll back earlier staged writes');
  console.log('Vault restore concurrency checks passed: '+count+' cases; stale merges and over-capacity snapshots rejected atomically.')
 })().catch(error=>{console.error(error);process.exitCode=1});
