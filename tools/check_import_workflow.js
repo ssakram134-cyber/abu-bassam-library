@@ -11,7 +11,7 @@ function checkSourceBranchGate(){
   need(sourceChecks,'branches: [main]','source-check workflow must target main');
   need(sourceChecks,"'.github/workflows/**'",'workflow edits must run source checks');
   need(sourceChecks,"'AGENTS.md'",'approved project contract edits must run source checks');
-  need(sourceChecks,'permissions:\\n  contents: read'.replace('\\\\n','\\n'),'source checks must be read-only');
+  need(sourceChecks,'permissions:' + String.fromCharCode(10) + '  contents: read','source checks must be read-only');
   need(sourceChecks,'npm run check:web','source checks must run canonical validation');
   forbid(sourceChecks,'contents: write','source checks must never have source write permission');
   forbid(sourceChecks,'git push','source checks must not push commits');
