@@ -157,7 +157,7 @@ async function main(){
   };
   return tx
  }};
- const {putItem}=new Function('openDb','STORE',advancedCode+';return {putItem}')(async()=>restoreDb,'items');
+ const {putItem}=new Function('openDb','STORE','MAX_ITEMS',advancedCode+';return {putItem}')(async()=>restoreDb,'items',1000);
  const {put,applyAtomic}=new Function('openDb','STORE','MAX_ITEMS','MAX_BACKUP_RECORDS',hardeningCode+';return {put,applyAtomic}')(async()=>restoreDb,'items',1000,2000);
  await put({id:'original-photo',name:'first'});
  const priorPhoto=clone(restoreRecords.get('original-photo'));
