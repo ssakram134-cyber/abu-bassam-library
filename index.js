@@ -416,9 +416,14 @@ function App() {
     try {
       const root = FileSystem.cacheDirectory;
       if (!root) throw new Error('مجلد الملفات المؤقتة غير متاح');
-      const entries = await FileSystem.readDirectoryAsync(root), generated = entries.filter((name) => name.startsWith('abu_bassam_'));
-      await Promise.all(generated.map((name) => FileSystem.deleteAsync(`${root}${name}`, { idempotent: true })));
-      Alert.alert('تم التنظيف', `حُذفت ${generated.length} من الملفات المؤقتة فقط. لم تُحذف ملفاتك.`);
+      const entries = await FileSystem.readDirectoryAsync(root);
+      const generated = entries.filter((name) => name.startsWith('abu_bassam_') && !name.includes('/') && !name.includes('\\'));
+      // Keep each deletion independent so the displayed result matches reality.
+      const outcomes = await Promise.allSettled(generated.map((name) => FileSystem.deleteAsync(`${root}${name}`, { idempotent: true })));
+      const removed = outcomes.filter((result) => result.status === 'fulfilled').length;
+      const failed = outcomes.length - removed;
+      Alert.alert(failed ? 'تنظيف جزئي' : 'تم التنظيف',
+        failed ? `حُذف ${removed} ملف مؤقت، وتعذر حذف ${failed}. لم تُحذف ملفاتك.` : `حُذف ${removed} ملف مؤقت فقط. لم تُحذف ملفاتك.`);
     } catch (error) { Alert.alert('تعذر التنظيف', String(error?.message || error)); }
   }, []);
 
