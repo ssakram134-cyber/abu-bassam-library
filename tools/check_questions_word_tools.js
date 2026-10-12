@@ -54,6 +54,25 @@ async function test() {
   assert.equal(imported.length, 2);
   assert.equal(imported[0].body, 'الماء سائل');
   assert.equal(imported[1].body, 'الأنهار والأمطار');
+
+  const roundTrip = Array.from(api.parseImportedQuestions([
+    'مدرسة أبو بسام', 'ورقة الأسئلة', 'س1/ ما هو الماء؟', 'الماء أساسي',
+    'الدرجة: 5', 'مستوى الصعوبة: سهل', 'س2/ ما هي مصادره؟', 'الأنهار',
+    'الدرجة: 10', 'مجموع الدرجات المحددة: 15'
+  ]));
+  assert.equal(roundTrip.length, 2, 'DOCX export header must not create phantom questions');
+  assert.equal(roundTrip[0].body, 'الماء أساسي', 'marks/difficulty cannot contaminate text');
+  assert.equal(roundTrip[1].body, 'الأنهار', 'total marks must not contaminate text');
+  const teacherRoundTrip = Array.from(api.parseImportedQuestions([
+    'English exam', 'Questions with model answers', 'Q1/ Explain water',
+    'It is essential', 'Marks: 5', 'Model answer: secret',
+    'Q2/ Where is it found?', 'In rivers', 'Answer key',
+    '1. secret', '2. secret'
+  ]));
+  assert.equal(teacherRoundTrip.length, 2, 'answer key must never import as questions');
+  assert.equal(teacherRoundTrip[0].body, 'It is essential', 'model answer must not leak into body');
+  assert.equal(teacherRoundTrip[1].body, 'In rivers', 'answer key items must not enter body');
+
   assert.ok(runtime.includes('docPart._data.uncompressedSize'), 'decompression must be size guarded');
   assert.ok(runtime.includes("cloneNode(true)"), 'import must not overwrite existing question nodes');
   const report = api.collect(true);
