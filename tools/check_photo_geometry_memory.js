@@ -14,6 +14,7 @@ for(const marker of [
  'if(!finished&&output){output.width=0;output.height=0}',
  'if(out){out.width=0;out.height=0}',
  'geoOperationId++',
+ 'stopDrag?.()',
  '};refreshOverlay()'
 ])assert.ok(source.includes(marker),'Missing memory/touch guard: '+marker);
 
@@ -109,6 +110,17 @@ async function rejected(fn,re){await assert.rejects(fn,re);count++}
  check(drawCount===1,'Moving handle 50 times must not redraw the source bitmap');
  check(stage.querySelectorAll('.abu-geo-handle').every((h,i)=>h===handles[i]),
   'Handle objects and their listeners must be reused during dragging');
+ handles[1].listeners.pointerdown({preventDefault(){},stopPropagation(){},pointerId:77});
+ check((events.pointermove||[]).length===1,'Active drag must own one move listener');
+ geometry.close('abuGeoModal');
+ check((events.pointermove||[]).length===0&&(events.pointerup||[]).length===0,
+  'Closing editor during a drag must detach pointer listeners');
+ geometry.openGeo();
+ handles[1].listeners.pointerdown({preventDefault(){},stopPropagation(){},pointerId:78});
+ check((events.pointermove||[]).length===1,
+  'Reopening editor after an interrupted drag must allow a fresh pointer gesture');
+ window.emit('pointerup',{pointerId:78});
+
 
  window.setTestGeometryPoints([{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}]);
  const start=created.length;
