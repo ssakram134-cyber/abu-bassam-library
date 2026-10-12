@@ -45,7 +45,7 @@ function roleLabel(){return currentDevice?.role==='owner'?'رئيسي':'فرعي
 function permissions(){return currentDevice?.role==='owner'?OWNER_PERMISSIONS:Object.assign({},SECONDARY_DEFAULT,currentDevice?.permissions||{})}
 function can(name){return !!permissions()[name]}
 function sessionUnlocked(){return unlocked||(window.AbuBassamSecurity?.offlineActive?.()===true&&$('abuSecurityGate')?.classList.contains('hide')===true)}
-function lockMinutes(){const value=Number(localStorage.getItem(LOCK_MINUTES_KEY));return [0,1,5,15,60].includes(value)?value:5}
+function lockMinutes(){const raw=localStorage.getItem(LOCK_MINUTES_KEY);const value=raw===null?5:Number(raw);return [0,1,5,15,60].includes(value)?value:5}
 function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
 function nativeRequest(action,payload={}){
   const api=window.AbuBassamNativeSecurity;
