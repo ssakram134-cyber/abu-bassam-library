@@ -15,8 +15,11 @@ for(const marker of [
  "file?resolve(file):reject(new Error('تعذر ترميز إحدى صفحات PDF'))",
  "jpeg=new Uint8Array(await blob.arrayBuffer())",
  "doc.addImage(jpeg,'JPEG',0,0,pd.w,pd.h)",
- "if(i+1<pageCanvases.length)await new Promise(resolve=>setTimeout(resolve,0))",
+ "if(i+1<pages.length)await new Promise(resolve=>setTimeout(resolve,0))",
  "const d=await makePdfDataAsync();",
+ "const pages=pageCanvases.slice(),revision=pagePrintMeta;",
+ "const ensureCurrent=()=>{",
+ "if(imageBytes>28*1024*1024)",
  "const pdf=await makePdfDataAsync();"
 ])assert.ok((pdfSource+dlSource+printSource).includes(marker),'Missing cooperative PDF memory guard: '+marker);
 
