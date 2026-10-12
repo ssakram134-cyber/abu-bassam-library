@@ -26,7 +26,7 @@ for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi()
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
+for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady || webFailure) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
@@ -36,4 +36,7 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 }
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
+require('./check_startup_recovery.js');
+require('./check_shared_script_bootstrap.js');
+require('./check_iframe_lifecycle.js');
 process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, native startup watchdog, and canonical login guards.\n');
