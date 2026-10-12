@@ -100,7 +100,7 @@ function printDimensions(paper) {
     const parts = String(paper).split(':');
     const width = Number(parts[1]);
     const height = Number(parts[2]);
-    if (width > 0 && height > 0) return { width, height };
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && width <= 3000 && height <= 3000) return { width, height };
   }
   return { width: 210, height: 297 };
 }
