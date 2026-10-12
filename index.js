@@ -137,6 +137,8 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [webAttempt, setWebAttempt] = useState(0);
+  const [webFailure, setWebFailure] = useState('');
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -151,12 +153,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (webReady) return undefined;
+    if (webReady || webFailure) return undefined;
     const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
+      setWebFailure('لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. تحقق من اتصالك ثم أعد المحاولة.');
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [webReady, webFailure, webAttempt]);
+
+  const retryWebBoot = useCallback(() => {
+    setWebReady(false);
+    setWebFailure('');
+    setWebAttempt((attempt) => attempt + 1);
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -410,8 +418,9 @@ function App() {
   }, [inject]);
 
   const onWebMessage = useCallback(async (event) => {
-    let message; try { message = JSON.parse(event.nativeEvent.data); } catch (_) { return; }
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    let message; try { message = JSON.parse(event?.nativeEvent?.data); } catch (_) { return; }
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
+    if (message.type === 'webBootReady') { setWebFailure(''); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
     if (message.type === 'saveBase64') return saveBase64(message);
@@ -435,7 +444,7 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle={cameraMode ? 'light-content' : 'dark-content'} backgroundColor={cameraMode ? '#000000' : '#fffaf3'} />
       <WebView
-        ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
+        key={webAttempt} ref={webRef} source={{ uri: APP_URL }} style={styles.webView} originWhitelist={['file://*','about:*']} javaScriptEnabled domStorageEnabled
         allowFileAccess allowFileAccessFromFileURLs allowUniversalAccessFromFileURLs mixedContentMode="never"
         setSupportMultipleWindows={false} mediaPlaybackRequiresUserAction={false}
         onShouldStartLoadWithRequest={(request) => {
@@ -445,9 +454,20 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onError={() => { setWebReady(false); setWebFailure('تعذر تحميل واجهة مكتبة أبو بسام. يمكنك إعادة المحاولة دون إغلاق التطبيق.'); }}
       />
-      {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {!webReady && <View style={styles.loading}>
+        {webFailure ? (
+          <>
+            <Text accessibilityRole="alert" style={styles.loadingError}>{webFailure}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={retryWebBoot} accessibilityRole="button" accessibilityLabel="إعادة محاولة تشغيل التطبيق">
+              <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></>
+        )}
+      </View>}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -477,6 +497,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
   loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
+  loadingError: { color: '#812c26', fontSize: 15, fontWeight: '700', textAlign: 'center', paddingHorizontal: 26, lineHeight: 25 },
+  retryButton: { marginTop: 20, minHeight: 52, minWidth: 170, borderRadius: 12, paddingHorizontal: 24, backgroundColor: '#76533e', alignItems: 'center', justifyContent: 'center' },
+  retryButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },
   cameraShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 38 },
   cameraHeader: { width: '100%', paddingTop: 14, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
