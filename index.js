@@ -41,9 +41,12 @@ const MAX_NATIVE_PAGE_COUNT = 20;
 const ANDROID_BRIDGE = `
 (function () {
   var messageLimit = 48 * 1024 * 1024;
+  var nextExportRequest = 0;
+  var exportActions = /^(saveBase64|saveToGallery|savePagesToGallery|savePdfHtml|printPages|printBase64|printHtml|shareBase64)$/;
   function send(type, payload) {
     try {
       var estimated = 0, data = payload || {};
+      if (exportActions.test(type) && !data.requestId) data.requestId = 'abu-export-' + Date.now().toString(36) + '-' + (++nextExportRequest);
       for (var key in data) {
         if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
         var item = data[key];
@@ -59,20 +62,25 @@ const ANDROID_BRIDGE = `
       var serialized = JSON.stringify(Object.assign({ type: type }, data));
       if (serialized.length > messageLimit) throw new Error('الملف أكبر من الحد الآمن للنقل إلى Android.');
       window.ReactNativeWebView.postMessage(serialized);
+      return data.requestId || '';
     } catch (error) {
       try { window.alert('تعذر إرسال الملف إلى Android: ' + String(error.message || error)); } catch (_) {}
     }
   }
+  window.AbuBassamNativeExportResult = function (detail) {
+    if (!detail || typeof detail !== 'object' || !/^abu-export-[a-z0-9-]+$/.test(String(detail.requestId || ''))) return;
+    try { window.dispatchEvent(new CustomEvent('abu-bassam-native-export-result', { detail: detail })); } catch (_) {}
+  };
   window.Android = {
-    saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
-    saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
-    savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
-    printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
-    printBase64: function (name, mime, data) { send('printBase64', { name: name, mime: mime, data: data }); },
+    saveBase64: function (name, mime, data) { return send('saveBase64', { name: name, mime: mime, data: data }); },
+    saveToGallery: function (name, mime, data) { return send('saveToGallery', { name: name, mime: mime, data: data }); },
+    savePagesToGallery: function (prefix, pages, mime) { return send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
+    printPages: function (pages, paper, dpi) { return send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
+    printBase64: function (name, mime, data) { return send('printBase64', { name: name, mime: mime, data: data }); },
     scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
-    printHtml: function (html) { send('printHtml', { html: html }); },
-    savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
-    shareBase64: function (name, mime, data) { send('shareBase64', { name: name, mime: mime, data: data }); },
+    printHtml: function (html) { return send('printHtml', { html: html }); },
+    savePdfHtml: function (name, html) { return send('savePdfHtml', { name: name, html: html }); },
+    shareBase64: function (name, mime, data) { return send('shareBase64', { name: name, mime: mime, data: data }); },
     openExternal: function (url) { send('openExternal', { url: url }); },
     openAppSettings: function () { send('openAppSettings'); },
     getDeviceInfo: function () { send('getDeviceInfo'); },
@@ -148,20 +156,39 @@ function nativeDeviceInfo(cameraPermission) {
   };
 }
 
-async function runNativeExportOnce(inFlight, kind, execute) {
-  if (inFlight.has(kind)) return false;
-  inFlight.add(kind);
+async function runNativeExportOnce(inFlight, kind, execute, message, report) {
+  const previous = inFlight.get(kind);
+  if (previous) {
+    const fields = ['name','mime','prefix','pages','data','html','paper','dpi'];
+    const same = fields.every((key) => previous.message[key] === message[key]);
+    if (same) { report(kind, message, { status: 'duplicate' }); return false; }
+    if (previous.next) { report(kind, message, { status: 'busy' }); return false; }
+    return new Promise((resolve, reject) => {
+      previous.next = { execute, message, report, resolve, reject };
+      report(kind, message, { status: 'queued' });
+    });
+  }
+  const slot = { message, next: null };
+  inFlight.set(kind, slot);
   try {
-    await execute();
+    const outcome = await execute();
+    report(kind, message, outcome && typeof outcome === 'object' ? outcome : { status: 'submitted' });
     return true;
+  } catch (error) {
+    report(kind, message, { status: 'failed', error: String(error?.message || error) });
+    throw error;
   } finally {
     inFlight.delete(kind);
+    if (slot.next) {
+      const next = slot.next;
+      runNativeExportOnce(inFlight, kind, next.execute, next.message, next.report).then(next.resolve, next.reject);
+    }
   }
 }
 
 function App() {
   const webRef = useRef(null);
-  const exportInFlightRef = useRef(new Set());
+  const exportInFlightRef = useRef(new Map());
   const cameraRef = useRef(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
@@ -179,6 +206,15 @@ function App() {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     webRef.current?.injectJavaScript(`if (typeof window.${functionName} === 'function') window.${functionName}(${json}); true;`);
   }, []);
+  const reportExport = useCallback((kind, request, outcome) => {
+    const requestId = String(request?.requestId || '');
+    if (!/^abu-export-[a-z0-9-]{1,80}$/.test(requestId)) return;
+    inject('AbuBassamNativeExportResult', {
+      requestId, type: kind, status: String(outcome?.status || 'failed'),
+      count: Number(outcome?.count) || 0, failed: Number(outcome?.failed) || 0,
+      error: String(outcome?.error || ''), name: String(outcome?.name || '')
+    });
+  }, [inject]);
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
@@ -487,21 +523,21 @@ function App() {
     if (message.type === 'webBootReady') { setWebFailure(''); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
-    if (message.type === 'saveBase64') return runNativeExportOnce(exportInFlightRef.current, 'saveBase64', () => saveBase64(message));
-    if (message.type === 'saveToGallery') return runNativeExportOnce(exportInFlightRef.current, 'saveToGallery', () => saveToGallery(message));
-    if (message.type === 'savePagesToGallery') return runNativeExportOnce(exportInFlightRef.current, 'savePagesToGallery', () => savePagesToGallery(message));
-    if (message.type === 'printPages') return runNativeExportOnce(exportInFlightRef.current, 'printPages', () => printPages(message));
-    if (message.type === 'printBase64') return runNativeExportOnce(exportInFlightRef.current, 'printBase64', () => printBase64(message));
-    if (message.type === 'printHtml') return runNativeExportOnce(exportInFlightRef.current, 'printHtml', () => printHtml(message));
-    if (message.type === 'savePdfHtml') return runNativeExportOnce(exportInFlightRef.current, 'savePdfHtml', () => savePdfHtml(message));
-    if (message.type === 'shareBase64') return runNativeExportOnce(exportInFlightRef.current, 'shareBase64', () => shareBase64(message));
+    if (message.type === 'saveBase64') return runNativeExportOnce(exportInFlightRef.current, 'saveBase64', () => saveBase64(message), message, reportExport);
+    if (message.type === 'saveToGallery') return runNativeExportOnce(exportInFlightRef.current, 'saveToGallery', () => saveToGallery(message), message, reportExport);
+    if (message.type === 'savePagesToGallery') return runNativeExportOnce(exportInFlightRef.current, 'savePagesToGallery', () => savePagesToGallery(message), message, reportExport);
+    if (message.type === 'printPages') return runNativeExportOnce(exportInFlightRef.current, 'printPages', () => printPages(message), message, reportExport);
+    if (message.type === 'printBase64') return runNativeExportOnce(exportInFlightRef.current, 'printBase64', () => printBase64(message), message, reportExport);
+    if (message.type === 'printHtml') return runNativeExportOnce(exportInFlightRef.current, 'printHtml', () => printHtml(message), message, reportExport);
+    if (message.type === 'savePdfHtml') return runNativeExportOnce(exportInFlightRef.current, 'savePdfHtml', () => savePdfHtml(message), message, reportExport);
+    if (message.type === 'shareBase64') return runNativeExportOnce(exportInFlightRef.current, 'shareBase64', () => shareBase64(message), message, reportExport);
     if (message.type === 'openExternal') return openExternal(message);
     if (message.type === 'openAppSettings') return openAppSettings();
     if (message.type === 'getDeviceInfo') return getDeviceInfo();
     if (message.type === 'cleanCache') return cleanCache();
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, reportExport, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
