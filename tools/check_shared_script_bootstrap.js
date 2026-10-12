@@ -96,5 +96,24 @@ function harness(){
  deviceFirst.append[0].fire('load');
  eq(await dc,true,'approved-owned load completes');
  eq(await ac,true,'advanced completes on same event');
+
+ const advancedBad=harness(),brokenAdvanced=advancedBad.advanced('advancedBad','advanced.js','__ADV__');
+ advancedBad.append[0].fire('error');
+ await assert.rejects(brokenAdvanced,/advanced.js failed to load/);count++;
+ eq(advancedBad.all.has('advancedBad'),false,'advanced loader removes failed script from DOM');
+ const retryAdvanced=advancedBad.advanced('advancedBad','advanced.js','__ADV__');
+ eq(advancedBad.append.length,2,'advanced loader retries using a new element');
+ eq(await status(retryAdvanced),'pending','advanced retry waits for event');
+ advancedBad.append[1].fire('load');
+ eq(await retryAdvanced,true,'advanced retry succeeds');
+
+ const externalAdvanced=harness(),foreignNode=externalAdvanced.node('foreignAdvanced');
+ externalAdvanced.all.set('foreignAdvanced',foreignNode);
+ const pendingAdvanced=externalAdvanced.advanced('foreignAdvanced','foreign.js','__FOREIGN__');
+ eq(await status(pendingAdvanced),'pending','advanced loader waits for foreign script');
+ foreignNode.fire('error');
+ await assert.rejects(pendingAdvanced,/foreign.js failed to load/);count++;
+ eq(externalAdvanced.all.has('foreignAdvanced'),false,'advanced loader removes failed foreign script');
+
  console.log('Shared script loader regression: '+count+'/'+count+' focused checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1});
