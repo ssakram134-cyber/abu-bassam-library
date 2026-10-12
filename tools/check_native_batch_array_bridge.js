@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const home=fs.readFileSync('web/index.html','utf8');
 const poster=fs.readFileSync('web/photo-print-advanced-runtime.js','utf8');
 const begin=home.indexOf('function downloadJPG(){');
-const mid=home.indexOf('function downloadPDF(){',begin);
+const mid=home.indexOf('async function downloadPDF(){',begin);
 const printStart=home.indexOf('async function printDirectly(){');
 const printEnd=home.indexOf('function saveTelegramSettings(){',printStart);
 const p1=poster.indexOf('function testPoster(){'),p2=poster.indexOf('function posterPdf(){',p1);
