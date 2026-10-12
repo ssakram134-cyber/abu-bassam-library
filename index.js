@@ -148,8 +148,20 @@ function nativeDeviceInfo(cameraPermission) {
   };
 }
 
+async function runNativeExportOnce(inFlight, kind, execute) {
+  if (inFlight.has(kind)) return false;
+  inFlight.add(kind);
+  try {
+    await execute();
+    return true;
+  } finally {
+    inFlight.delete(kind);
+  }
+}
+
 function App() {
   const webRef = useRef(null);
+  const exportInFlightRef = useRef(new Set());
   const cameraRef = useRef(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
@@ -475,14 +487,14 @@ function App() {
     if (message.type === 'webBootReady') { setWebFailure(''); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
-    if (message.type === 'saveBase64') return saveBase64(message);
-    if (message.type === 'saveToGallery') return saveToGallery(message);
-    if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
-    if (message.type === 'printPages') return printPages(message);
-    if (message.type === 'printBase64') return printBase64(message);
-    if (message.type === 'printHtml') return printHtml(message);
-    if (message.type === 'savePdfHtml') return savePdfHtml(message);
-    if (message.type === 'shareBase64') return shareBase64(message);
+    if (message.type === 'saveBase64') return runNativeExportOnce(exportInFlightRef.current, 'saveBase64', () => saveBase64(message));
+    if (message.type === 'saveToGallery') return runNativeExportOnce(exportInFlightRef.current, 'saveToGallery', () => saveToGallery(message));
+    if (message.type === 'savePagesToGallery') return runNativeExportOnce(exportInFlightRef.current, 'savePagesToGallery', () => savePagesToGallery(message));
+    if (message.type === 'printPages') return runNativeExportOnce(exportInFlightRef.current, 'printPages', () => printPages(message));
+    if (message.type === 'printBase64') return runNativeExportOnce(exportInFlightRef.current, 'printBase64', () => printBase64(message));
+    if (message.type === 'printHtml') return runNativeExportOnce(exportInFlightRef.current, 'printHtml', () => printHtml(message));
+    if (message.type === 'savePdfHtml') return runNativeExportOnce(exportInFlightRef.current, 'savePdfHtml', () => savePdfHtml(message));
+    if (message.type === 'shareBase64') return runNativeExportOnce(exportInFlightRef.current, 'shareBase64', () => shareBase64(message));
     if (message.type === 'openExternal') return openExternal(message);
     if (message.type === 'openAppSettings') return openAppSettings();
     if (message.type === 'getDeviceInfo') return getDeviceInfo();
