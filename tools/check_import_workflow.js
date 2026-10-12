@@ -13,6 +13,11 @@ function checkSourceBranchGate(){
   need(sourceChecks,"'AGENTS.md'",'approved project contract edits must run source checks');
   need(sourceChecks,'permissions:' + String.fromCharCode(10) + '  contents: read','source checks must be read-only');
   need(sourceChecks,'npm run check:web','source checks must run canonical validation');
+  const trigger=sourceChecks.split('  pull_request:')[1]?.split('  workflow_dispatch:')[0]||'';
+  if(!trigger)throw new Error('Source CI must include a pull_request gate');
+  forbid(trigger,'paths:','required PR source checks must not be filtered by changed paths');
+  forbid(trigger,'paths-ignore:','required PR source checks must not be skipped by ignored paths');
+  need(sourceChecks,'# All PRs must receive source verification','unfiltered PR verification must be explicit');
   forbid(sourceChecks,'contents: write','source checks must never have source write permission');
   forbid(sourceChecks,'git push','source checks must not push commits');
 }
