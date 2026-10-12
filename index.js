@@ -194,6 +194,25 @@ function App() {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     webRef.current?.injectJavaScript(`if (typeof window.${functionName} === 'function') window.${functionName}(${json}); true;`);
   }, []);
+  const reportExport = useCallback((kind, message, outcome) => {
+    const requestId = String(message?.requestId || '');
+    if (!/^abu-export-[a-z0-9-]{1,80}$/.test(requestId)) return;
+    try {
+      inject('AbuBassamNativeExportResult', {
+        requestId, type: kind, status: String(outcome?.status || 'failed'),
+        count: Number(outcome?.count) || 0, failed: Number(outcome?.failed) || 0,
+        error: String(outcome?.error || ''), name: String(outcome?.name || '')
+      });
+    } catch (_) { /* WebView may have been remounted after request began. */ }
+  }, [inject]);
+  const runReportedExport = useCallback(async (kind, message, task) => {
+    const result = await runNativeExport(nativeExportBusyRef, task);
+    const isSubmission = /^(print|share)/.test(kind);
+    const outcome = result && typeof result === 'object' && typeof result.status === 'string'
+      ? result : { status: result === true ? (isSubmission ? 'submitted' : 'saved') : 'failed' };
+    reportExport(kind, message, outcome);
+    return result;
+  }, [reportExport]);
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
   }, [inject]);
@@ -559,7 +578,12 @@ function App() {
       const declaredType = /^\s*\{\s*"type"\s*:\s*"([A-Za-z][A-Za-z0-9]*)"\s*[,}]/.exec(raw.slice(0, 128))?.[1];
       const heavyType = /^(?:scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/;
       if (heavyType.test(declaredType || '') || (raw.length > 1024 && !declaredType)) {
-        Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل إرسال ملف جديد إلى Android.');
+        const requestId = /^\s*\{\s*"type"\s*:\s*"[A-Za-z][A-Za-z0-9]*"\s*,\s*"requestId"\s*:\s*"(abu-export-[a-z0-9-]{1,80})"/.exec(raw.slice(0,240))?.[1];
+        if (requestId && heavyType.test(declaredType || '')) {
+          reportExport(declaredType, { requestId }, { status: 'busy', error: 'عملية حفظ أو طباعة أخرى قيد التنفيذ؛ أعد المحاولة بعد انتهائها.' });
+        } else {
+          Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل إرسال ملف جديد إلى Android.');
+        }
         return false;
       }
     }
@@ -568,17 +592,17 @@ function App() {
     if (message.type === 'webBootReady') { setWebFailure(''); setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return runNativeExport(nativeExportBusyRef, () => scanBarcodeImage(message));
-    if (message.type === 'saveBase64') return runNativeExport(nativeExportBusyRef, async () => {
+    if (message.type === 'saveBase64') return runReportedExport('saveBase64', message, async () => {
       const saved = await saveBase64(message);
       if (saved === true && message.shareAfter) await shareBase64(message);
       return saved;
     });
-    if (message.type === 'saveToGallery') return runNativeExport(nativeExportBusyRef, async () => {
+    if (message.type === 'saveToGallery') return runReportedExport('saveToGallery', message, async () => {
       const saved = await saveToGallery(message);
       if (saved === true && message.shareAfter) await shareBase64(message);
       return saved;
     });
-    if (message.type === 'savePagesToGallery') return runNativeExport(nativeExportBusyRef, async () => {
+    if (message.type === 'savePagesToGallery') return runReportedExport('savePagesToGallery', message, async () => {
       const result = await savePagesToGallery(message);
       const index = message.shareIndex;
       if (Number.isInteger(index) && index >= 0 && result?.savedIndexes?.includes(index)) {
@@ -590,22 +614,22 @@ function App() {
       }
       return result;
     });
-    if (message.type === 'printPages') return runNativeExport(nativeExportBusyRef, () => printPages(message));
-    if (message.type === 'printBase64') return runNativeExport(nativeExportBusyRef, async () => {
+    if (message.type === 'printPages') return runReportedExport('printPages', message, () => printPages(message));
+    if (message.type === 'printBase64') return runReportedExport('printBase64', message, async () => {
       const printed = await printBase64(message);
       if (printed === true && message.shareAfter) await shareBase64(message);
       return printed;
     });
-    if (message.type === 'printHtml') return runNativeExport(nativeExportBusyRef, () => printHtml(message));
-    if (message.type === 'savePdfHtml') return runNativeExport(nativeExportBusyRef, () => savePdfHtml(message));
-    if (message.type === 'shareBase64') return runNativeExport(nativeExportBusyRef, () => shareBase64(message));
+    if (message.type === 'printHtml') return runReportedExport('printHtml', message, () => printHtml(message));
+    if (message.type === 'savePdfHtml') return runReportedExport('savePdfHtml', message, () => savePdfHtml(message));
+    if (message.type === 'shareBase64') return runReportedExport('shareBase64', message, () => shareBase64(message));
     if (message.type === 'openExternal') return openExternal(message);
     if (message.type === 'openAppSettings') return openAppSettings();
     if (message.type === 'getDeviceInfo') return getDeviceInfo();
     if (message.type === 'cleanCache') return runNativeExport(nativeExportBusyRef, () => cleanCache());
     if (message.type === 'security') return handleSecurity(message);
     if (message.type === 'exitApp') return BackHandler.exitApp();
-  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
+  }, [cleanCache, getDeviceInfo, handleSecurity, openAppSettings, openCamera, openExternal, scanBarcodeImage, runReportedExport, reportExport, printBase64, printHtml, printPages, saveBase64, savePdfHtml, savePagesToGallery, saveToGallery, shareBase64]);
 
   const barcodeMode = cameraMode === 'barcode';
   return (
