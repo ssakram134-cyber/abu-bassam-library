@@ -304,9 +304,18 @@ function App() {
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
-    const parsed = splitDataUrl(data), finalName = safeName(name), uri = `${FileSystem.cacheDirectory}abu_bassam_${Date.now()}_${finalName}`;
-    await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
-    return { uri, name: finalName, type: mime || parsed.mime };
+    const parsed = splitDataUrl(data), finalName = safeName(name);
+    if (!FileSystem.cacheDirectory) throw new Error('مجلد الملفات المؤقتة غير متاح');
+    // Two simultaneous print/share requests must never overwrite one another.
+    const uri = `${FileSystem.cacheDirectory}abu_bassam_${Date.now()}_${Math.random().toString(36).slice(2)}_${finalName}`;
+    try {
+      await FileSystem.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      return { uri, name: finalName, type: mime || parsed.mime };
+    } catch (error) {
+      // A failed native write may already have created a partial cache file.
+      try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch (_) {}
+      throw error;
+    }
   }, []);
 
   const printBase64 = useCallback(async ({ name, mime, data }) => {
