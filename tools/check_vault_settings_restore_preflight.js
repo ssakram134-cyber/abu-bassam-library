@@ -15,7 +15,7 @@ assert.ok(restore.indexOf('await readValidatedBackupSettings(zip)')<restore.inde
 assert.ok(restore.includes("catch(settingsError){"),'Settings failures after file commit must be reported separately');
 
 function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"dark"}}',
-  packedSize,settingsFailure=false,onSettingsRead=null,missingSettings=false}={}){
+  packedSize,settingsFailure=false,onSettingsRead=null,missingSettings=false,switchAfterCommit=false}={}){
  let scope='owner:branch1',committed=false,settingsApplied=0;
  const alerts=[],calls=[];
  const manifest=JSON.stringify({format:'AbuBassamVault',version:6,branchDeviceId:'branch1',items:[]});
@@ -45,7 +45,7 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
   all:async()=>existing,
   backupBytes:async()=>new Uint8Array(),saveBlob:async()=>{},
   blobHash:async()=>'',nice:x=>x,
-  applyAtomic:async()=>{calls.push('commit');committed=true;existing.length=0},
+  applyAtomic:async()=>{calls.push('commit');committed=true;existing.length=0;if(switchAfterCommit)scope='other-account'},
   restoreSettings:()=>{settingsApplied++;calls.push('apply-settings');if(settingsFailure)throw Error('quota denied')},
   alert:m=>alerts.push(String(m)),
   '$':()=>null,
@@ -85,6 +85,12 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  assert.equal(storageFull.result,true,'Committed archive files cannot be reported as rolled back');
  assert.equal(storageFull.committed,true);
  assert.ok(storageFull.alerts.some(x=>x.includes('تمت استعادة الملفات')),'Partial settings error must be explained');
+
+ const afterCommit=await scenario({switchAfterCommit:true}).run();
+ assert.equal(afterCommit.committed,true);
+ assert.equal(afterCommit.result,true,'Completely saved files must not be reported as a failed restore after account change');
+ assert.equal(afterCommit.settingsApplied,0,'New account must never receive old account settings');
+ assert.ok(afterCommit.alerts.some(x=>x.includes('تم حفظ ملفات النسخة')),'User must be informed that files were saved to prior branch');
 
  const switched=await scenario({onSettingsRead:change=>change()}).run();
  assert.equal(switched.result,false);
@@ -126,6 +132,6 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  const oversize=exerciseSettings({theme:'old'},{theme:'a'.repeat(500001)});
  assert.match(String(oversize.error),/يتجاوز الحد/,'Oversized setting must be rejected before commit');
  assert.equal(oversize.entries.theme,'old','Oversized values must not partially write settings');
- console.log('Archive restore settings preflight passed: 7 restore scenarios and 4 direct localStorage rollback tests.');
+ console.log('Archive restore settings preflight passed: 8 restore scenarios and 4 direct localStorage rollback tests.');
 
 })().catch(e=>{console.error(e);process.exitCode=1});
