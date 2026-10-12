@@ -11,9 +11,9 @@ for(const marker of [
  "async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true)",
  "const sessionEpoch=vaultSessionEpoch,sessionScope=syncScope()",
  "ensureSyncSession();const row=await service.get('vault',item.id)",
- "await dbStoreSyncConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy)",
- "await dbAckPending(item,String(saved?.updated_at||''))",
- "await dbStoreRemoteIfCurrent(here||null,remoteItem(data,blob,remoteVersion))",
+ "await dbStoreSyncConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy,sessionValid)",
+ "await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid)",
+ "await dbStoreRemoteIfCurrent(here||null,remoteItem(data,blob,remoteVersion),sessionValid)",
  "ensureSyncSession();await refresh();ensureSyncSession()"
 ])assert.ok(source.includes(marker),'Missing vault race-protection invariant: '+marker);
 
