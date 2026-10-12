@@ -22,3 +22,7 @@ __pycache__/
 output/
 tools/__pycache__/
 *.pyc
+credentials.json
+.env
+.env.*
+!.env.example
