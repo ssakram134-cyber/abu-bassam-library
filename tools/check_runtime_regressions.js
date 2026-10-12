@@ -38,4 +38,5 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 require('./check_startup_recovery.js');
 require('./check_shared_script_bootstrap.js');
+require('./check_iframe_lifecycle.js');
 process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, native startup watchdog, and canonical login guards.\n');
