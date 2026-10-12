@@ -126,15 +126,35 @@ async function main(){
  assert.ok(advancedCode.includes('async function putItem(')&&hardeningCode.includes('async function applyAtomic('),'Independent archive writers must be testable');
  const restoreRecords=new Map();
  const restoreDb={transaction(){
-  let aborted=false;
-  const tx={oncomplete:null,onerror:null,onabort:null,abort(){aborted=true;queueMicrotask(()=>tx.onabort?.())},objectStore(){
-   return{
-    get(id){const q={result:null,onsuccess:null};queueMicrotask(()=>{q.result=clone(restoreRecords.get(id));q.onsuccess?.();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})});return q},
-    getAll(){const q={result:null,onsuccess:null};queueMicrotask(()=>{q.result=[...restoreRecords.values()].map(clone);q.onsuccess?.();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})});return q},
-    put(record){restoreRecords.set(record.id,clone(record));queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})},
-    clear(){restoreRecords.clear();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})}
-   }
-  }};
+  let aborted=false,finished=false,pending=0;
+  const finish=()=>queueMicrotask(()=>{
+   if(!aborted&&!finished&&pending===0){finished=true;tx.oncomplete?.()}
+  });
+  const request=read=>{
+   pending++;const q={result:null,onsuccess:null,onerror:null};
+   queueMicrotask(()=>{
+    if(aborted)return;
+    try{q.result=read();q.onsuccess?.()}catch(e){tx.error=e;q.onerror?.();tx.abort()}
+    pending--;finish()
+   });
+   return q
+  };
+  const tx={
+   oncomplete:null,onerror:null,onabort:null,error:null,
+   abort(){if(aborted||finished)return;aborted=true;queueMicrotask(()=>tx.onabort?.())},
+   objectStore(){return{
+    get:id=>request(()=>clone(restoreRecords.get(id))),
+    getAll:()=>request(()=>[...restoreRecords.values()].map(clone)),
+    put(record){
+     pending++;restoreRecords.set(record.id,clone(record));
+     queueMicrotask(()=>{pending--;finish()})
+    },
+    clear(){
+     pending++;restoreRecords.clear();
+     queueMicrotask(()=>{pending--;finish()})
+    }
+   }}
+  };
   return tx
  }};
  const {putItem}=new Function('openDb','STORE',advancedCode+';return {putItem}')(async()=>restoreDb,'items');
