@@ -188,13 +188,13 @@ async function makePdfDataAsync(){
 function tgCaption(action){let ps=getPhotoSize(),pd=getPaperSize(),d=new Date().toLocaleString('ar-IQ');return `مكتبة أبو بسام للقرطاسية والتصوير\n${action}\n${d}\nالورق: ${pd.w/10}×${pd.h/10} سم | الصورة: ${ps.w/10}×${ps.h/10} سم${dpiIsEnabled()?' | '+manualDpi()+' DPI':''}`}
 function telegramReady(){return $('tgEnabled')&&$('tgEnabled').checked}
 function telegramSend(data,name,mime,action){if(!telegramReady())return;if(window.Android&&Android.shareBase64)Android.shareBase64(name,mime,data)}
-function downloadJPG(){if(!pageCanvases.length)return alert('أضف صورة أولاً');if(pageCanvases.length>20)return alert('العمل يحتوي على أكثر من 20 صفحة، وهذا يتجاوز حد حفظ الصور الآمن على Android. احفظ العمل PDF متعدد الصفحات أو قسمه إلى دفعات.');let d=pageCanvases[currentPage].toDataURL('image/jpeg',.98),name=`Abu_Bassam_Page_${currentPage+1}.jpg`;telegramSend(d,name,'image/jpeg','حفظ في المعرض');if(window.Android&&Android.savePagesToGallery){let pages=[],totalChars=0;for(let i=0;i<pageCanvases.length;i++){const image=i===currentPage?d:pageCanvases[i].toDataURL('image/jpeg',.98);totalChars+=image.length;if(totalChars>40*1024*1024)return alert('الصور كبيرة جداً؛ احفظها على دفعات أصغر للحفاظ على ذاكرة الهاتف.');pages.push(image)}return Android.savePagesToGallery('Abu_Bassam_Page',pages,'image/jpeg')}if(window.Android&&Android.saveToGallery)return Android.saveToGallery(name,'image/jpeg',d);if(window.Android&&Android.saveBase64)return Android.saveBase64(name,'image/jpeg',d);let a=document.createElement('a');a.download=name;a.href=d;a.click()}
+function downloadJPG(){if(!pageCanvases.length)return alert('أضف صورة أولاً');if(pageCanvases.length>20)return alert('العمل يحتوي على أكثر من 20 صفحة، وهذا يتجاوز حد حفظ الصور الآمن على Android. احفظ العمل PDF متعدد الصفحات أو قسمه إلى دفعات.');let d=pageCanvases[currentPage].toDataURL('image/jpeg',.98),name=`Abu_Bassam_Page_${currentPage+1}.jpg`;if(window.Android&&Android.savePagesToGallery){let pages=[],totalChars=0;for(let i=0;i<pageCanvases.length;i++){const image=i===currentPage?d:pageCanvases[i].toDataURL('image/jpeg',.98);totalChars+=image.length;if(totalChars>40*1024*1024)return alert('الصور كبيرة جداً؛ احفظها على دفعات أصغر للحفاظ على ذاكرة الهاتف.');pages.push(image)}return Android.savePagesToGallery('Abu_Bassam_Page',pages,'image/jpeg',telegramReady()?currentPage:-1)}if(window.Android&&Android.saveToGallery)return Android.saveToGallery(name,'image/jpeg',d,telegramReady());if(window.Android&&Android.saveBase64)return Android.saveBase64(name,'image/jpeg',d,telegramReady());telegramSend(d,name,'image/jpeg','حفظ في المعرض');let a=document.createElement('a');a.download=name;a.href=d;a.click()}
 async function downloadPDF(){
  if(!pageCanvases.length)return alert('أضف صورة أولاً');
  try{
   const d=await makePdfDataAsync();
+  if(window.Android&&Android.saveBase64)return Android.saveBase64('Abu_Bassam_Photos.pdf','application/pdf',d,telegramReady());
   telegramSend(d,'Abu_Bassam_Photos.pdf','application/pdf','حفظ PDF');
-  if(window.Android&&Android.saveBase64)return Android.saveBase64('Abu_Bassam_Photos.pdf','application/pdf',d);
   let a=document.createElement('a');a.href=d;a.download='Abu_Bassam_Photos.pdf';a.click()
  }catch(e){alert('تعذر إنشاء PDF: '+String(e?.message||e))}
 }
@@ -204,11 +204,9 @@ async function printDirectly(){
   if(pageCanvases.length>20){
    if(!window.Android?.printBase64)return alert('هذه الدفعة تزيد على 20 ورقة؛ احفظ PDF واطبعه من تطبيق يدعم الصفحات جميعها.');
    const pdf=await makePdfDataAsync();
-   telegramSend(pdf,'Abu_Bassam_Print.pdf','application/pdf','طباعة');
-   return Android.printBase64('Abu_Bassam_Print.pdf','application/pdf',pdf)
+   return Android.printBase64('Abu_Bassam_Print.pdf','application/pdf',pdf,telegramReady())
   }
   if(!window.Android||!Android.printPages)return alert('الطباعة المباشرة متاحة داخل تطبيق أندرويد');
-  if(telegramReady())telegramSend(await makePdfDataAsync(),'Abu_Bassam_Print.pdf','application/pdf','طباعة');
   let urls=[],totalSize=0;
   for(const canvas of pageCanvases){
    const image=canvas.toDataURL('image/png');
@@ -217,7 +215,7 @@ async function printDirectly(){
    urls.push(image)
   }
   // Pass the array directly: the native bridge serializes exactly once.
-  return Android.printPages(urls,pagePrintMeta?.paperKey||getPaperPrintKey(),pagePrintMeta?.dpi??printDpi())
+  return Android.printPages(urls,pagePrintMeta?.paperKey||getPaperPrintKey(),pagePrintMeta?.dpi??printDpi(),telegramReady())
  }catch(e){alert('تعذرت الطباعة: '+String(e?.message||e))}
 }
 function saveTelegramSettings(){localStorage.setItem('tgEnabled',$('tgEnabled').checked?'1':'0');localStorage.setItem('tgUsername',$('tgUsername').value.trim().replace(/^@/,''));localStorage.setItem('tgLink',$('tgLink').value.trim());localStorage.removeItem('tgToken');localStorage.removeItem('tgChatId');updateTelegramStatus()}
