@@ -122,6 +122,43 @@ async function run(){
  assert.equal((await guarded('test',local,null)).updated_at,ack.updated_at);
  assert.equal(recorded,1,'Valid server CAS receipt may be recorded');
  console.log('CAS acknowledgement guard passed: ten invalid receipts rejected and one valid receipt accepted.');
+
+ function uploadResponseScenario(mode){
+  const actions=[],paths=new Map(),uploadPath='uid/branch-vault/dev/item/rev';
+  const gate=async name=>{actions.push('rpc:'+name);return true};
+  const signed=async()=>{actions.push('edge');return {path:mode==='empty-path'?'':uploadPath,token:mode==='empty-token'?'':'valid-token'}};
+  const store=()=>({storage:{from:()=>({uploadToSignedUrl:async(path,token,blob,opts)=>{
+   actions.push('storage');if(opts.upsert!==undefined)throw Error('Signed upload must not claim an upsert override');
+   if(mode==='no-receipt')return {data:null,error:null};
+   if(mode==='wrong-path')return {data:{path:uploadPath+'/wrong'},error:null};
+   if(mode==='storage-failed')return {data:null,error:new Error('STORAGE_FAILED')};
+   return {data:{path:uploadPath},error:null}
+  }})}});
+  const fn=new Function('allowed','credentials','rpc','client','edge','BUCKET','pathToId',
+   uploadSrc+';return uploadVault')(
+   ()=>true,async()=>({deviceId:'dev',secret:'example'}),gate,store,signed,'bucket',paths
+  );
+  return {actions,paths,run:()=>fn('item',{size:4,type:'image/png'},'image/png')};
+ }
+ const confirmedUpload=uploadResponseScenario('ok');
+ assert.equal(await confirmedUpload.run(),'uid/branch-vault/dev/item/rev','Only actual Storage receipt confirms file path');
+ assert.equal(confirmedUpload.paths.size,1,'Confirmed upload can be added to Storage path map');
+ for(const mode of ['empty-path','empty-token']){
+  const result=uploadResponseScenario(mode);
+  await assert.rejects(result.run(),/VAULT_UPLOAD_PLAN_INVALID/,mode+' must be rejected before upload');
+  assert.equal(result.actions.includes('storage'),false);
+  assert.equal(result.paths.size,0);
+ }
+ for(const mode of ['no-receipt','wrong-path']){
+  const result=uploadResponseScenario(mode);
+  await assert.rejects(result.run(),/VAULT_UPLOAD_UNCONFIRMED/,mode+' must keep archive pending');
+  assert.equal(result.actions.includes('storage'),true);
+  assert.equal(result.paths.size,0);
+ }
+ const uploadFailure=uploadResponseScenario('storage-failed');
+ await assert.rejects(uploadFailure.run(),/STORAGE_FAILED/,'Storage error must not be disguised as a successful upload');
+ assert.equal(uploadFailure.paths.size,0);
+ console.log('Signed Storage uploads: 6 receipt/plan scenarios verified; no false saved paths.');
  console.log('Vault server CAS contract checks passed: SQL locking/permissions, 4 CAS calls and 4 upload-preflight scenarios. Database migration NOT deployed or SQL-executed.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1});
