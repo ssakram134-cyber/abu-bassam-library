@@ -6,6 +6,8 @@ function section(src,from,to){const a=src.indexOf(from),b=src.indexOf(to,a+from.
 const helpers=section(home,'function disposeCanvas(','function clearImages(){');
 const photo=section(home,'function renderPaper(){','function showPage(');
 const zoom=section(home,'function openPaperZoom(){','function zoomDist(');
+const jpeg=section(home,'function downloadJPG(){','function downloadPDF(){');
+const printing=section(home,'function printDirectly(){','function saveTelegramSettings(){');
 const build=section(poster,'function buildPoster(){','function drawPosterMarks(');
 const invalidate=section(poster,'function invalidatePosterPages(){','function posterSettingsChanged(){');
 for(const token of ['old.forEach(cv=>','disposeCanvas(t)','pagesCreated.forEach(disposeCanvas)','printZoomThumbnail(pageCanvases[currentPage])',"$('paperZoomImage').removeAttribute('src')"])
@@ -14,16 +16,16 @@ for(const token of ["pages.push(page);page.width=", "pages.forEach(cv=>{cv.width
  "if(typeof releasePrintPages==='function')releasePrintPages(pages)"])
  assert.ok(build.includes(token),'Poster memory guard missing: '+token);
 
-const canvases=[];let failAfter=0;
+const canvases=[];let failAfter=0,downloads=0;
 class Canvas{
- constructor(){this.width=0;this.height=0;this.encoded=null;this.style={};canvases.push(this)}
+ constructor(){this.width=0;this.height=0;this.encoded=null;this.encodeCount=0;this.style={};canvases.push(this)}
  getContext(){const self=this;return{
   fillRect(){},strokeRect(){},save(){},restore(){},translate(){},rotate(){},clearRect(){},
   drawImage(){if(failAfter&&!--failAfter)throw Error('SIMULATED_CANVAS_DRAW_FAILURE')},
   get imageSmoothingEnabled(){return true},set imageSmoothingEnabled(v){},
   set imageSmoothingQuality(v){},set fillStyle(v){},set strokeStyle(v){},set lineWidth(v){}
  }}
- toDataURL(type){this.encoded={width:this.width,height:this.height,type};return 'data:image/jpeg;base64,QUJD'}
+ toDataURL(type){this.encodeCount++;this.encoded={width:this.width,height:this.height,type};return 'data:image/jpeg;base64,QUJD'}
 }
 const elements=new Map();
 function el(id){if(!elements.has(id))elements.set(id,{
@@ -32,7 +34,7 @@ function el(id){if(!elements.has(id))elements.set(id,{
  classList:{add(){},remove(){}},
  removeAttribute(k){if(k==='src')this.src=''}
  });return elements.get(id)}
-const document={createElement:t=>{assert.equal(t,'canvas');return new Canvas()},
+const document={createElement:t=>{if(t==='a')return{click(){downloads++},href:'',download:''};assert.equal(t,'canvas');return new Canvas()},
  querySelector:()=>({classList:{remove(){}}})};
 const $=el;
 const original=[{img:{naturalWidth:100,naturalHeight:100},src:'original'}];
@@ -95,6 +97,26 @@ check(posterTest.pages().length===0&&good.every(c=>c.width===0&&c.height===0),
  'Poster draw failure must discard previously published pages and invalidate output');
 check(canvases.every(c=>c.width===0&&c.height===0),'Poster failure releases all partly generated tile canvases');
 check(posterTest.meta()===null,'Failed poster build must invalidate stale print metadata');
+
+const nativeCalls=[],native={printPages:(...args)=>nativeCalls.push(args)};
+const sampleA=new Canvas(),sampleB=new Canvas();sampleA.width=1200;sampleA.height=1800;sampleB.width=1200;sampleB.height=1800;
+const userBridge={};
+let pdfBuilds=0,telegramBuilds=0;
+const exports=new Function('document','window','Android','telegramSend','telegramReady','makePdfData','getPaperPrintKey','printDpi','alert','sampleA','sampleB',
+ 'let pageCanvases=[sampleA,sampleB],currentPage=0,pagePrintMeta={paperKey:"A4",dpi:150};'+jpeg+printing+
+ ';return {downloadJPG,printDirectly}')(
+ document,userBridge,native,()=>{telegramBuilds++},()=>false,()=>{pdfBuilds++;return 'pdf-data'},()=> 'A4',()=>150,()=>{},sampleA,sampleB
+);
+exports.downloadJPG();
+check(sampleA.encodeCount===1&&sampleB.encodeCount===0&&downloads===1,
+ 'Browser JPG save must encode just the selected page');
+exports.printDirectly();
+check(pdfBuilds===0&&nativeCalls.length===0,
+ 'Browser without a native print bridge must not encode all images or create a PDF');
+userBridge.Android=native;
+exports.printDirectly();
+check(nativeCalls.length===1&&nativeCalls[0][1]==='A4'&&pdfBuilds===0,
+ 'Native print sends pages without creating an unnecessary Telegram PDF when sharing is off');
 
 console.log('Print canvas lifecycle checks passed: '+count+
  ' cases; page replacement, render failure, zoom cleanup, poster failure and canvas disposal.');
