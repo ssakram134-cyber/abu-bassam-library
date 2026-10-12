@@ -108,6 +108,70 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
   'Photo, PDF and print operations must no longer send a second concurrent Telegram request');
  check(calls[0].kind==='gallery'&&calls[0].args[3]===1&&calls[1].args[3]===true&&
    calls[2].args[3]===true,'Native exports must convey optional share preference');
+
+ const actualPrint=native.match(/  const printPages = useCallback\\([\\s\\S]*?\\n  \\}, \\[\\]\\);/)?.[0];
+ assert.ok(actualPrint,'Cannot extract canonical native print handler');
+ function printerMock({enabled=true,printerError=false,sharingError=false}={}){
+  const sequence=[],notices=[];
+  const FileSystem={cacheDirectory:'file:///test-cache/',deleteAsync:async uri=>{sequence.push('delete:'+uri)}};
+  const Print={printAsync:async()=>{
+   sequence.push('print');
+   if(printerError)throw Error('printer canceled');
+  },printToFileAsync:async()=>{sequence.push('create-pdf');return{uri:'file:///test-cache/printed.pdf'}}};
+  const Sharing={isAvailableAsync:async()=>true,shareAsync:async()=>{
+   sequence.push('share');
+   if(sharingError)throw Error('share canceled')
+  }};
+  const handler=new Function('useCallback','Print','Sharing','FileSystem','Alert',
+   'MAX_NATIVE_PAGE_CHARS','MAX_NATIVE_PAGE_COUNT','printDimensions',
+   actualPrint+';return printPages')(
+   x=>x,Print,Sharing,FileSystem,{alert:(...parts)=>notices.push(parts)},2048,20,
+   ()=>({width:210,height:297})
+  );
+  return{sequence,notices,run:()=>handler({pages:['data:image/png;base64,AQID'],paper:'A4',shareAfter:enabled})}
+ }
+ const normalPrint=printerMock();
+ check(await normalPrint.run()===true&&normalPrint.sequence.join(',')===
+  'print,create-pdf,share,delete:file:///test-cache/printed.pdf',
+  'Native printed pages are optionally shared only after print dialog and temp PDF is cleaned');
+ const noTelegram=printerMock({enabled:false});
+ check(await noTelegram.run()===true&&noTelegram.sequence.join(',')==='print',
+  'With Telegram disabled native printing must not generate a second PDF');
+ const failedPrint=printerMock({printerError:true});
+ check(await failedPrint.run()===false&&failedPrint.sequence.join(',')==='print',
+  'Failed or canceled print must never open share sheet');
+ const failedShare=printerMock({sharingError:true});
+ check(await failedShare.run()===true&&
+   failedShare.sequence.at(-1)==='delete:file:///test-cache/printed.pdf'&&
+   failedShare.notices.some(parts=>String(parts[0]).includes('تعذرت المشاركة')),
+  'After printing, failed sharing must not report printing failed or leave a temp PDF');
+
+ const actualSave=native.match(/  const saveBase64 = useCallback\\([\\s\\S]*?\\n  \\}, \\[\\]\\);/)?.[0];
+ assert.ok(actualSave,'Cannot extract canonical save-to-SAF handler');
+ function saf({grant=true,failWrite=false}={}){
+  const calls=[],notices=[];
+  const FileSystem={StorageAccessFramework:{
+   getUriForDirectoryInRoot:()=> 'content://downloads',
+   requestDirectoryPermissionsAsync:async()=>{calls.push('permission');return{granted:grant,directoryUri:'content://downloads'}}
+  }};
+  const callback=new Function('useCallback','splitDataUrl','safeName','FileSystem','writeSafFile','Alert',
+   actualSave+';return saveBase64')(
+   fn=>fn,()=>({mime:'application/pdf',base64:'AQID'}),n=>n,FileSystem,
+   async()=>{calls.push('write');if(failWrite)throw Error('storage unavailable')},
+   {alert:(...msg)=>notices.push(msg)}
+  );
+  return{calls,notices,run:()=>callback({name:'copy.pdf',mime:'application/pdf',
+   data:'data:application/pdf;base64,AQID',shareAfter:true})}
+ }
+ const denied=saf({grant:false});
+ check(await denied.run()===false&&denied.calls.join(',')==='permission',
+  'Canceled Android document picker must return false without writing');
+ const saved=saf();
+ check(await saved.run()===true&&saved.calls.join(',')==='permission,write',
+  'Successful SAF save must return true so sharing is allowed to follow');
+ const errored=saf({failWrite:true});
+ check(await errored.run()===false&&errored.notices.some(msg=>String(msg[0]).includes('تعذر الحفظ')),
+  'A failed SAF write must be reported as failed and must not trigger a share');
  console.log('Native Telegram serialization passed: '+passed+
   ' cases; success, cancel, partial gallery save, print failure and one-message bridge.')
 })().catch(e=>{console.error(e);process.exitCode=1});
