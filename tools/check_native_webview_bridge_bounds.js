@@ -107,3 +107,4 @@ async function check(){
  console.log('WebView bridge size and print safety passed: 3 payload paths and validation of malformed, too-large and excessive-page requests.');
 }
 check().catch(e=>{console.error(e);process.exitCode=1});
+require('./check_native_export_ack.js');
