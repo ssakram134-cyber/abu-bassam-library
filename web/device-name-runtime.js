@@ -92,13 +92,22 @@
   function showBootFailure(error){
     const splash=document.getElementById('splash');
     if(splash){splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1'}
-    const message=document.getElementById('splashText')||splash?.querySelector?.('p,small,div');
-    if(message)message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.';
+    if(splash){
+      let message=document.getElementById('splashText');
+      if(!message){
+        message=document.createElement('p');
+        message.id='splashText';
+        message.setAttribute('role','alert');
+        message.style.cssText='position:absolute;z-index:2;bottom:9%;left:5%;right:5%;padding:14px;border-radius:12px;background:#fff8f4;color:#7f2424;text-align:center;font-weight:bold';
+        splash.appendChild(message);
+      }
+      message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق أو استخدم زر إعادة المحاولة.';
+    }
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
-    ensureIdentity();
     try{
+      ensureIdentity();
       await loadApprovedUi();
       signalBootReady();
       dismissSplash();
