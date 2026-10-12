@@ -48,7 +48,10 @@ Deno.serve(async(req:Request)=>{
       const body=await req.json().catch(()=>({})),itemId=String(body?.item_id||''),mime=String(body?.mime||'application/octet-stream').split(';',1)[0].trim().toLowerCase();
       if(!validItemId(itemId))return json({error:'ITEM_ID_REQUIRED'},400);
       const base=await context(req,'vaultSync');
-      const {data:existing}=await base.admin.from('abu_bassam_branch_vault').select('client_id').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
+      const {data:existing,error:existingError}=await base.admin.from('abu_bassam_branch_vault').select('client_id').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
+      // A failed metadata lookup is not proof the item does not exist.
+      // Do not issue a signed upload URL using vaultAdd rights on a read error.
+      if(existingError)return json({error:'VAULT_METADATA_UNAVAILABLE'},503);
       const permission=existing?'vaultEdit':'vaultAdd';
       if(!permissionEnabled(base.device,permission))return json({error:permission.toUpperCase()+'_NOT_ALLOWED'},403);
       const path=scopedPath(base.user.id,base.deviceId,itemId,crypto.randomUUID()),{data,error}=await base.admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:false});
@@ -60,8 +63,10 @@ Deno.serve(async(req:Request)=>{
       const base=await context(req,'vaultView');
       if(!permissionEnabled(base.device,'vaultSync'))return json({error:'VAULT_SYNC_NOT_ALLOWED'},403);
       const {data:row,error:rowError}=await base.admin.from('abu_bassam_branch_vault').select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId).eq('client_id',itemId).maybeSingle();
-      if(rowError||!row)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
-      const path=String(row.data?.storagePath||'');if(!path||!isScoped(path,base.user.id,base.deviceId))return json({error:'VAULT_PATH_INVALID'},403);
+      if(rowError)return json({error:'VAULT_METADATA_UNAVAILABLE'},503);
+      if(!row)return json({error:'VAULT_ITEM_NOT_FOUND'},404);
+      const path=String(row.data?.storagePath||'');
+      if(!path||row.data?.deleted===true||!isItemRevision(path,base.user.id,base.deviceId,itemId))return json({error:'VAULT_PATH_INVALID'},403);
       const {data,error}=await base.admin.storage.from(BUCKET).createSignedUrl(path,900,{download:false});if(error||!data?.signedUrl)return json({error:error?.message||'SIGNED_DOWNLOAD_FAILED'},500);
       return json({ok:true,path,url:data.signedUrl,expiresIn:900});
     }
