@@ -358,8 +358,11 @@ async function deleteItem(id){if(!requireVault('vaultDelete'))return;
   await refresh();logOperation('delete','نقل إلى سلة المحذوفات: '+item.name);if(autoSync()&&navigator.onLine)setTimeout(()=>syncNow(false),500)
 }
 async function purgeExpiredTrash(){
+ // Expiration is a destructive archive operation: viewing alone must never
+ // grant the authority to clear deleted blobs or remove tombstones.
+ if(!vaultScopeOk(false)||!vaultAllowed('vaultDelete'))return;
  const epoch=vaultSessionEpoch,scope=syncScope();
- const isCurrent=()=>epoch===vaultSessionEpoch&&scope===syncScope()&&vaultScopeOk(false)&&vaultAllowed('vaultView');
+ const isCurrent=()=>epoch===vaultSessionEpoch&&scope===syncScope()&&vaultScopeOk(false)&&vaultAllowed('vaultDelete');
  const rows=await dbAll();
  for(const item of rows){
   if(!isCurrent())return;
