@@ -209,11 +209,13 @@ function App() {
   const reportExport = useCallback((kind, request, outcome) => {
     const requestId = String(request?.requestId || '');
     if (!/^abu-export-[a-z0-9-]{1,80}$/.test(requestId)) return;
-    inject('AbuBassamNativeExportResult', {
-      requestId, type: kind, status: String(outcome?.status || 'failed'),
-      count: Number(outcome?.count) || 0, failed: Number(outcome?.failed) || 0,
-      error: String(outcome?.error || ''), name: String(outcome?.name || '')
-    });
+    try {
+      inject('AbuBassamNativeExportResult', {
+        requestId, type: kind, status: String(outcome?.status || 'failed'),
+        count: Number(outcome?.count) || 0, failed: Number(outcome?.failed) || 0,
+        error: String(outcome?.error || ''), name: String(outcome?.name || '')
+      });
+    } catch (_) { /* A remounted WebView may no longer receive this result. */ }
   }, [inject]);
   const replySecurity = useCallback((requestId, ok, value, error) => {
     inject('AbuBassamNativeSecurityResult', { requestId: String(requestId || ''), ok: !!ok, value: value ?? null, error: error ? String(error) : '' });
@@ -448,9 +450,9 @@ function App() {
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error('المشاركة غير متاحة على هذا الجهاز');
       const file = await writeTemporaryFile(name, mime, data);
-      try { await Sharing.shareAsync(file.uri, { mimeType: file.type, dialogTitle: 'حفظ أو مشاركة الملف' }); }
+      try { await Sharing.shareAsync(file.uri, { mimeType: file.type, dialogTitle: 'حفظ أو مشاركة الملف' }); return { status: 'submitted' }; }
       finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت المشاركة', String(error?.message || error)); }
+    } catch (error) { Alert.alert('تعذرت المشاركة', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, [writeTemporaryFile]);
 
   const openAppSettings = useCallback(async () => {
