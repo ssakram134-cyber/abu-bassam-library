@@ -81,7 +81,55 @@ async function downloadBytes(id){
  if(sha!==String(d.backup.sha256).toLowerCase())throw Error('فشل فحص SHA-256؛ تم رفض النسخة لأنها قد تكون ناقصة أو تالفة');
  return{bytes:out,backup:d.backup}
 }
-async function restoreCloud(id){if(busy)return false;if(!can('backupRestore')){alert('الأدمن عطّل الاستعادة لهذا الفرع.');return false}if(!confirm('سيتم تنزيل النسخة المختارة والتحقق من سلامتها أولًا، ثم إنشاء Snapshot أمان للحالة الحالية قبل الاستعادة. متابعة؟'))return false;busy=true;try{const d=await downloadBytes(id),cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');if(d.backup.branch_device_id!==cur)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن استعادتها داخل هذا الفرع');const file=new File([d.bytes],`Abu_Bassam_Cloud_${id}.zip`,{type:'application/zip'});status('تم التحقق من النسخة المختارة • إنشاء Snapshot أمان للحالة الحالية...');busy=false;await backupNow('pre_restore',true);busy=true;const restore=window.AbuDocumentVaultHardening?.restore;if(typeof restore!=='function')throw Error('خدمة الاستعادة الآمنة غير جاهزة');status('جاري الاستعادة الآمنة...');const restored=await restore(file,{mode:'snapshot',silentConfirm:true});if(restored!==true){status('تم إلغاء الاستعادة أو لم تكتمل');return false}await api('cleanup','POST',{retention:retention()}).catch(()=>{});log('restore','استعادة نسخة سحابية',id);status('تمت الاستعادة بنجاح ✓');await refreshList();return true}catch(e){alert('تعذرت الاستعادة: '+String(e?.message||e));status('تعذرت الاستعادة');return false}finally{busy=false;paint()}}
+async function restoreCloud(id){
+ if(busy)return false;
+ if(!can('backupRestore')){alert('الأدمن عطّل الاستعادة لهذا الفرع.');return false}
+ if(!confirm('سيتم تنزيل النسخة المختارة والتحقق من سلامتها أولًا، ثم إنشاء Snapshot أمان للحالة الحالية قبل الاستعادة. متابعة؟'))return false;
+ const initialScope=stateScope();
+ const requireScope=()=>{
+  if(stateScope()!==initialScope||!can('backupRestore'))throw Error('تغيّر الحساب أو الفرع أو صلاحية الاستعادة أثناء العملية؛ أُلغيت حمايةً للبيانات.')
+ };
+ busy=true;
+ let archiveCommitted=false;
+ try{
+  requireScope();
+  const d=await downloadBytes(id);
+  requireScope();
+  const cur=String(dev().device_id||window.AbuBassamDevices?.ensure?.()?.id||'');
+  if(d.backup.branch_device_id!==cur)throw Error('هذه النسخة تخص فرعًا آخر ولا يمكن استعادتها داخل هذا الفرع');
+  const file=new File([d.bytes],`Abu_Bassam_Cloud_${id}.zip`,{type:'application/zip'});
+  status('تم التحقق من النسخة المختارة • إنشاء Snapshot أمان للحالة الحالية...');
+  // backupNow owns the same busy flag; recheck scope as soon as its
+  // authenticated request completes, before calling the destructive restore.
+  busy=false;
+  try{await backupNow('pre_restore',true)}finally{busy=true}
+  requireScope();
+  const restore=window.AbuDocumentVaultHardening?.restore;
+  if(typeof restore!=='function')throw Error('خدمة الاستعادة الآمنة غير جاهزة');
+  status('جاري الاستعادة الآمنة...');
+  const restored=await restore(file,{mode:'snapshot',silentConfirm:true});
+  archiveCommitted=restored===true;
+  if(!archiveCommitted){
+   status('تم إلغاء الاستعادة أو لم تكتمل');
+   return false
+  }
+  // A restore can commit before the account changes. Never run cleanup or
+  // logging under another account, and distinguish this from rollback.
+  requireScope();
+  await api('cleanup','POST',{retention:retention()}).catch(()=>{});
+  requireScope();
+  log('restore','استعادة نسخة سحابية',id);
+  status('تمت الاستعادة بنجاح ✓');
+  await refreshList();
+  return true
+ }catch(e){
+  const message=String(e?.message||e);
+  if(archiveCommitted)alert('تمت استعادة الملفات، لكن توقفت خطوات ما بعد الاستعادة: '+message);
+  else alert('تعذرت الاستعادة: '+message);
+  status(archiveCommitted?'استُعيدت الملفات؛ تعذرت بعض الخطوات اللاحقة':'تعذرت الاستعادة');
+  return false
+ }finally{busy=false;paint()}
+}
 async function deleteCloud(id){if(!can('backupDelete'))return alert('الأدمن عطّل حذف النسخ.');if(!confirm('حذف هذه النسخة السحابية نهائيًا؟'))return;try{await api('delete','DELETE',{backup_id:id});log('backup','حذف نسخة سحابية',id);await refreshList()}catch(e){alert(String(e?.message||e))}}
 function status(t){const e=$('abuBackupStatus');if(e)e.textContent=t||''}
 function css(){if($('abuBackupCss'))return;const s=document.createElement('style');s.id='abuBackupCss';s.textContent=`.abm{position:fixed;z-index:39000;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:9px;direction:rtl}.abm.on{display:flex}.abb{width:min(760px,100%);max-height:94vh;overflow:auto;background:#fffaf3;border-radius:18px;color:#261f1b}.abh{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;background:#0b665f;color:#fff;padding:11px}.abh button{width:36px;height:36px;border:0;border-radius:50%}.abc{padding:10px}.abgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.abcard{background:#fff;border:1px solid #ddd0c6;border-radius:12px;padding:9px}.abcard b{font-size:9px}.abcard small{display:block;font-size:8px;color:#74685f;line-height:1.7}.abtools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.abtools button,.abrow button{border:0;border-radius:9px;min-height:40px;background:#087f72;color:#fff;font-weight:900}.abrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;align-items:center;margin:7px 0}.abrow select,.abrow input{min-height:38px;border:1px solid #cbbcaf;border-radius:8px;background:#fff;padding:6px}.ablist{display:grid;gap:6px}.abi{background:#fff;border:1px solid #ddd0c6;border-radius:10px;padding:8px;display:grid;grid-template-columns:1fr auto;gap:6px}.abacts{display:flex;gap:4px}.abacts button{border:0;border-radius:7px;background:#087f72;color:#fff;padding:6px;font-size:8px}.abacts .danger{background:#a62d3a}.abnote{font-size:8px;line-height:1.8;color:#74685f;background:#f3eee7;border-radius:9px;padding:8px}@media(max-width:560px){.abgrid{grid-template-columns:1fr}.abrow{grid-template-columns:1fr 1fr}.abi{grid-template-columns:1fr}.abacts{justify-content:flex-start}}`;document.head.appendChild(s)}
