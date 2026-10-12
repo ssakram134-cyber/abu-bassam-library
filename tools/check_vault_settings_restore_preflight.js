@@ -90,5 +90,42 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  assert.equal(switched.result,false);
  assert.equal(switched.committed,false,'Switching account during async settings read must block archive commit');
 
- console.log('Archive restore settings preflight passed: 7 scenarios; invalid metadata cannot commit files and post-commit settings errors are reported separately.');
+
+ const restoreImpl=between('function restoreSettings(snap,mode){','function safeSettingKey(');
+ const safeKeyImpl=between('function safeSettingKey(k){','function settings(){');
+ function exerciseSettings(initial,snapshot,{mode='snapshot',blockedKey=null}={}){
+  const entries=new Map(Object.entries(initial));
+  const storage={
+   get length(){return entries.size},
+   key:index=>[...entries.keys()][index],
+   getItem:key=>entries.has(key)?entries.get(key):null,
+   setItem:(key,value)=>{if(key===blockedKey)throw Error('QuotaExceededError');entries.set(key,String(value))},
+   removeItem:key=>entries.delete(key)
+  };
+  const apply=new Function('localStorage',safeKeyImpl+restoreImpl+';return restoreSettings')(storage);
+  let error=null;
+  try{apply({settings:snapshot},mode)}catch(e){error=e}
+  return{entries:Object.fromEntries(entries),error}
+ }
+ const quota=exerciseSettings({theme:'old',abuBassamPrintSettings:'prior'},{
+  theme:'new',abuBassamPrintSettings:'new printer'
+ },{blockedKey:'abuBassamPrintSettings'});
+ assert.match(String(quota.error),/QuotaExceededError/,'Quota failures must remain visible');
+ assert.deepEqual(quota.entries,{theme:'old',abuBassamPrintSettings:'prior'},
+  'A settings write failure must restore all previously changed keys');
+ const replaced=exerciseSettings({theme:'old',abuBassamTypography:'unused'},{
+  theme:'new'
+ });
+ assert.equal(replaced.error,null,'Normal settings snapshot should succeed');
+ assert.deepEqual(replaced.entries,{theme:'new'},'Snapshot must remove obsolete safe keys');
+ const merged=exerciseSettings({theme:'old',abuBassamTypography:'retain'},{
+  theme:'new'
+ },{mode:'merge'});
+ assert.deepEqual(merged.entries,{theme:'new',abuBassamTypography:'retain'},
+  'Merge must keep unrelated existing settings');
+ const oversize=exerciseSettings({theme:'old'},{theme:'a'.repeat(500001)});
+ assert.match(String(oversize.error),/يتجاوز الحد/,'Oversized setting must be rejected before commit');
+ assert.equal(oversize.entries.theme,'old','Oversized values must not partially write settings');
+ console.log('Archive restore settings preflight passed: 7 restore scenarios and 4 direct localStorage rollback tests.');
+
 })().catch(e=>{console.error(e);process.exitCode=1});
