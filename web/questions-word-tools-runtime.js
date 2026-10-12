@@ -299,14 +299,24 @@
     }).filter(Boolean);
   }
   function parseImportedQuestions(lines) {
-    var heading = /^(?:س\s*[0-9٠-٩۰-۹]+|Q(?:uestion)?\s*[0-9]+)\s*[/):.\-]?\s*/i;
-    var hasHeadings = lines.some(function (line) { return heading.test(line); });
-    var result = [];
-    lines.forEach(function (line) {
-      if (hasHeadings) {
-        if (heading.test(line) || !result.length) result.push({ title: line, body: '' });
-        else result[result.length - 1].body += (result[result.length - 1].body ? '\n' : '') + line;
-      } else result.push({ title: line, body: '' });
+    var heading = /^(?:س\s*[0-9٠-٩۰-۹]+|السؤال\s*[0-9٠-٩۰-۹]+|Q(?:uestion)?\s*[0-9]+)\s*[/):.\-]?\s*/i;
+    var hasHeadings = lines.some(function (line) { return heading.test(String(line || '').trim()); });
+    var result = [], inAnswerKey = false, started = false;
+    lines.forEach(function (raw) {
+      var line = String(raw || '').trim();
+      if (!line) return;
+      if (!hasHeadings) { result.push({ title: line, body: '' }); return; }
+      // The application adds a header, instructions, totals and an answer key to
+      // its exported DOCX. None of these may become imported exam questions.
+      if (/^(?:مفتاح الإجابة|Answer key)\s*$/i.test(line)) { inAnswerKey = true; return; }
+      if (inAnswerKey) return;
+      if (heading.test(line)) {
+        started = true;
+        result.push({ title: line, body: '' });
+      } else if (started && result.length) {
+        if (/^(?:الدرجة\s*:|Marks\s*:|مستوى الصعوبة\s*:|Difficulty\s*:|الإجابة النموذجية\s*:|Model answer\s*:|مجموع الدرجات المحددة\s*:|Assigned marks total\s*:)/i.test(line)) return;
+        result[result.length - 1].body += (result[result.length - 1].body ? '\n' : '') + line;
+      }
     });
     return result.slice(0, 30);
   }
