@@ -82,7 +82,19 @@ Deno.serve(async(req:Request)=>{
       if(path&&!isItemRevision(path,base.user.id,base.deviceId,itemId))return json({error:'VAULT_PATH_INVALID'},403);
       // Do not remove a revision referenced by active server metadata.
       if(path&&path===currentPath&&row?.data?.deleted!==true)return json({error:'VAULT_ACTIVE_REVISION'},409);
-      if(path){const {error}=await base.admin.storage.from(BUCKET).remove([path]);if(error)return json({error:error.message},500)}
+      if(path){
+        // The initial metadata read can become stale while this request awaits.
+        // Recheck immediately before the irreversible Storage operation.
+        // This narrows the race window but does not make Storage and Postgres atomic.
+        const {data:latest,error:latestError}=await base.admin.from('abu_bassam_branch_vault')
+          .select('data').eq('user_id',base.user.id).eq('branch_device_id',base.deviceId)
+          .eq('client_id',itemId).maybeSingle();
+        if(latestError)return json({error:'VAULT_METADATA_UNAVAILABLE'},503);
+        if(String(latest?.data?.storagePath||'')===path&&latest?.data?.deleted!==true)
+          return json({error:'VAULT_ACTIVE_REVISION'},409);
+        const {error}=await base.admin.storage.from(BUCKET).remove([path]);
+        if(error)return json({error:error.message},500);
+      }
       return json({ok:true});
     }
     return json({error:'UNSUPPORTED_ACTION'},400);
