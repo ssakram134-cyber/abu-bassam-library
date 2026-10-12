@@ -81,7 +81,7 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  assert.equal(unsafeText.result,false,'Bearer tokens in allowed settings must be rejected before commit');
  assert.equal(unsafeText.committed,false,'Bearer token must not commit archive files');
 
- const good=
+ const good=await scenario().run();
  assert.equal(good.result,true);
  assert.equal(good.committed,true);
  assert.equal(good.settingsApplied,1);
