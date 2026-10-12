@@ -85,13 +85,14 @@ function openDb(){
   return dbPromise
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
-function localWriteVersion(item){const v=item?._localWriteRev;return Number.isSafeInteger(v)&&v>=0?v:0}
+function localWriteVersion(item){return String(item?._localWriteRev??'')}
+function newWriteRevision(){return globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
 async function dbPut(item){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
   const read=store.get(item.id);
-  read.onsuccess=()=>{store.put({...item,_localWriteRev:localWriteVersion(read.result)+1})};
+  read.onsuccess=()=>{store.put({...item,_localWriteRev:newWriteRevision()})};
   read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
   tx.oncomplete=resolve;
   tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ تعديل الأرشيف'))
@@ -107,7 +108,7 @@ async function dbAckPending(snapshot,remoteVersion,keepPending=false,isCurrent=(
    const current=read.result;
    if(!current||current.syncState!=='pending')return;
    const unchanged=localWriteVersion(current)===localWriteVersion(snapshot);
-   store.put({...current,remoteUpdatedAt:String(remoteVersion||''),syncState:!keepPending&&unchanged?'synced':'pending',_localWriteRev:localWriteVersion(current)+1});
+   store.put({...current,remoteUpdatedAt:String(remoteVersion||''),syncState:!keepPending&&unchanged?'synced':'pending',_localWriteRev:newWriteRevision()});
    acked=unchanged&&!keepPending
   };
   read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
@@ -124,8 +125,8 @@ async function dbStoreSyncConflict(snapshot,replacement,copy,isCurrent=()=>true)
    if(!isCurrent())return;
    const current=read.result;
    if(!current||current.syncState!=='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return;
-   store.put({...replacement,_localWriteRev:localWriteVersion(current)+1});
-   store.put({...copy,_localWriteRev:1});
+   store.put({...replacement,_localWriteRev:newWriteRevision()});
+   store.put({...copy,_localWriteRev:newWriteRevision()});
    done=true
   };
   read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
@@ -144,7 +145,7 @@ async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true){
    if(snapshot){
     if(!current||current.syncState==='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return
    }else if(current)return;
-   if(replacement)store.put({...replacement,_localWriteRev:localWriteVersion(current)+1});
+   if(replacement)store.put({...replacement,_localWriteRev:newWriteRevision()});
    else store.delete(snapshot.id);
    applied=true
   };
