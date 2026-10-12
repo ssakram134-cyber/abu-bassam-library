@@ -477,21 +477,14 @@ function App() {
       Alert.alert('الملف كبير جداً', 'قسّم الصور إلى دفعات أصغر أو استخدم ملفاً مضغوطاً للطباعة.');
       return;
     }
-    // The app bridge writes "type" as the first property. Reject duplicate
-    // heavy payloads before allocating a parsed copy of their Base64 data.
-    // The action lock below remains authoritative for other property orders.
-    const earlyType = raw.match(/^\s*\{\s*"type"\s*:\s*"([A-Za-z]+)"\s*[,}]/);
-    if (nativeExportBusyRef.current && earlyType &&
-      /^(?:scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/.test(earlyType[1])) {
-      Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل طلب طباعة أو حفظ ملف آخر، لتجنب تجمّد الهاتف.');
-      return false;
-    }
-    // The bundled bridge serializes the type first. If a large second export
-    // arrives while another export is active, reject it before JSON.parse
-    // allocates another potentially enormous image or PDF object.
-    if (nativeExportBusyRef.current && raw.length > 1024) {
-      const declaredType = /^\s*\{\s*"type"\s*:\s*"([a-zA-Z][a-zA-Z0-9]*)"/.exec(raw.slice(0, 128))?.[1];
-      if (!declaredType || /^(scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/.test(declaredType)) {
+    // The bundled bridge writes "type" first. While a native export is
+    // running, reject another heavy request before JSON.parse duplicates its
+    // Base64 payload in memory. A missing type on a large message also fails
+    // closed, but ordinary security/device messages remain responsive.
+    if (nativeExportBusyRef.current) {
+      const declaredType = /^\s*\{\s*"type"\s*:\s*"([A-Za-z][A-Za-z0-9]*)"\s*[,}]/.exec(raw.slice(0, 128))?.[1];
+      const heavyType = /^(?:scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/;
+      if (heavyType.test(declaredType || '') || (raw.length > 1024 && !declaredType)) {
         Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل إرسال ملف جديد إلى Android.');
         return false;
       }
