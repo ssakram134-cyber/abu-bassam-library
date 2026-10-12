@@ -71,6 +71,7 @@ let count=0;function check(b,message){assert.ok(b,message);count++}
   'makePdfDataAsync','telegramSend','telegramReady','getPaperPrintKey','printDpi','pagePrintMeta','currentPage',
   'getPaperSize',dlSource+printSource+';return {downloadPDF,printDirectly}');
  const native={saveBase64:(...args)=>saved.push(args),printPages:(...args)=>printPages.push(args),printBase64:(...args)=>saved.push(args)};
+ pdfEvents.length=0;
  const env=htmlRuntime(pageCanvases,{Android:native},native,x=>alerts.push(String(x)),
  {createElement:()=>({click(){}})},main,(...args)=>telegram.push(args),()=>false,
  ()=> 'A4',()=>0,pagePrintMeta,0,()=>({w:210,h:297}));
