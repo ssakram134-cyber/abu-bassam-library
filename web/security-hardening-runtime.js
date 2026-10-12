@@ -11,7 +11,7 @@ const APP_VERSION='4.3.2';
 const OFFLINE_GRACE_MS=12*60*60*1000;
 const CLOCK_SKEW_MS=5*60*1000;
 const LOCK_MINUTES_KEY='abuBassamSecurityLockMinutesV1';
-function configuredLockMinutes(){const value=Number(localStorage.getItem(LOCK_MINUTES_KEY));return [0,1,5,15,60].includes(value)?value:5}
+function configuredLockMinutes(){const raw=localStorage.getItem(LOCK_MINUTES_KEY);const value=raw===null?5:Number(raw);return [0,1,5,15,60].includes(value)?value:5}
 let patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0,revalidationPromise=null;
 
 function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV3')||''}
