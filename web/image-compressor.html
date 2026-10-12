@@ -101,7 +101,8 @@ function namedDataUrl(dataUrl,name){const s=String(dataUrl||''),marker=';base64,
 function browserSave(name,data){const a=document.createElement('a');a.download=name;a.href=data;document.body.appendChild(a);a.click();a.remove()}
 const pendingNativeSaves=new Set();
 function trackNativeSave(requestId){
- if(typeof requestId==='string'&&/^abu-export-[a-z0-9-]+$/.test(requestId))pendingNativeSaves.add(requestId);
+ if(typeof requestId==='string'&&/^abu-export-[a-z0-9-]+$/.test(requestId)){pendingNativeSaves.add(requestId);return true}
+ $('progress').textContent='تعذر إرسال طلب الحفظ إلى Android؛ حاول تقليل حجم الصور.';return false
 }
 function onNativeSaveResult(event){
  const detail=event?.detail;
@@ -130,7 +131,7 @@ async function saveResults(){
   if(bridge?.savePagesToGallery){
    const pages=[];
    for(const r of good){pages.push(namedDataUrl(await blobUrlData(r.blob),r.name));await new Promise(resolve=>setTimeout(resolve,0))}
-   trackNativeSave(bridge.savePagesToGallery('Abu_Bassam_Compressed',JSON.stringify(pages),'image/jpeg'));
+   if(!trackNativeSave(bridge.savePagesToGallery('Abu_Bassam_Compressed',JSON.stringify(pages),'image/jpeg')))return;
    $('progress').textContent='أُرسل طلب حفظ الصور إلى Android. اختر مجلد الصور وأكّد العملية من نافذة النظام.'
   }else{
    for(const r of good)browserSave(r.name,r.url);
@@ -146,7 +147,7 @@ window.saveOneResult=async i=>{
  saving=true;lockProcessingControls(true);$('saveBtn').disabled=true;
  try{
   if(bridge?.saveToGallery){
-   trackNativeSave(bridge.saveToGallery(r.name,r.mime,namedDataUrl(await blobUrlData(r.blob),r.name)));
+   if(!trackNativeSave(bridge.saveToGallery(r.name,r.mime,namedDataUrl(await blobUrlData(r.blob),r.name))))return;
    $('progress').textContent='أُرسل طلب حفظ الصورة إلى Android. اختر المجلد إذا طُلب منك.'
   }else browserSave(r.name,r.url)
  }catch(e){alert('تعذر تجهيز حفظ الصورة: '+String(e?.message||e))}
