@@ -6,7 +6,26 @@ const AUTO='abuBassamBackupAutoV1',CAD='abuBassamBackupCadenceV1',KEEP='abuBassa
 const CHUNK=5*1024*1024,MAX_ZIP=120*1024*1024,MAX_TOTAL=500*1024*1024,MAX_ITEMS=1000,MAX_BACKUP_RECORDS=2000;let busy=false,modalBuilt=false;
 function stateScope(){const uid=String(window.AbuBassamCloud?.session?.()?.user?.id||'local'),d=window.AbuBassamSecurity?.device?.()||window.AbuBassamDevices?.ensure?.()||{},id=String(d.device_id||d.id||'device');return uid+':'+id}
 function scopedKey(key){return key+':'+stateScope()}
-function stateGet(key){const scoped=scopedKey(key);let value=localStorage.getItem(scoped);if(value===null){const legacy=localStorage.getItem(key);if(legacy!==null){localStorage.setItem(scoped,legacy);value=legacy}}return value}
+function stateGet(key){
+ const scope=stateScope(),scoped=key+':'+scope;
+ let value=localStorage.getItem(scoped);
+ // Prior versions used global keys. Only copy preferences once, to the first
+ // identified account/branch. Never transfer backup success, fingerprints,
+ // errors or retry deadlines from one account to another.
+ if(value===null&&(key===AUTO||key===CAD||key===KEEP)){
+  const migrationKey='abuBassamBackupLegacyPreferencesScopeV1';
+  const migrated=localStorage.getItem(migrationKey);
+  if(!migrated||migrated===scope){
+   const legacy=localStorage.getItem(key);
+   if(legacy!==null){
+    localStorage.setItem(scoped,legacy);
+    if(!migrated)localStorage.setItem(migrationKey,scope);
+    value=legacy
+   }
+  }
+ }
+ return value
+}
 function stateSet(key,value){localStorage.setItem(scopedKey(key),String(value))}
 function stateRemove(key){localStorage.removeItem(scopedKey(key))}
 const $=id=>document.getElementById(id),dev=()=>window.AbuBassamSecurity?.device?.()||{},role=()=>window.AbuBassamSecurity?.role?.()||'',cloud=()=>window.AbuBassamCloud,can=k=>{const sec=window.AbuBassamSecurity;if(sec?.role?.()==='owner')return true;return typeof sec?.can==='function'&&sec.can(k)===true};
