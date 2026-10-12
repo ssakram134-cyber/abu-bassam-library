@@ -7,6 +7,8 @@ const vault=fs.readFileSync('web/document-vault-runtime.js','utf8');
 
 for(const [marker,label] of [
  ['create or replace function public.abu_bassam_vault_upsert_cas(', 'new CAS RPC'],
+ ['create or replace function public.abu_bassam_vault_cas_ready(', 'read-only capability preflight'],
+ ['grant execute on function public.abu_bassam_vault_cas_ready(text,text)', 'readiness RPC granted only to authenticated'],
  ['p_expected_updated_at timestamptz', 'required remote revision parameter'],
  ["p_data->>'id' is distinct from p_client_id", 'matching document identity'],
  ["public._abu_bassam_vault_authorized(p_device_id, p_device_secret, 'vaultSync')", 'device-secret authentication'],
@@ -55,12 +57,54 @@ async function run(){
  );
  await cloudFn('vault','a',{id:'a'},unchanged);
  assert.equal(captured[2].payload.p_expected_updated_at,unchanged,'The secure-sync intermediary must preserve remote version');
+ const upStart=branch.indexOf('async function requireCasReady(){');
+ const upEnd=branch.indexOf('\nfunction vaultItemId(',upStart);
+ assert.ok(upStart>=0&&upEnd>upStart,'Safe cloud upload preflight must exist');
+ const uploadSrc=branch.slice(upStart,upEnd);
+ assert.ok(uploadSrc.includes('await requireCasReady();const c=client(),plan=await edge('),
+   'Capability RPC must finish BEFORE requesting signed upload URLs');
+ function buildUpload(mode,can=true){
+  const actions={rpc:[],edge:[],storage:[]},pathToId=new Map();
+  const probe=async(name,payload)=>{
+   actions.rpc.push({name,payload});
+   if(mode==='missing')throw Error('PGRST202 FUNCTION_NOT_FOUND');
+   return mode==='ready'
+  };
+  const gateway=async(action)=>{actions.edge.push(action);return {path:'uid/branch-vault/dev/item/rev',token:'test-token'}};
+  const storage={from:()=>({uploadToSignedUrl:async(path,token,blob,opts)=>{
+   actions.storage.push({path,token,blob,opts});
+   return {data:{path},error:null}
+  }})};
+  const api=new Function('allowed','credentials','rpc','client','edge','BUCKET','pathToId',
+    uploadSrc+';return uploadVault')(
+   ()=>can,async()=>({deviceId:'dev',secret:'not-a-real-secret'}),probe,()=>({storage}),
+   gateway,'test-bucket',pathToId
+  );
+  return {actions,upload:()=>api('item',{size:4,type:'image/png'},'image/png')}
+ }
+ const missing=buildUpload('missing');
+ await assert.rejects(missing.upload(),/VAULT_CAS_NOT_READY/,'Old server must not produce orphan Storage uploads');
+ assert.equal(missing.actions.edge.length,0,'Missing CAS RPC must reject before requesting any signed URL');
+ assert.equal(missing.actions.storage.length,0,'Missing CAS RPC must reject before uploading bytes');
+ const denied=buildUpload('denied');
+ await assert.rejects(denied.upload(),/VAULT_CAS_NOT_READY/,'False capability must reject');
+ assert.equal(denied.actions.edge.length,0);
+ const allowedUpload=buildUpload('ready');
+ const uploadPath=await allowedUpload.upload();
+ assert.equal(uploadPath,'uid/branch-vault/dev/item/rev');
+ assert.deepEqual(allowedUpload.actions.rpc.map(x=>x.name),['abu_bassam_vault_cas_ready']);
+ assert.equal(allowedUpload.actions.edge.length,1,'Signed upload is requested only after a valid capability check');
+ assert.equal(allowedUpload.actions.storage.length,1);
+ const blocked=buildUpload('ready',false);
+ await assert.rejects(blocked.upload(),/VAULT_SYNC_NOT_ALLOWED/,'Missing user permission must block upload early');
+ assert.equal(blocked.actions.rpc.length,0);
+
  const throwCas=async()=>{throw Error('VAULT_VERSION_CONFLICT')};
  const rejectedFn=new Function('allowed','credentials','rpc','recordPaths',line+';return vaultUpsert')(
   ()=>true,async()=>({deviceId:'device',secret:'test-secret'}),throwCas,()=>{}
  );
  await assert.rejects(()=>rejectedFn('a',{id:'a'},unchanged),/VAULT_VERSION_CONFLICT/,
   'Conflicting update must fail, not silently revert to last-write-wins');
- console.log('Vault server CAS contract checks passed: SQL locking/permissions and 4 client RPC scenarios. Database migration NOT deployed or SQL-executed.');
+ console.log('Vault server CAS contract checks passed: SQL locking/permissions, 4 CAS calls and 4 upload-preflight scenarios. Database migration NOT deployed or SQL-executed.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1});
