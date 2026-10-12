@@ -4,16 +4,23 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/source-code-checks.yml'
+      - '.github/workflows/**'
       - 'web/**'
       - 'tools/**'
       - 'scripts/**'
       - 'supabase/**'
+      - 'config/**'
       - 'index.js'
       - 'index-auth.js'
       - 'package.json'
       - 'package-lock.json'
       - 'app.json'
+      - 'eas.json'
+      - 'AGENTS.md'
+      - 'docs/PROJECT-MASTER-SPEC.md'
+  # All PRs must receive source verification, regardless of modified paths.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
