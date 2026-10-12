@@ -99,8 +99,13 @@ function harness(first,second,{onYield=()=>{},scaledLimit=false}={}){
  await ongoing;
  check(serial.images.map(v=>String.fromCharCode(v)).join('')==='AB',
   'Original export must complete normally after rejecting a duplicate request');
- await assert.rejects(serial.run(),/يُنشأ PDF حالياً/).catch(()=>{});
  // The first call has completed: the exporter must not remain stuck as busy.
+ let repeatCallback=null;
+ delayed.toBlob=done=>{repeatCallback=()=>done({arrayBuffer:async()=>Uint8Array.of(255,216,65,255,217).buffer})};
+ const replay=serial.run();
+ check(typeof repeatCallback==='function','A completed export must release the busy lock for another call');
+ repeatCallback();
+ await replay;
  const released=harness(canvas('C'),canvas('D'));
  await released.run();
  check(released.events.includes('output'),'A completed export must allow subsequent generation');
