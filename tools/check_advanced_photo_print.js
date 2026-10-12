@@ -25,7 +25,7 @@ const home=read('index.html');
 for(const marker of [
   "r.onerror=()=>{failed++;done()}",
   "loaded=new Array(files.length)",
-  "if(!uploadedImages.length){pageCanvases=[]",
+  "if(!uploadedImages.length){releasePrintPages()",
   "Math.max(0,Math.round(Math.max(0,Number(mm)||0)",
   "if(iw+2*margin>pw||ih+2*margin>ph)",
   "if(totalCopies>maxJobs)",
