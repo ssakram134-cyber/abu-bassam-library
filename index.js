@@ -166,6 +166,7 @@ function App() {
   const webRef = useRef(null);
   const nativeExportBusyRef = useRef(false);
   const cameraRef = useRef(null);
+  const barcodeScanLockRef = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -185,6 +186,7 @@ function App() {
   }, [inject]);
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
+    barcodeScanLockRef.current = false;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
   }, []);
 
@@ -218,6 +220,7 @@ function App() {
       let permission = cameraPermission;
       if (!permission?.granted) permission = await requestCameraPermission();
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
+      barcodeScanLockRef.current = false;
       setCameraReady(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode', 'maker', 'cardPhoto', 'ocr'].includes(mode) ? mode : 'scan');
@@ -240,12 +243,14 @@ function App() {
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
-    if (barcodeLocked || !result?.data) return;
+    if (barcodeScanLockRef.current || !result?.data) return;
+    // Expo Camera can emit multiple scan events before React rerenders.
+    // Keep a synchronous lock until the camera session is explicitly reset.
+    barcodeScanLockRef.current = true;
     setBarcodeLocked(true);
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
-    setTimeout(() => setBarcodeLocked(false), 500);
-  }, [barcodeLocked, inject]);
+  }, [inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
   const saveBase64 = useCallback(async ({ name, mime, data }) => {
