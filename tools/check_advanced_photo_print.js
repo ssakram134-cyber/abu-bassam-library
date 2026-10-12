@@ -48,7 +48,7 @@ need(posterProject,"document.addEventListener('abu-runtime-loaded',event=>",'pos
 need(read('advanced-completion-runtime.js'),"document.addEventListener('abu-design-advanced-ready',ensureDesignCompletion)",'design tools event-driven startup');
 need(read('design-studio-advanced-runtime.js'),"new CustomEvent('abu-design-advanced-ready')",'design studio readiness signal');
 for(const marker of ['Math.sqrt(12_000_000/(ow*oh))','Math.sqrt(8_000_000/(originalW*originalH))'])need(read('photo-geometry-runtime.js'),marker,'bounded geometry memory');
-for(const marker of ['geoTarget=it;geoSourceAtOpen=it.src','geoTarget!==it||it.src!==originalSrc','async function warpFull(im)','if((y&63)===63)await new Promise'])need(read('photo-geometry-runtime.js'),marker,'guard stale crop and yield perspective work');
+for(const marker of ['geoTarget=it;geoSourceAtOpen=it.src','const cancelled=()=>operationId!==geoOperationId','async function warpFull(im,shouldCancel=()=>false)','const strip=outCtx.createImageData(ow,rows)','if(startY+rows<oh)await new Promise','}else pts[i]={x,y};refreshOverlay()'])need(read('photo-geometry-runtime.js'),marker,'guard stale crop and yield perspective work');
 for(const marker of ['function htmlEsc(v)','function trimHistory(stack)','invalidatePosterPages?.()'])need(read('advanced-completion-runtime.js'),marker,'safe layer names, undo size and poster cache invalidation');
 need(read('design-studio-advanced-runtime.js'),"attributeFilter:['class']", 'prevent style mutation feedback loops during card dragging');
 if(read('design-studio-advanced-runtime.js').includes('return setTimeout(observe,80)'))errors.push('design studio must not poll 80ms while canvas is missing');
