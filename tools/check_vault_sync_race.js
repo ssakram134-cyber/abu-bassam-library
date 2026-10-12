@@ -32,24 +32,45 @@ const code=source.slice(start,end);
 const rows=new Map();
 const clone=x=>x==null?x:JSON.parse(JSON.stringify(x));
 const db={transaction(){
- const tx={oncomplete:null,onerror:null,onabort:null,objectStore(){
-  return{
-   get(id){
-    const request={result:undefined,onsuccess:null,onerror:null};
-    queueMicrotask(()=>{
-     request.result=clone(rows.get(id));
-     request.onsuccess?.();
-     queueMicrotask(()=>tx.oncomplete?.())
-    });
-    return request
-   },
-   put(record){rows.set(record.id,clone(record))},
-   delete(id){rows.delete(id)}
+ let pending=0,finished=false;
+ const tx={oncomplete:null,onerror:null,onabort:null,abort(){finished=true;queueMicrotask(()=>tx.onabort?.())}};
+ const complete=()=>queueMicrotask(()=>{if(!finished&&pending===0){finished=true;tx.oncomplete?.()}});
+ tx.objectStore=()=>({
+  get(id){
+   pending++;
+   const request={result:undefined,onsuccess:null,onerror:null};
+   queueMicrotask(()=>{
+    if(finished)return;
+    request.result=clone(rows.get(id));
+    request.onsuccess?.();
+    pending--;complete()
+   });
+   return request
+  },
+  openCursor(){
+   pending++;let offset=0;
+   const values=[...rows.values()].map(clone),request={result:null,onsuccess:null,onerror:null};
+   const advance=()=>{
+    if(finished)return;
+    request.result=offset<values.length?{value:values[offset],continue(){offset++;queueMicrotask(advance)}}:null;
+    request.onsuccess?.();
+    if(!request.result){pending--;complete()}
+   };
+   queueMicrotask(advance);
+   return request
+  },
+  put(record){
+   pending++;rows.set(record.id,clone(record));
+   queueMicrotask(()=>{pending--;complete()})
+  },
+  delete(id){
+   pending++;rows.delete(id);
+   queueMicrotask(()=>{pending--;complete()})
   }
- }};
+ });
  return tx
 }};
-const helpers=new Function('openDb','STORE',code+';return {dbPut,dbAckPending,dbStoreSyncConflict,dbStoreRemoteIfCurrent}')(async()=>db,'items');
+const helpers=new Function('openDb','STORE','MAX_ITEMS',code+';return {dbPut,dbAckPending,dbStoreSyncConflict,dbStoreRemoteIfCurrent}')(async()=>db,'items',1000);
 const {dbPut,dbAckPending,dbStoreSyncConflict,dbStoreRemoteIfCurrent}=helpers;
 let checks=0;
 function verify(ok,message){assert.ok(ok,message);checks++}
