@@ -16,20 +16,21 @@ const syncCode=source.slice(start,end);
 async function scenario(name){
  let remote={client_id:'doc',data:{id:'doc',name:'document.pdf',mime:'application/pdf',storagePath:'old-revision',deleted:false,updatedAt:'t1'},updated_at:'rev1'};
  let local={id:'doc',name:'document.pdf',category:'file',mime:'application/pdf',size:4,blob:{size:4},createdAt:'t0',updatedAt:'t1',remoteUpdatedAt:'rev1',syncState:'pending',deleted:false,_localWriteRev:'local1'};
+ if(name==='missing-delete-revision')local={...local,deleted:true,deletedAt:'t1'};
  const removed=[],uploaded=[],statuses=[],alerts=[],expectedVersions=[];
  const service={
   get:async()=>remote,
   upsert:async(_kind,id,data,expectedUpdatedAt)=>{
    expectedVersions.push(expectedUpdatedAt);
    if(name!=='failed-upsert'){
-    remote={client_id:id,data,updated_at:'rev2'};
+    remote={client_id:id,data,updated_at:['missing-server-revision','lost-confirmation-missing-revision','missing-delete-revision'].includes(name)?'':'rev2'};
     if(name==='concurrent-local-edit')local={...local,name:'newest local edit',updatedAt:'t2',syncState:'pending',_localWriteRev:'local2'}
    }
-   if(name==='lost-confirmation')throw Error('response lost after commit');
+   if(name==='lost-confirmation'||name==='lost-confirmation-missing-revision')throw Error('response lost after commit');
    if(name==='failed-upsert')throw Error('RPC could not commit');
    return remote
   },
-  uploadVault:async()=>{uploaded.push('new-revision');return 'new-revision'},
+  uploadVault:async()=>{if(name==='cas-unavailable')throw Error('VAULT_CAS_NOT_READY: server migration missing');uploaded.push('new-revision');return 'new-revision'},
   removeVault:async path=>{removed.push(path)},
   list:async()=>[remote],
   downloadVault:async()=>({size:4})
@@ -69,5 +70,16 @@ async function scenario(name){
  assert.deepEqual(edited.expectedVersions,['rev1'],'Concurrent edits must preserve the version precondition');
  assert.equal(edited.local.name,'newest local edit');
  assert.deepEqual(edited.removed,[],'Do not prune older cloud revisions while a newer local edit is pending');
- console.log('Vault cloud upload safety passed: 3 scenarios; lost acknowledgements, failed RPCs and concurrent local edits.');
+ for(const kind of ['missing-server-revision','lost-confirmation-missing-revision','missing-delete-revision']){
+  const missing=await scenario(kind);
+  assert.equal(missing.result,false,kind+' must not report a successful sync');
+  assert.equal(missing.local.syncState,'pending',kind+' must preserve the pending local record');
+  assert.deepEqual(missing.removed,[],kind+' must not delete previous cloud Storage revisions');
+ }
+ const blockedServer=await scenario('cas-unavailable');
+ assert.equal(blockedServer.result,false,'Missing CAS service must not complete sync');
+ assert.equal(blockedServer.local.syncState,'pending','CAS preflight failures preserve local changes');
+ assert.deepEqual(blockedServer.removed,[],'CAS preflight failure must never prune cloud revisions');
+ assert.match(blockedServer.status,/الخادم يحتاج تحديث CAS/,'Automatic sync must display an actionable CAS server warning');
+ console.log('Vault cloud upload safety passed: 7 scenarios; absent CAS is clearly reported, data remains pending.');
 })().catch(e=>{console.error(e);process.exitCode=1});

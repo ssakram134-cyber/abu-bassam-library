@@ -578,7 +578,8 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         const saved=await service.upsert('vault',item.id,data,row?remoteVersion:null);ensureSyncSession();
-        const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
+        if(!String(saved?.updated_at||'').trim())throw new Error('VAULT_CAS_REVISION_REQUIRED: لم يؤكد خادم الأرشيف إصدار الحفظ؛ سيبقى الملف محلياً بانتظار المزامنة.');
+         const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
         if(acknowledged&&oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -593,11 +594,12 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         // Do not delete newPath here: deleting it could break a valid cloud document.
         const confirmed=await service.get('vault',item.id).catch(()=>null);
         ensureSyncSession();
-        if(confirmed?.data?.storagePath!==newPath||String(confirmed?.data?.updatedAt||'')!==String(item.updatedAt||''))throw error;
+        if(confirmed?.data?.storagePath!==newPath||String(confirmed?.data?.updatedAt||'')!==String(item.updatedAt||'')||confirmed?.data?.deleted!==false||!String(confirmed?.updated_at||'').trim())throw error;
         saved=confirmed
       }
       ensureSyncSession();
-      const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
+      if(!String(saved?.updated_at||'').trim())throw new Error('VAULT_CAS_REVISION_REQUIRED: لم يؤكد خادم الأرشيف إصدار الحفظ؛ سيبقى الملف محلياً بانتظار المزامنة.');
+         const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
       if(acknowledged&&oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
 
@@ -618,7 +620,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
      syncSet(LAST_SYNC_KEY,String(Date.now()));setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
-  }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
+  }catch(error){const message=String(error?.message||error),casPending=message.includes('VAULT_CAS_NOT_READY')||message.includes('abu_bassam_vault_upsert_cas');setSyncStatus(casPending?'المزامنة السحابية معلّقة: الخادم يحتاج تحديث CAS • ملفاتك محفوظة على هذا الجهاز':'تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+message);return false}
   finally{state.syncing=false}
 }
 function onShow(){if(!updateVaultAccessUi())return false;refresh();let last=Number(syncGet(LAST_SYNC_KEY)||0);if(last)setSyncStatus('آخر مرة '+formatTime(last));return true}
