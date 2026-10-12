@@ -67,10 +67,27 @@ function safeName(value) {
   return String(value || 'Abu_Bassam_File').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'Abu_Bassam_File';
 }
 function splitDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  const marker = ';base64,';
+  const at = raw.indexOf(marker);
+  if (!raw.startsWith('data:') || at < 6) throw new Error('صيغة الملف غير مدعومة');
+  const mime = raw.slice(5, at).split(';')[0].trim().toLowerCase();
+  const base64 = raw.slice(at + marker.length);
+  if (!/^[a-z0-9!#function splitDataUrl(dataUrl) {
   const marker = ';base64,';
   const at = String(dataUrl || '').indexOf(marker);
   if (at < 0) throw new Error('صيغة الملف غير مدعومة');
   return { mime: String(dataUrl).slice(5, at).split(';')[0] || 'application/octet-stream', base64: String(dataUrl).slice(at + marker.length) };
+}^_.+-]+\/[a-z0-9!#function splitDataUrl(dataUrl) {
+  const marker = ';base64,';
+  const at = String(dataUrl || '').indexOf(marker);
+  if (at < 0) throw new Error('صيغة الملف غير مدعومة');
+  return { mime: String(dataUrl).slice(5, at).split(';')[0] || 'application/octet-stream', base64: String(dataUrl).slice(at + marker.length) };
+}^_.+-]+$/i.test(mime)
+      || !base64 || base64.length % 4 !== 0 || !/^[a-z0-9+/]+={0,2}$/i.test(base64)) {
+    throw new Error('بيانات الملف غير صالحة أو غير مكتملة');
+  }
+  return { mime, base64 };
 }
 function printDimensions(paper) {
   if (paper === 'A5') return { width: 148, height: 210 };
@@ -289,10 +306,18 @@ function App() {
 
   const printBase64 = useCallback(async ({ name, mime, data }) => {
     try {
-      const finalMime = String(mime || 'application/octet-stream');
+      const parsed = splitDataUrl(data);
+      const finalMime = String(mime || parsed.mime).trim().toLowerCase();
       if (finalMime.startsWith('image/')) {
+        if (!parsed.mime.startsWith('image/')) throw new Error('نوع الصورة لا يطابق بيانات الملف');
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
         await Print.printAsync({ html }); return;
+      }
+      // expo-print accepts a URI only for PDF files, never for DOCX/XLSX/ZIP or text.
+      // Fail before writing a temporary file, so unsupported print requests cannot
+      // launch Android's PDF printer with incompatible file contents.
+      if (finalMime !== 'application/pdf' || parsed.mime !== 'application/pdf') {
+        throw new Error('الطباعة المباشرة متاحة لملفات PDF والصور فقط. احفظ ملف Word أو Excel وافتحه في التطبيق المناسب للطباعة.');
       }
       const file = await writeTemporaryFile(name, finalMime, data);
       try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
