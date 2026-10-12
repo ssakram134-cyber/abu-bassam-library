@@ -26,7 +26,10 @@ for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi()
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
+for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'setTimeout(() => {','if (webReady || webFailure) return undefined;','key={webAttempt}','onPress={retryWebBoot}','setWebAttempt((attempt) => attempt + 1)','if (!message || typeof message !== \'object\' || Array.isArray(message)'])need(native,marker,'native startup recovery');
+const mainHtml=fs.readFileSync(path.join(web,'index.html'),'utf8');
+forbid(mainHtml,"setTimeout(()=>$('splash').classList.add('hide'),1000)",'unconditional pre-security splash dismissal');
+for(const marker of ["message=document.createElement('p')",'splash.appendChild(message)','try{\n      ensureIdentity();'])need(device,marker,'visible fail-closed web startup');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
