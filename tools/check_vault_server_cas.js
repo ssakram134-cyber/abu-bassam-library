@@ -14,6 +14,7 @@ for(const [marker,label] of [
  ["public._abu_bassam_vault_authorized(p_device_id, p_device_secret, 'vaultAdd')", 'create authorization'],
  ["public._abu_bassam_vault_authorized(p_device_id, p_device_secret, 'vaultDelete')", 'deletion authorization'],
  ['for update;', 'row lock when updating existing revisions'],
+ ["set search_path to 'pg_catalog', 'extensions'", 'SECURITY DEFINER search path omits writable public'],
  ['v_current.updated_at is distinct from p_expected_updated_at', 'required existing-row version match'],
  ['p_expected_updated_at is not null then', 'create must expect absence'],
  ['on conflict (user_id, branch_device_id, client_id) do nothing', 'concurrent first insert must not overwrite'],
