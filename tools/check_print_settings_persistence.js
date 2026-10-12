@@ -24,7 +24,7 @@ fields.dpiEnabled={checked:true,disabled:false};
 fields.dpiModeInfo={textContent:''};
 const $=id=>fields[id]||null;
 const funcs=new Function('$','localStorage',
- 'let guideEnabled=true;'+save+load+mode+loadMode+
+ 'let guideEnabled=true;function dpiIsEnabled(){return !!$("dpiEnabled")?.checked}function settingsChanged(){saveAppSettings()}'+save+load+mode+loadMode+
  ';return{saveAppSettings,loadAppSettings,dpiModeChanged,loadDpiMode}')($,localStorage);
 let count=0;function check(expr,msg){assert.ok(expr,msg);count++}
 funcs.saveAppSettings();
