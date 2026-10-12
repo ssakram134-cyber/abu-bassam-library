@@ -130,6 +130,7 @@ async function main(){
   const tx={oncomplete:null,onerror:null,onabort:null,abort(){aborted=true;queueMicrotask(()=>tx.onabort?.())},objectStore(){
    return{
     get(id){const q={result:null,onsuccess:null};queueMicrotask(()=>{q.result=clone(restoreRecords.get(id));q.onsuccess?.();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})});return q},
+    getAll(){const q={result:null,onsuccess:null};queueMicrotask(()=>{q.result=[...restoreRecords.values()].map(clone);q.onsuccess?.();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})});return q},
     put(record){restoreRecords.set(record.id,clone(record));queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})},
     clear(){restoreRecords.clear();queueMicrotask(()=>{if(!aborted)tx.oncomplete?.()})}
    }
@@ -153,14 +154,14 @@ async function main(){
  verify(restoreRecords.get('new-copy').name==='kept separately','Advanced photo editor can save a separate copy');
  let duplicate=false;try{await putItem({id:'new-copy',name:'duplicate'})}catch(_){duplicate=true}
  verify(duplicate&&restoreRecords.get('new-copy').name==='kept separately','Advanced photo copy cannot overwrite an existing ID');
- await applyAtomic([{...replaced,name:'restored snapshot'}],{replaceAll:true});
+ await applyAtomic([{...replaced,name:'restored snapshot'}],{replaceAll:true,expectedBefore:[...restoreRecords.values()].map(clone)});
  verify(restoreRecords.get('original-photo').name==='restored snapshot'&&restoreRecords.get('original-photo')._localWriteRev!==replaced._localWriteRev&&!restoreRecords.has('new-copy'),'Snapshot restore invalidates old sync revisions');
  const safeRecord=clone(restoreRecords.get('original-photo'));
  let deniedSave=false;
  try{await putItem({...safeRecord,name:'wrong branch'},safeRecord,()=>false)}catch(_){deniedSave=true}
  verify(deniedSave&&restoreRecords.get('original-photo').name==='restored snapshot','Changing branch during photo commit must cancel write');
  let deniedRestore=false;
- try{await applyAtomic([{id:'other-branch',name:'wrong'}],{replaceAll:true,isCurrent:()=>false})}catch(_){deniedRestore=true}
+ try{await applyAtomic([{id:'other-branch',name:'wrong'}],{replaceAll:true,expectedBefore:[...restoreRecords.values()].map(clone),isCurrent:()=>false})}catch(_){deniedRestore=true}
  verify(deniedRestore&&restoreRecords.get('original-photo').name==='restored snapshot'&&!restoreRecords.has('other-branch'),'Changing branch during restore must preserve existing archive');
 
  console.log('Vault synchronization race checks passed: '+checks+' cases; stale writes, atomic conflicts, safe incoming records and prompt pending sync.')
