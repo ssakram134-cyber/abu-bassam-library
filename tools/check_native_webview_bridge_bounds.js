@@ -13,7 +13,7 @@ assert.ok(printSource.includes('MAX_NATIVE_PAGE_COUNT')&&printSource.includes('M
 async function check(){
  const sent=[],notices=[];
  const window={alert:x=>notices.push(String(x)),ReactNativeWebView:{postMessage:x=>sent.push(JSON.parse(x))}};
- const reduced=bridge.replace('var messageLimit = 48 * 1024 * 1024;','var messageLimit = 128;');
+ const reduced=bridge.replace('var messageLimit = 48 * 1024 * 1024;','var messageLimit = 151;');
  new Function('window',reduced)(window);
  window.Android.saveBase64('file.pdf','application/pdf','data:application/pdf;base64,AQIDBA==');
  assert.equal(sent.length,1);assert.equal(sent[0].type,'saveBase64');
