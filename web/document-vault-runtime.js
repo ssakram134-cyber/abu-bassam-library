@@ -91,11 +91,32 @@ async function dbPut(item){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  let failure=null;
+  const write=()=>store.put({...item,_localWriteRev:newWriteRevision()});
   const read=store.get(item.id);
-  read.onsuccess=()=>{store.put({...item,_localWriteRev:newWriteRevision()})};
-  read.onerror=()=>tx.abort();tx.onabort=()=>reject(tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'));
+  read.onsuccess=()=>{
+   const existing=read.result;
+   // Only new active files, or the restoration of deleted files, consume a slot.
+   if(item.deleted||(existing&&!existing.deleted)){write();return}
+   // The cursor and the insertion share one readwrite transaction. A concurrent
+   // upload/copy cannot pass the quota check before this transaction commits.
+   let active=0;
+   const scan=store.openCursor();
+   scan.onsuccess=()=>{
+    const cursor=scan.result;
+    if(!cursor){write();return}
+    if(!cursor.value?.deleted&&++active>=MAX_ITEMS){
+     failure=new Error('الأرشيف ممتلئ (1000 ملف نشط). لم تتم إضافة الملف، وبقيت الملفات المحذوفة في السلة.');
+     tx.abort();return
+    }
+    cursor.continue()
+   };
+   scan.onerror=()=>tx.abort()
+  };
+  read.onerror=()=>tx.abort();
   tx.oncomplete=resolve;
-  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ تعديل الأرشيف'))
+  tx.onerror=()=>reject(failure||tx.error||new Error('تعذر حفظ تعديل الأرشيف'));
+  tx.onabort=()=>reject(failure||tx.error||new Error('تم إلغاء معاملة قاعدة البيانات'))
  })
 }
 async function dbAckPending(snapshot,remoteVersion,keepPending=false,isCurrent=()=>true){
