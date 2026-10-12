@@ -1,6 +1,14 @@
 'use strict';
 const fs=require('node:fs'),assert=require('node:assert/strict');
 const sql=fs.readFileSync('supabase/migrations/20261012102100_vault_optimistic_cas.sql','utf8');
+const deploymentPreflight=fs.readFileSync('tools/vault_cas_deploy_preflight.sql','utf8');
+const deploymentSql=deploymentPreflight.replace(/^--.*$/gm,'').trim();
+assert.match(deploymentPreflight,/^-- Read-only CAS deployment gate/,'CAS deployment gate must be read-only');
+assert.equal((deploymentSql.match(/;/g)||[]).length,1,'CAS preflight must be a single read-only statement');
+assert.doesNotMatch(deploymentSql,/^\s*(?:create|alter|drop|delete|update|insert|truncate|grant|revoke|copy|call|do)\b/im,'CAS preflight cannot change production');
+for(const expected of ['vault_rls_enabled','vault_identity_pk','vault_columns_present','legacy_writer_executable','cas_anonymous_executable','readiness_anonymous_executable','TEST_MIGRATION_REQUIRED','BLOCKED_SCHEMA_MISMATCH','BLOCKED_PARTIAL_OR_UNSAFE_PRIVILEGES','CAS_DEPLOYED_PERMISSIONS_OK'])
+  assert.ok(deploymentPreflight.includes(expected),'CAS preflight missing required condition: '+expected);
+assert.doesNotMatch(deploymentSql,/\bfrom\s+public\.abu_bassam_branch_vault\b/i,'Preflight must not read private customer records');
 const branch=fs.readFileSync('web/branch-vault-runtime.js','utf8');
 const cloud=fs.readFileSync('web/secure-sync-runtime.js','utf8');
 const vault=fs.readFileSync('web/document-vault-runtime.js','utf8');
