@@ -6,6 +6,9 @@ const guard=native.match(/async function runNativeExport\([\s\S]*?\n\}/)?.[0];
 const inbox=native.match(/  const onWebMessage = useCallback\([\s\S]*?\n  \}, \[[^\n]+\]\);/)?.[0];
 assert.ok(guard&&inbox,'Native export lock and WebView dispatcher must exist');
 assert.ok(native.includes('const nativeExportBusyRef = useRef(false)'),'Busy state belongs to native App instance');
+const preparse=inbox.slice(0,inbox.indexOf('let message; try { message = JSON.parse(raw); }'));
+assert.equal((preparse.match(/if \(nativeExportBusyRef\.current\)/g)||[]).length,1,
+ 'Exactly one early busy guard must protect WebView JSON.parse, without stacked duplicate patches');
 for(const kind of ['saveBase64','saveToGallery','savePagesToGallery','printPages',
  'printBase64','printHtml','savePdfHtml','shareBase64','scanBarcodeImage']){
  assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => "+kind+"(message))"),
