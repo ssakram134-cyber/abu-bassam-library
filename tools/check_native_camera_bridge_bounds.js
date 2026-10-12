@@ -16,10 +16,10 @@ function makeCapture(options={}){
   return{base64:options.data}
  }}};
  const cameraError=msg=>events.push('error:'+msg);
- const capture=new Function('useCallback','cameraRef','cameraReady','cameraCaptureLockRef','cameraSessionEpochRef',
+ const capture=new Function('useCallback','cameraRef','cameraReady','cameraCaptureLockRef','cameraSessionEpochRef','cameraActiveRef',
    'setCameraBusy','cameraError','cameraMode','closeCamera','inject',
    'MAX_NATIVE_CAMERA_CHARS',f+';return captureDocument')(
-  fn=>fn,ref,true,{current:false},{current:0},flag=>events.push('busy:'+flag),
+  fn=>fn,ref,true,{current:false},{current:0},{current:true},flag=>events.push('busy:'+flag),
   cameraError,'scan',()=>events.push('close'),
   (event,data)=>events.push({event,data}),100
  );
