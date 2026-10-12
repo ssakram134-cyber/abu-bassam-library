@@ -6,8 +6,8 @@ function section(src,from,to){const a=src.indexOf(from),b=src.indexOf(to,a+from.
 const helpers=section(home,'function disposeCanvas(','function clearImages(){');
 const photo=section(home,'function renderPaper(){','function showPage(');
 const zoom=section(home,'function openPaperZoom(){','function zoomDist(');
-const jpeg=section(home,'function downloadJPG(){','function downloadPDF(){');
-const printing=section(home,'function printDirectly(){','function saveTelegramSettings(){');
+const jpeg=section(home,'function downloadJPG(){','async function downloadPDF(){');
+const printing=section(home,'async function printDirectly(){','function saveTelegramSettings(){');
 const build=section(poster,'function buildPoster(){','function drawPosterMarks(');
 const invalidate=section(poster,'function invalidatePosterPages(){','function posterSettingsChanged(){');
 for(const token of ['old.forEach(cv=>','disposeCanvas(t)','pagesCreated.forEach(disposeCanvas)','printZoomThumbnail(pageCanvases[currentPage])',"$('paperZoomImage').removeAttribute('src')"])
