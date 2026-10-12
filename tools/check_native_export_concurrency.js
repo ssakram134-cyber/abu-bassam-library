@@ -9,10 +9,13 @@ assert.ok(native.includes('const nativeExportBusyRef = useRef(false)'),'Busy sta
 const preparse=inbox.slice(0,inbox.indexOf('let message; try { message = JSON.parse(raw); }'));
 assert.equal((preparse.match(/if \(nativeExportBusyRef\.current\)/g)||[]).length,1,
  'Exactly one early busy guard must protect WebView JSON.parse, without stacked duplicate patches');
-for(const kind of ['saveBase64','saveToGallery','savePagesToGallery','printPages',
- 'printBase64','printHtml','savePdfHtml','shareBase64','scanBarcodeImage']){
+for(const kind of ['printPages','printHtml','savePdfHtml','shareBase64','scanBarcodeImage']){
  assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => "+kind+"(message))"),
   'Operation must be serialized: '+kind);
+}
+for(const kind of ['saveBase64','saveToGallery','savePagesToGallery','printBase64']){
+ assert.ok(inbox.includes("if (message.type === '"+kind+"') return runNativeExport(nativeExportBusyRef, async () => {"),
+  'Combined save and share must remain inside one native export lock: '+kind);
 }
 assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => cleanCache())"),
  'Cache cleanup must be locked with active print/share files');
