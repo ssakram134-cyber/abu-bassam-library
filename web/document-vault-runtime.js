@@ -578,7 +578,8 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         const oldPath=String(remote?.storagePath||'');
         const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:0,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:true,storagePath:''};
         const saved=await service.upsert('vault',item.id,data,row?remoteVersion:null);ensureSyncSession();
-        const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
+        if(!String(saved?.updated_at||'').trim())throw new Error('VAULT_CAS_REVISION_REQUIRED: لم يؤكد خادم الأرشيف إصدار الحفظ؛ سيبقى الملف محلياً بانتظار المزامنة.');
+         const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
         if(acknowledged&&oldPath)await service.removeVault(oldPath).catch(error=>{try{window.AbuBassamOps?.add?.({type:'failure',title:'تنظيف ملف سحابي مؤجل',details:String(error?.message||error),section:'الحفظ والمستندات'})}catch(_){}});
         continue
       }
@@ -593,11 +594,12 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
         // Do not delete newPath here: deleting it could break a valid cloud document.
         const confirmed=await service.get('vault',item.id).catch(()=>null);
         ensureSyncSession();
-        if(confirmed?.data?.storagePath!==newPath||String(confirmed?.data?.updatedAt||'')!==String(item.updatedAt||''))throw error;
+        if(confirmed?.data?.storagePath!==newPath||String(confirmed?.data?.updatedAt||'')!==String(item.updatedAt||'')||confirmed?.data?.deleted!==false||!String(confirmed?.updated_at||'').trim())throw error;
         saved=confirmed
       }
       ensureSyncSession();
-      const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
+      if(!String(saved?.updated_at||'').trim())throw new Error('VAULT_CAS_REVISION_REQUIRED: لم يؤكد خادم الأرشيف إصدار الحفظ؛ سيبقى الملف محلياً بانتظار المزامنة.');
+         const acknowledged=await dbAckPending(item,String(saved?.updated_at||''),false,sessionValid);
       if(acknowledged&&oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
 
