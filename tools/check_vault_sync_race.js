@@ -6,8 +6,9 @@ const source=fs.readFileSync('web/document-vault-runtime.js','utf8');
 const advanced=fs.readFileSync('web/document-vault-advanced-runtime.js','utf8');
 const hardened=fs.readFileSync('web/document-vault-hardening-runtime.js','utf8');
 assert.ok(advanced.includes("itemRevision(item)!==itemRevision(st.item)"),'Replacing a photo must reject changes since editor opened');
-assert.ok(advanced.includes("await putItem(next,choice==='2'?item:null)"),'Advanced photo save must check current revision');
+assert.ok(advanced.includes("await putItem(next,choice==='2'?item:null,()=>epoch===sessionEpoch"),'Advanced photo save must check current revision');
 assert.ok(advanced.includes('_localWriteRev:newWriteRevision()'),'Advanced photo editor must change the revision token');
+assert.ok(hardened.includes("if(restoreIdentity()!==initialRestoreIdentity||!allowed('vaultRestoreBackup'))"),'Backup restore must cancel if account or branch changes while unpacking');
 assert.ok(hardened.includes("for(const item of items)store.put({...item,_localWriteRev:newWriteRevision()})"),'Restoring a backup must invalidate prior sync snapshots');
 
 for(const marker of [
@@ -133,6 +134,14 @@ async function main(){
  verify(duplicate&&restoreRecords.get('new-copy').name==='kept separately','Advanced photo copy cannot overwrite an existing ID');
  await applyAtomic([{...replaced,name:'restored snapshot'}],{replaceAll:true});
  verify(restoreRecords.get('original-photo').name==='restored snapshot'&&restoreRecords.get('original-photo')._localWriteRev!==replaced._localWriteRev&&!restoreRecords.has('new-copy'),'Snapshot restore invalidates old sync revisions');
+ const safeRecord=clone(restoreRecords.get('original-photo'));
+ let deniedSave=false;
+ try{await putItem({...safeRecord,name:'wrong branch'},safeRecord,()=>false)}catch(_){deniedSave=true}
+ verify(deniedSave&&restoreRecords.get('original-photo').name==='restored snapshot','Changing branch during photo commit must cancel write');
+ let deniedRestore=false;
+ try{await applyAtomic([{id:'other-branch',name:'wrong'}],{replaceAll:true,isCurrent:()=>false})}catch(_){deniedRestore=true}
+ verify(deniedRestore&&restoreRecords.get('original-photo').name==='restored snapshot'&&!restoreRecords.has('other-branch'),'Changing branch during restore must preserve existing archive');
+
  console.log('Vault synchronization race checks passed: '+checks+' cases; stale writes, atomic conflicts, safe incoming records and prompt pending sync.')
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
