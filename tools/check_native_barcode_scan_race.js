@@ -19,7 +19,7 @@ assert.ok(open.includes('barcodeScanLockRef.current = false')&&
  'Opening and closing a camera resets the synchronous scan lock');
 
 function fixture(options={}){
- const events=[],state={},barcodeScanLockRef={current:false},cameraCaptureLockRef={current:false},cameraSessionEpochRef={current:0};
+ const events=[],state={},barcodeScanLockRef={current:false},cameraCaptureLockRef={current:false},cameraSessionEpochRef={current:0},cameraActiveRef={current:false};
  let permission={granted:options.permissionInitiallyGranted!==false};
  const record=(kind)=>(val)=>{state[kind]=val;events.push([kind,val])};
  const setCameraMode=record('mode'),setCameraReady=record('ready'),
@@ -28,12 +28,12 @@ function fixture(options={}){
  const captures=[];
  const inject=(method,body)=>captures.push({method,body});
  const cameraError=text=>events.push(['error',text]);
- const callbacks=new Function('useCallback','barcodeScanLockRef','cameraCaptureLockRef','cameraSessionEpochRef','setCameraMode',
+ const callbacks=new Function('useCallback','barcodeScanLockRef','cameraCaptureLockRef','cameraSessionEpochRef','cameraActiveRef','setCameraMode',
   'setCameraReady','setCameraBusy','setBarcodeLocked','setTorch','setCameraFacing',
   'setCameraFrameKind','inject','cameraError','cameraPermission','requestCameraPermission',
   close+open+scan+';return {closeCamera,openCamera,onBarcodeScanned};'
  )(
-  f=>f,barcodeScanLockRef,cameraCaptureLockRef,cameraSessionEpochRef,setCameraMode,setCameraReady,setCameraBusy,setBarcodeLocked,
+  f=>f,barcodeScanLockRef,cameraCaptureLockRef,cameraSessionEpochRef,cameraActiveRef,setCameraMode,setCameraReady,setCameraBusy,setBarcodeLocked,
   setTorch,setCameraFacing,setCameraFrameKind,inject,cameraError,permission,
   async()=>{events.push(['askPermission']);return options.permissionGranted===false?{granted:false}:{granted:true}}
  );
