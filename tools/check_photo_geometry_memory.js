@@ -15,6 +15,7 @@ for(const marker of [
  'if(out){out.width=0;out.height=0}',
  'geoOperationId++',
  'stopDrag?.()',
+ 'function rulerPreviewData(source){',
  '};refreshOverlay()'
 ])assert.ok(source.includes(marker),'Missing memory/touch guard: '+marker);
 
@@ -29,6 +30,7 @@ class CanvasMock{
   const cv=this;
   return{
    drawImage(){drawCount++},
+   fillRect(){},
    getImageData(_x,_y,w,h){
     const data=new Uint8ClampedArray(w*h*4);
     for(let y=0;y<h;y++)for(let x=0;x<w;x++)data.set(expectedPixel(x,y),(y*w+x)*4);
@@ -45,7 +47,7 @@ class CanvasMock{
    }
   }
  }
- toDataURL(){return 'data:image/jpeg;base64,QUJD'}
+ toDataURL(type){this.encoded={type,width:this.width,height:this.height};return 'data:image/jpeg;base64,QUJD'}
 }
 const canvasPreview=new CanvasMock();
 const stage={children:[],isConnected:true,
@@ -55,10 +57,14 @@ const stage={children:[],isConnected:true,
 };
 const cssState=()=>{const active=new Set();return{add:x=>active.add(x),remove:x=>active.delete(x),toggle:(x,yes)=>yes?active.add(x):active.delete(x)}};
 const modal={classList:cssState()};
+const rulerPage=new CanvasMock();rulerPage.width=6000;rulerPage.height=4200;
+const paper={style:{}},safe={style:{}};
 const controls={abuGeoCanvas:canvasPreview,abuGeoStage:stage,abuGeoModal:modal,
- abuModeCrop:{classList:cssState()},abuModePerspective:{classList:cssState()}};
+ abuModeCrop:{classList:cssState()},abuModePerspective:{classList:cssState()},
+ abuRulerWrap:{style:{}},abuRulerPaper:paper,abuRulerSafe:safe,abuRulerCaption:{textContent:''},
+ abuRulerModal:{classList:cssState()},marginInput:{value:'5'}};
 const events={};
-const window={
+const window={innerWidth:400,innerHeight:750,
  addEventListener(type,fn){(events[type]??=[]).push(fn)},
  removeEventListener(type,fn){events[type]=(events[type]||[]).filter(f=>f!==fn)},
  emit(type,event){for(const callback of [...(events[type]||[])])callback(event)}
@@ -77,6 +83,7 @@ class ImageMock{naturalWidth=80;naturalHeight=64;set src(val){this.value=val;Pro
 const original={src:'data:image/jpeg;base64,QUJD',img:image};
 const alerts=[];
 const context={window,document,uploadedImages:[original],selectedIndex:0,
+ pageCanvases:[rulerPage],currentPage:0,pagePrintMeta:{paper:{w:210,h:297},margin:5},
  alert:message=>alerts.push(String(message)),Image:ImageMock,
  setTimeout:fn=>Promise.resolve().then(fn),
  requestAnimationFrame:fn=>{
@@ -155,6 +162,14 @@ async function rejected(fn,re){await assert.rejects(fn,re);count++}
   'Interrupted processing must clearly report cancellation');
  check(created.at(-1)?.width===0,'Interrupted live perspective must release output backing store');
 
+ window.openAbuPhotoRuler();
+ const thumb=created.at(-1);
+ check(thumb.encoded?.width<=880&&thumb.encoded?.height<=880&&thumb.encoded.type==='image/jpeg',
+  'Paper ruler must not encode the 6000 by 4200 print bitmap');
+ check(thumb.width===0&&thumb.height===0,'Temporary ruler thumbnail canvas must be released');
+ check(paper.style.backgroundImage.includes('data:image/jpeg'),'Ruler must use compressed small JPEG preview');
+ geometry.close('abuRulerModal');
+ check(paper.style.backgroundImage==='none','Closing ruler must clear background data URL');
  console.log('Photo geometry memory/touch checks passed: '+count+
   ' cases; pixel accuracy, 50 pointer moves, tiled rendering, cancellation and canvas cleanup.')
 })().catch(error=>{console.error(error);process.exitCode=1});
