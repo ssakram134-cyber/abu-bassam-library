@@ -6,9 +6,9 @@ const source=fs.readFileSync('web/document-vault-runtime.js','utf8');
 for(const marker of [
  "if(hasPending())return true",
  "function localWriteVersion(item)",
- "async function dbAckPending(snapshot,remoteVersion,keepPending=false)",
- "async function dbStoreSyncConflict(snapshot,replacement,copy)",
- "async function dbStoreRemoteIfCurrent(snapshot,replacement)",
+ "async function dbAckPending(snapshot,remoteVersion,keepPending=false,isCurrent=()=>true)",
+ "async function dbStoreSyncConflict(snapshot,replacement,copy,isCurrent=()=>true)",
+ "async function dbStoreRemoteIfCurrent(snapshot,replacement,isCurrent=()=>true)",
  "const sessionEpoch=vaultSessionEpoch,sessionScope=syncScope()",
  "ensureSyncSession();const row=await service.get('vault',item.id)",
  "await dbStoreSyncConflict(item,remoteItem(remote,remoteBlob,remoteVersion),localCopy)",
@@ -71,6 +71,12 @@ async function main(){
  verify(!(await dbStoreRemoteIfCurrent(record,null))&&rows.get('remote-only').name==='edited','Remote tombstone cannot delete a concurrently edited file');
  await dbPut({...rows.get('remote-only'),syncState:'synced'});
  verify(await dbStoreRemoteIfCurrent(clone(rows.get('remote-only')),null)&&!rows.has('remote-only'),'Old synced tombstone may be purged');
+ await dbPut({id:'session',name:'private',syncState:'pending'});
+ const held=clone(rows.get('session'));
+ verify(!(await dbAckPending(held,'late',false,()=>false))&&rows.get('session').remoteUpdatedAt===undefined&&rows.get('session').syncState==='pending','Account switch blocks a late sync acknowledgement in its transaction');
+ verify(!(await dbStoreSyncConflict(held,{...held,name:'wrong account'},{id:'session-copy',name:'unsafe'},()=>false))&&!rows.has('session-copy')&&rows.get('session').name==='private','Account switch blocks creation of stale conflict copies');
+ verify(!(await dbStoreRemoteIfCurrent(null,{id:'session-remote',name:'outside branch'},()=>false))&&!rows.has('session-remote'),'Account switch blocks stale remote additions');
+
 
  const dueSource=source.split(/\r?\n/).find(x=>x.startsWith('function automaticDue()'));
  assert.ok(dueSource,'Automatic due function must exist');
