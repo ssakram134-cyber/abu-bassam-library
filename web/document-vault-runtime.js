@@ -85,7 +85,71 @@ function openDb(){
   return dbPromise
 }
 async function dbAll(){let db=await openDb();return new Promise((resolve,reject)=>{let request=db.transaction(STORE,'readonly').objectStore(STORE).getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)})}
-async function dbPut(item){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+function localWriteVersion(item){const v=item?._localWriteRev;return Number.isSafeInteger(v)&&v>=0?v:0}
+async function dbPut(item){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  const read=store.get(item.id);
+  read.onsuccess=()=>{store.put({...item,_localWriteRev:localWriteVersion(read.result)+1})};
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ تعديل الأرشيف'))
+ })
+}
+async function dbAckPending(snapshot,remoteVersion,keepPending=false){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  const read=store.get(snapshot.id);let acked=false;
+  read.onsuccess=()=>{
+   const current=read.result;
+   if(!current||current.syncState!=='pending')return;
+   const unchanged=localWriteVersion(current)===localWriteVersion(snapshot);
+   store.put({...current,remoteUpdatedAt:String(remoteVersion||''),syncState:!keepPending&&unchanged?'synced':'pending',_localWriteRev:localWriteVersion(current)+1});
+   acked=unchanged&&!keepPending
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=()=>resolve(acked);
+  tx.onerror=()=>reject(tx.error||new Error('تعذر تثبيت نتيجة المزامنة'))
+ })
+}
+async function dbStoreSyncConflict(snapshot,replacement,copy){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  const read=store.get(snapshot.id);let done=false;
+  read.onsuccess=()=>{
+   const current=read.result;
+   if(!current||current.syncState!=='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return;
+   store.put({...replacement,_localWriteRev:localWriteVersion(current)+1});
+   store.put({...copy,_localWriteRev:1});
+   done=true
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=()=>resolve(done);
+  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة تعارض المزامنة'))
+ })
+}
+async function dbStoreRemoteIfCurrent(snapshot,replacement){
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  const read=store.get(replacement?.id||snapshot?.id);let applied=false;
+  read.onsuccess=()=>{
+   const current=read.result;
+   if(snapshot){
+    if(!current||current.syncState==='pending'||localWriteVersion(current)!==localWriteVersion(snapshot))return
+   }else if(current)return;
+   if(replacement)store.put({...replacement,_localWriteRev:localWriteVersion(current)+1});
+   else store.delete(snapshot.id);
+   applied=true
+  };
+  read.onerror=()=>tx.abort();
+  tx.oncomplete=()=>resolve(applied);
+  tx.onerror=()=>reject(tx.error||new Error('تعذر حفظ نسخة الجهاز الآخر'))
+ })
+}
 async function dbDelete(id){let db=await openDb();return new Promise((resolve,reject)=>{let tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
 
 function addCss(){
