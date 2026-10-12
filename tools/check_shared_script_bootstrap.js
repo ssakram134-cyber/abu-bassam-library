@@ -1,0 +1,119 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const text=fs.readFileSync(path.join(__dirname,'..','web/device-name-runtime.js'),'utf8');
+const a=text.indexOf('  function loadScript(id,src,guard){'),b=text.indexOf('\n  const loadFeatureRecovery=',a);
+assert.ok(a>=0&&b>a,'shared loader source missing');
+const fn=text.slice(a,b);
+const productivity=fs.readFileSync(path.join(__dirname,'..','web/productivity-tools-runtime.js'),'utf8');
+const advancedStart=productivity.indexOf('function loadOne(id,src,flag){');
+const advancedEnd=productivity.indexOf('\nasync function loadAdvancedRuntime(){',advancedStart);
+assert.ok(advancedStart>=0&&advancedEnd>advancedStart,'second loader source missing');
+const advancedFn=productivity.slice(advancedStart,advancedEnd);
+let count=0;
+function eq(a,b,m){assert.equal(a,b,m);count++}
+async function status(p){let state='pending';p.then(()=>state='resolved',()=>state='rejected');await Promise.resolve();await Promise.resolve();return state}
+function harness(){
+ const all=new Map(),append=[],events=[],window={};
+ function node(id=''){
+  const listeners={load:[],error:[]};
+  return{id,dataset:{},style:{},removed:false,
+   addEventListener:(type,callback)=>listeners[type].push(callback),
+   fire(type){this['on'+type]?.();listeners[type].forEach(callback=>callback())},
+   remove(){this.removed=true;all.delete(this.id)}
+  };
+ }
+ const document={getElementById:id=>all.get(id)||null,createElement:()=>node(),
+  head:{appendChild(el){all.set(el.id,el);append.push(el)}},
+  dispatchEvent:ev=>events.push(ev.detail)};
+ const CustomEvent=function(type,options){this.detail=options.detail};
+ document.body=document.head;
+ const load=new Function('window','document','CustomEvent',fn+'\nreturn loadScript;')(window,document,CustomEvent);
+ const advanced=new Function('window','document','CustomEvent',advancedFn+'\nreturn loadOne;')(window,document,CustomEvent);
+ return{all,node,append,events,window,load,advanced};
+}
+(async()=>{
+ const guard=harness();guard.window.__SHARED__=true;
+ eq(await guard.load('shared','shared.js','__SHARED__'),true,'initialized guard accepted');
+ eq(guard.append.length,0,'no duplicate script for initialized guard');
+
+ const first=harness(),request=first.load('new','feature.js','__FEATURE__');
+ eq(first.append.length,1,'first request appends script');
+ eq(await status(request),'pending','new load must await real event');
+ first.append[0].fire('load');
+ eq(await request,true,'new load finishes after event');
+ eq(first.append[0].dataset.abuLoaded,'1','new script records completed state');
+ eq(first.events.length,1,'initial load broadcasts once');
+
+ const same=harness(),p=same.load('same','shared.js','__SHARED__'),q=same.load('same','shared.js','__SHARED__');
+ eq(same.append.length,1,'simultaneous callers append once');
+ eq(await status(q),'pending','second caller waits for existing pending script');
+ same.append[0].fire('load');
+ eq(await p,true,'first caller resolves after load');
+ eq(await q,true,'second caller resolves after load');
+ eq(await same.load('same','shared.js','__SHARED__'),true,'completed script reused');
+ eq(same.append.length,1,'no reinsertion after load');
+
+ const external=harness(),tag=external.node('foreign');external.all.set('foreign',tag);
+ const pending=external.load('foreign','foreign.js','__FOREIGN__');
+ eq(await status(pending),'pending','script started by other loader cannot be treated ready');
+ eq(external.append.length,0,'no second copy while foreign script loads');
+ tag.fire('load');eq(await pending,true,'foreign script load accepted');
+ eq(tag.dataset.abuLoaded,'1','foreign completed script marked loaded');
+
+ const completed=harness(),pre=completed.node('complete');pre.dataset.abuLoaded='1';completed.all.set('complete',pre);
+ eq(await completed.load('complete','complete.js','__COMPLETE__'),true,'previous successful load recognized');
+
+ const bad=harness(),failed=bad.load('broken','broken.js','__BROKEN__');
+ bad.append[0].fire('error');
+ await assert.rejects(failed,/broken.js failed to load/);count++;
+ eq(bad.append[0].removed,true,'failed script removed');
+ eq(bad.all.has('broken'),false,'failed element removed from DOM');
+ const retry=bad.load('broken','broken.js','__BROKEN__');
+ eq(bad.append.length,2,'retry creates a fresh script');
+ eq(await status(retry),'pending','retry does not report premature completion');
+ bad.append[1].fire('load');eq(await retry,true,'retry eventually works');
+
+ const externalFailure=harness(),badNode=externalFailure.node('foreignFail');
+ externalFailure.all.set('foreignFail',badNode);
+ const reject=externalFailure.load('foreignFail','badexternal.js','__ERR__');
+ eq(await status(reject),'pending','foreign error still pending until fired');
+ badNode.fire('error');
+ await assert.rejects(reject,/badexternal.js failed to load/);count++;
+ eq(externalFailure.all.has('foreignFail'),false,'foreign failed script cleared');
+
+ const advancedFirst=harness(),ar=advancedFirst.advanced('dual','dual-runtime.js','__DUAL__');
+ const dr=advancedFirst.load('dual','dual-runtime.js','__DUAL__');
+ eq(advancedFirst.append.length,1,'one script shared with advanced loader');
+ eq(await status(dr),'pending','approved loader waits when advanced loader owns script');
+ advancedFirst.append[0].fire('load');
+ eq(await ar,true,'advanced-owned load completes');
+ eq(await dr,true,'approved loader completes on same event');
+
+ const deviceFirst=harness(),dc=deviceFirst.load('dualDevice','dual-runtime.js','__DUAL__');
+ const ac=deviceFirst.advanced('dualDevice','dual-runtime.js','__DUAL__');
+ eq(deviceFirst.append.length,1,'advanced loader does not duplicate approved script');
+ eq(await status(ac),'pending','advanced waits for approved loader');
+ deviceFirst.append[0].fire('load');
+ eq(await dc,true,'approved-owned load completes');
+ eq(await ac,true,'advanced completes on same event');
+
+ const advancedBad=harness(),brokenAdvanced=advancedBad.advanced('advancedBad','advanced.js','__ADV__');
+ advancedBad.append[0].fire('error');
+ await assert.rejects(brokenAdvanced,/advanced.js failed to load/);count++;
+ eq(advancedBad.all.has('advancedBad'),false,'advanced loader removes failed script from DOM');
+ const retryAdvanced=advancedBad.advanced('advancedBad','advanced.js','__ADV__');
+ eq(advancedBad.append.length,2,'advanced loader retries using a new element');
+ eq(await status(retryAdvanced),'pending','advanced retry waits for event');
+ advancedBad.append[1].fire('load');
+ eq(await retryAdvanced,true,'advanced retry succeeds');
+
+ const externalAdvanced=harness(),foreignNode=externalAdvanced.node('foreignAdvanced');
+ externalAdvanced.all.set('foreignAdvanced',foreignNode);
+ const pendingAdvanced=externalAdvanced.advanced('foreignAdvanced','foreign.js','__FOREIGN__');
+ eq(await status(pendingAdvanced),'pending','advanced loader waits for foreign script');
+ foreignNode.fire('error');
+ await assert.rejects(pendingAdvanced,/foreign.js failed to load/);count++;
+ eq(externalAdvanced.all.has('foreignAdvanced'),false,'advanced loader removes failed foreign script');
+
+ console.log('Shared script loader regression: '+count+'/'+count+' focused checks passed');
+})().catch(e=>{console.error(e);process.exitCode=1});
