@@ -8,6 +8,32 @@ const script = source.replace(/^import [^\n]+;\r?\n/gm, '')
   .replace("fileURLToPath(new URL('..', import.meta.url))", "'/project'");
 assert.ok(!/\bimport\b|import\.meta/.test(script), 'Verifier must be runnable without external modules');
 
+const EXPECTED_OFFLINE_ASSETS = [
+  'assets/library/index.html',
+  'assets/library/device-name-runtime.js',
+  'assets/library/app-security-runtime.js',
+  'assets/library/document-vault-runtime.js',
+  'assets/library/national-id-runtime.js',
+  'assets/library/questions-ar.html',
+  'assets/library/questions-en.html',
+  'assets/library/image-compressor.html',
+  'assets/library/vendor/tesseract/tesseract.min.js',
+  'assets/library/vendor/tesseract/worker.min.js',
+  'assets/library/vendor/tesseract/core/tesseract-core.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-simd.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-lstm.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js',
+  'assets/library/vendor/tesseract/lang/ara.traineddata.gz',
+  'assets/library/vendor/tesseract/lang/eng.traineddata.gz',
+  'assets/library/vendor/documents/pdf.min.js',
+  'assets/library/vendor/documents/pdf.worker.min.js',
+  'assets/library/vendor/documents/mammoth.browser.min.js',
+  'assets/library/vendor/documents/xlsx.full.min.js'
+];
+for (const asset of EXPECTED_OFFLINE_ASSETS) {
+  assert.ok(source.includes("'" + asset + "'"), 'APK verifier must require ' + asset);
+}
+
 function verify(options = {}) {
   const fingerprint = 'a'.repeat(64);
   const logs = [];
@@ -33,9 +59,15 @@ function verify(options = {}) {
           + (options.multipleSigners ? '\nSigner #2 certificate SHA-256 digest: ' + fingerprint : '')
       };
     }
-    if (command === 'unzip') return {
-      status: 0, stdout: options.missingBundle ? 'META-INF/MANIFEST.MF\n' : 'assets/index.android.bundle\nMETA-INF/MANIFEST.MF\n'
-    };
+    if (command === 'unzip') {
+      if (options.unreadableZip) return { status: 9, stderr: 'cannot list APK' };
+      const names = ['assets/index.android.bundle', ...EXPECTED_OFFLINE_ASSETS, 'META-INF/MANIFEST.MF'];
+      const present = names.filter(name =>
+        !(options.missingBundle && name === 'assets/index.android.bundle') &&
+        name !== options.missingOfflineAsset
+      );
+      return { status: 0, stdout: present.join('\n') + '\n' };
+    }
     throw Error('Unexpected command ' + command);
   };
   const crypto = {createHash: () => ({
@@ -63,4 +95,9 @@ for (const [label, options, message] of [
 ]) {
   assert.throws(() => verify(options), message, label);
 }
-console.log('EAS APK verifier passed: valid signature and 8 rejection cases before cloud artifact upload.');
+for (const missingOfflineAsset of EXPECTED_OFFLINE_ASSETS) {
+  assert.throws(() => verify({ missingOfflineAsset }), /missing required offline assets/,
+    'Missing offline component must block APK release: ' + missingOfflineAsset);
+}
+assert.throws(() => verify({ unreadableZip: true }), /Unable to inspect the contents of the release APK/);
+console.log('EAS APK verifier passed: valid signature, 8 signing/bundle failures, 20 missing offline assets and unreadable APK rejection.');
