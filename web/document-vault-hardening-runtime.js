@@ -11,8 +11,18 @@ function scopeOk(){return window.AbuBassamBranchVault?.localScopeOk?.(false)===t
 function nice(v){return String(v||'ملف').replace(/[\\/:*?"<>|\r\n]/g,'_').trim().slice(0,180)||'ملف'}
 function openDb(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error||new Error('تعذر فتح الأرشيف'))})}
 async function all(){const db=await openDb();return new Promise((res,rej)=>{const r=db.transaction(STORE,'readonly').objectStore(STORE).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}
-async function put(item){const db=await openDb();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(item);tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error)})}
-async function applyAtomic(items,{replaceAll=false}={}){const db=await openDb();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);if(replaceAll)store.clear();for(const item of items)store.put(item);tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error||new Error('تعذرت معاملة الاستعادة'));tx.onabort=()=>rej(tx.error||new Error('تم إلغاء معاملة الاستعادة'))})}
+function newWriteRevision(){return globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
+async function put(item){
+ const db=await openDb();
+ return new Promise((res,rej)=>{
+  const tx=db.transaction(STORE,'readwrite');
+  tx.objectStore(STORE).put({...item,_localWriteRev:newWriteRevision()});
+  tx.oncomplete=()=>res(true);
+  tx.onerror=()=>rej(tx.error||new Error('تعذر حفظ نسخة الأرشيف'));
+  tx.onabort=()=>rej(tx.error||new Error('تم إلغاء الحفظ'))
+ })
+}
+async function applyAtomic(items,{replaceAll=false}={}){const db=await openDb();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);if(replaceAll)store.clear();for(const item of items)store.put({...item,_localWriteRev:newWriteRevision()});tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error||new Error('تعذرت معاملة الاستعادة'));tx.onabort=()=>rej(tx.error||new Error('تم إلغاء معاملة الاستعادة'))})}
 async function blobHash(blob){const bytes=await blob.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function restoreSettings(snap,mode){if(!snap?.settings)return;if(mode==='snapshot'){const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k))remove.push(k)}remove.forEach(k=>localStorage.removeItem(k))}Object.entries(snap.settings).forEach(([k,v])=>{if(safeSettingKey(k))localStorage.setItem(k,String(v))})}
 
