@@ -33,9 +33,39 @@ const fingerprints = Array.from(printed.matchAll(/Signer #\d+ certificate SHA-25
 if (fingerprints.length !== 1) throw new Error('APK must have exactly one readable signing certificate');
 if (fingerprints[0] !== baseline) throw new Error('APK was signed with a different key: refusing to mark this as a safe update');
 
-const listing = spawnSync('unzip', ['-Z', '-1', apk], { encoding: 'utf8' });
-if (listing.error || listing.status !== 0 || !String(listing.stdout).split(/\r?\n/).includes('assets/index.android.bundle')) {
+const listing = spawnSync('unzip', ['-Z', '-1', apk], {
+  encoding: 'utf8', maxBuffer: 8 * 1024 * 1024
+});
+if (listing.error || listing.status !== 0) {
+  throw new Error('Unable to inspect the contents of the release APK');
+}
+const bundled = new Set(String(listing.stdout).split(/\r?\n/).filter(Boolean));
+if (!bundled.has('assets/index.android.bundle')) {
   throw new Error('APK is missing its offline React Native JavaScript bundle');
+}
+// Android's WebView opens file:///android_asset/library/index.html. The APK must
+// include this entire offline entry point, not merely the React Native bundle.
+const requiredOfflineAssets = [
+  'assets/library/index.html',
+  'assets/library/device-name-runtime.js',
+  'assets/library/app-security-runtime.js',
+  'assets/library/document-vault-runtime.js',
+  'assets/library/national-id-runtime.js',
+  'assets/library/questions-ar.html',
+  'assets/library/questions-en.html',
+  'assets/library/image-compressor.html',
+  'assets/library/vendor/tesseract/tesseract.min.js',
+  'assets/library/vendor/tesseract/worker.min.js',
+  'assets/library/vendor/tesseract/lang/ara.traineddata.gz',
+  'assets/library/vendor/tesseract/lang/eng.traineddata.gz',
+  'assets/library/vendor/documents/pdf.min.js',
+  'assets/library/vendor/documents/pdf.worker.min.js',
+  'assets/library/vendor/documents/mammoth.browser.min.js',
+  'assets/library/vendor/documents/xlsx.full.min.js'
+];
+const missingAssets = requiredOfflineAssets.filter(name => !bundled.has(name));
+if (missingAssets.length) {
+  throw new Error('APK is missing required offline assets: ' + missingAssets.join(', '));
 }
 const sha = createHash('sha256').update(readFileSync(apk)).digest('hex');
 console.log('Verified Android APK signing certificate matches the pinned production key.');
