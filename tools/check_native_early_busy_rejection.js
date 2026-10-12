@@ -5,8 +5,10 @@ const source=fs.readFileSync('index.js','utf8');
 const guard=source.match(/async function runNativeExport\([\s\S]*?\n\}/)?.[0];
 const inbox=source.match(/  const onWebMessage = useCallback\([\s\S]*?\n  \}, \[[^\n]+\]\);/)?.[0];
 assert.ok(guard&&inbox,'The Android dispatcher and export guard must exist');
-assert.ok(inbox.indexOf('const earlyType = raw.match(')<inbox.indexOf('JSON.parse(raw)'),
- 'Busy heavy requests must be rejected before JSON.parse');
+assert.ok(inbox.indexOf('if (nativeExportBusyRef.current) {')>=0 &&
+ inbox.indexOf('if (nativeExportBusyRef.current) {')<inbox.indexOf('JSON.parse(raw)') &&
+ inbox.includes('raw.slice(0, 128)'),
+ 'Busy heavy requests must be rejected before JSON.parse using bounded header inspection');
 assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => cleanCache())"),
  'Cache cleanup cannot delete an active shared or printed temporary file');
 
