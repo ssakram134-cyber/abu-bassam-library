@@ -6,7 +6,7 @@ const ANON_KEY=Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const BUCKET='abu-bassam-private';
 const TABLE='abu_bassam_backups';
-const MAX_BYTES=512*1024*1024,MAX_ITEMS=1000,MAX_PARTS=120;
+const MAX_BYTES=512*1024*1024,MAX_BACKUP_RECORDS=2000,MAX_PARTS=120;
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type, x-device-id, x-device-secret','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'};
 function json(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
 function userClient(req:Request){return createClient(SUPABASE_URL,ANON_KEY,{global:{headers:{Authorization:req.headers.get('Authorization')||''}},auth:{persistSession:false}})}
@@ -83,7 +83,7 @@ Deno.serve(async(req:Request)=>{
       const base=await context(req,kind==='pre_restore'?'backupRestore':'backupCreate');const cleanupDeferred=mayCleanup(base)?await cleanupPending(base):0;
       const sha=String(body.sha256||'').toLowerCase(),size=Number(body.size_bytes||0),count=Number(body.item_count||0),partCount=Number(body.part_count||0),encrypted=!!body.encrypted;
       if(!/^[0-9a-f]{64}$/.test(sha))return json({error:'INVALID_SHA256'},400);
-      if(!Number.isInteger(size)||size<0||size>MAX_BYTES||!Number.isInteger(count)||count<0||count>MAX_ITEMS||!Number.isInteger(partCount)||partCount<1||partCount>MAX_PARTS)return json({error:'BACKUP_LIMIT_INVALID'},400);
+      if(!Number.isInteger(size)||size<0||size>MAX_BYTES||!Number.isInteger(count)||count<0||count>MAX_BACKUP_RECORDS||!Number.isInteger(partCount)||partCount<1||partCount>MAX_PARTS)return json({error:'BACKUP_LIMIT_INVALID'},400);
       if(encrypted&&!permissionEnabled(base.device,'backupEncrypted'))return json({error:'BACKUP_ENCRYPTED_NOT_ALLOWED'},403);
       const backupId=crypto.randomUUID(),prefix=`${base.user.id}/backup-vault/${safeId(base.deviceId)}/${backupId}`;
       const parts=Array.from({length:partCount},(_,i)=>`${prefix}/part-${String(i+1).padStart(4,'0')}.bin`),uploads=[] as any[];
