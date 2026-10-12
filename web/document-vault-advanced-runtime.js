@@ -11,13 +11,17 @@ function permitted(key){const branch=window.AbuBassamBranchVault;if(branch?.loca
 async function getItem(id){const db=await openDb();return new Promise((resolve,reject)=>{const r=db.transaction(STORE,'readonly').objectStore(STORE).get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
 function itemRevision(item){return String(item?._localWriteRev??'')}
 function newWriteRevision(){return globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
-async function putItem(item,expected=null){
+async function putItem(item,expected=null,isCurrent=()=>true){
  const db=await openDb();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
   let conflict=null;
   const read=store.get(item.id);
   read.onsuccess=()=>{
+   if(!isCurrent()){
+    conflict=new Error('تغيّر الحساب أو الفرع أثناء الحفظ؛ لم تُكتب الصورة في جلسة أخرى.');
+    tx.abort();return
+   }
    const current=read.result;
    if(expected?(!current||itemRevision(current)!==itemRevision(expected)):!!current){
     conflict=new Error('تم تعديل الملف أثناء التحرير؛ لم يُستبدل التعديل الأحدث. افتح الملف مجددًا أو احفظ نسخة مستقلة.');
@@ -79,7 +83,7 @@ async function save(){
    ? {...item,id:globalThis.crypto?.randomUUID?.()||'edited-'+Date.now()+'-'+Math.random().toString(36).slice(2),name:name+' (نسخة معدلة).png',createdAt:now,lastOpenedAt:'',deleted:false,deletedAt:'',remoteUpdatedAt:'',blob,mime:'image/png',size:blob.size,updatedAt:now,syncState:'pending',advancedEditedAt:now}
    : {...item,name:name+'.png',blob,mime:'image/png',size:blob.size,updatedAt:now,syncState:'pending',advancedEditedAt:now};
   if(epoch!==sessionEpoch||!permitted(choice==='1'?'vaultAdd':'vaultImageEdit'))throw new Error('تغير الحساب أو انتهت صلاحية حفظ الملف');
-  await putItem(next,choice==='2'?item:null);
+  await putItem(next,choice==='2'?item:null,()=>epoch===sessionEpoch&&permitted(choice==='1'?'vaultAdd':'vaultImageEdit'));
   try{window.AbuBassamOps?.add?.({type:'edit',title:choice==='1'?'نسخة معدلة مع الحفاظ على الأصل':'استبدال صورة بعد التأكيد',details:next.name,section:'الحفظ والمستندات'})}catch(e){}
   close();await window.DocumentVault?.onShow?.();alert(choice==='1'?'تم حفظ نسخة جديدة مع الاحتفاظ بالأصل ✓':'تم استبدال الصورة وفق اختيارك ✓')
  }catch(e){status('تعذر الحفظ: '+(e.message||e));alert(e.message||'تعذر حفظ التعديل')}finally{btn.disabled=false}
