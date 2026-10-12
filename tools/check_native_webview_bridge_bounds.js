@@ -36,14 +36,16 @@ async function check(){
  await printer({pages:'x'.repeat(5001),paper:'A4'});
  assert.equal(jobs.length,1);assert.ok(alerts.length>=3);
  const events=[],nativeAlerts=[],noop=()=>{};
+ const guard=native.match(/async function runNativeExport\([\s\S]*?\n\}/)?.[0];
+ assert.ok(guard,'Native concurrent export guard must exist');
  const receiver=new Function('useCallback','Alert','MAX_NATIVE_MESSAGE_CHARS',
  'setWebReady','openCamera','scanBarcodeImage','saveBase64','saveToGallery','savePagesToGallery',
  'printPages','printBase64','printHtml','savePdfHtml','shareBase64','openExternal',
  'openAppSettings','getDeviceInfo','cleanCache','handleSecurity','BackHandler',
- inbox+';return onWebMessage;')(
+ 'nativeExportBusyRef',guard+';'+inbox+';return onWebMessage;')(
  fn=>fn,{alert:(...x)=>nativeAlerts.push(x)},128,
  ()=>events.push('ready'),noop,noop,()=>events.push('save'),noop,noop,
- noop,noop,noop,noop,noop,noop,noop,noop,noop,noop,{exitApp:noop});
+ noop,noop,noop,noop,noop,noop,noop,noop,noop,noop,{exitApp:noop},{current:false});
  await receiver({nativeEvent:{data:'{"type":"webBootReady"}'}});
  await receiver({nativeEvent:{data:'{"type":"saveBase64"}'}});
  assert.deepEqual(events,['ready','save']);
