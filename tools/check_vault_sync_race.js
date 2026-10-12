@@ -26,7 +26,7 @@ for(const marker of [
 ])assert.ok(source.includes(marker),'Missing vault race-protection invariant: '+marker);
 
 const start=source.indexOf('function localWriteVersion(item){');
-const end=source.indexOf('async function dbDelete(id){',start);
+const end=source.indexOf('async function dbDisposeTrashIfCurrent(',start);
 assert.ok(start>=0&&end>start,'Atomic vault helper functions must remain available');
 const code=source.slice(start,end);
 const rows=new Map();
