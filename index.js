@@ -115,6 +115,20 @@ async function writeSafFile(directoryUri, displayName, mime, base64) {
   }
 }
 
+async function runNativeExport(busyRef, task) {
+  if (busyRef.current) {
+    Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل طلب طباعة أو حفظ ملف آخر، لتجنب تجمّد الهاتف.');
+    return false;
+  }
+  busyRef.current = true;
+  try { return await task(); }
+  catch (error) {
+    Alert.alert('تعذرت معالجة الملف', String(error?.message || error));
+    return false;
+  }
+  finally { busyRef.current = false; }
+}
+
 function printDimensions(paper) {
   if (paper === 'A5') return { width: 148, height: 210 };
   if (paper === 'A6') return { width: 105, height: 148 };
@@ -150,6 +164,7 @@ function nativeDeviceInfo(cameraPermission) {
 
 function App() {
   const webRef = useRef(null);
+  const nativeExportBusyRef = useRef(false);
   const cameraRef = useRef(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
@@ -466,15 +481,15 @@ function App() {
     if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
-    if (message.type === 'scanBarcodeImage') return scanBarcodeImage(message);
-    if (message.type === 'saveBase64') return saveBase64(message);
-    if (message.type === 'saveToGallery') return saveToGallery(message);
-    if (message.type === 'savePagesToGallery') return savePagesToGallery(message);
-    if (message.type === 'printPages') return printPages(message);
-    if (message.type === 'printBase64') return printBase64(message);
-    if (message.type === 'printHtml') return printHtml(message);
-    if (message.type === 'savePdfHtml') return savePdfHtml(message);
-    if (message.type === 'shareBase64') return shareBase64(message);
+    if (message.type === 'scanBarcodeImage') return runNativeExport(nativeExportBusyRef, () => scanBarcodeImage(message));
+    if (message.type === 'saveBase64') return runNativeExport(nativeExportBusyRef, () => saveBase64(message));
+    if (message.type === 'saveToGallery') return runNativeExport(nativeExportBusyRef, () => saveToGallery(message));
+    if (message.type === 'savePagesToGallery') return runNativeExport(nativeExportBusyRef, () => savePagesToGallery(message));
+    if (message.type === 'printPages') return runNativeExport(nativeExportBusyRef, () => printPages(message));
+    if (message.type === 'printBase64') return runNativeExport(nativeExportBusyRef, () => printBase64(message));
+    if (message.type === 'printHtml') return runNativeExport(nativeExportBusyRef, () => printHtml(message));
+    if (message.type === 'savePdfHtml') return runNativeExport(nativeExportBusyRef, () => savePdfHtml(message));
+    if (message.type === 'shareBase64') return runNativeExport(nativeExportBusyRef, () => shareBase64(message));
     if (message.type === 'openExternal') return openExternal(message);
     if (message.type === 'openAppSettings') return openAppSettings();
     if (message.type === 'getDeviceInfo') return getDeviceInfo();
