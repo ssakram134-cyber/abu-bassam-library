@@ -66,7 +66,43 @@ async function applyAtomic(items,{replaceAll=false,isCurrent=()=>true,expectedBe
  })
 }
 async function blobHash(blob){const bytes=await blob.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-function restoreSettings(snap,mode){if(!snap?.settings)return;if(mode==='snapshot'){const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&safeSettingKey(k)&&!Object.prototype.hasOwnProperty.call(snap.settings,k))remove.push(k)}remove.forEach(k=>localStorage.removeItem(k))}Object.entries(snap.settings).forEach(([k,v])=>{if(safeSettingKey(k))localStorage.setItem(k,String(v))})}
+function restoreSettings(snap,mode){
+ if(!snap?.settings)return;
+ const target=new Map();
+ for(const [key,value] of Object.entries(snap.settings)){
+  if(!safeSettingKey(key))continue;
+  if(value===null||typeof value==='object')throw new Error('صيغة إعدادات النسخة غير صالحة: '+key);
+  const text=String(value);
+  if(text.length>500000)throw new Error('إعداد من النسخة يتجاوز الحد المسموح: '+key);
+  target.set(key,text)
+ }
+ const before=new Map();
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);
+  if(key&&safeSettingKey(key))before.set(key,localStorage.getItem(key))
+ }
+ const actions=[];
+ if(mode==='snapshot')for(const key of before.keys())if(!target.has(key))actions.push({key,value:null});
+ for(const [key,value]of target)actions.push({key,value});
+ const changed=[];
+ try{
+  for(const {key,value}of actions){
+   const prior=localStorage.getItem(key);
+   if(prior===value)continue;
+   if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);
+   changed.push({key,prior})
+  }
+ }catch(error){
+  let rollbackFailed=false;
+  for(let i=changed.length-1;i>=0;i--){
+   const {key,prior}=changed[i];
+   try{if(prior===null)localStorage.removeItem(key);else localStorage.setItem(key,prior)}
+   catch(_){rollbackFailed=true}
+  }
+  if(rollbackFailed)throw new Error('فشل حفظ بعض إعدادات النسخة وتعذرت استعادة جميع الإعدادات السابقة: '+String(error?.message||error));
+  throw error
+ }
+}
 
 function safeSettingKey(k){return /^(theme$|abuBassam(?:PrintSettings|Typography|CustomFonts|PrinterProfiles|DefaultPrinter|ActivePrinter|ProfessionalPrintPresets|QuestionLanguage|CardFreeLayout|Poster|VaultSort|VaultView|SyncPolicy|VaultAutoSync))/i.test(String(k||''))&&!/(auth|secret|password|token|device|security|operation|notification|customer|credential|session)/i.test(String(k||''))}
 function settings(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!safeSettingKey(k))continue;const v=localStorage.getItem(k);if(v!==null&&v.length<500000)out[k]=v}return out}
