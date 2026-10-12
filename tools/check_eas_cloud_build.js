@@ -22,6 +22,8 @@ assert.equal(eas.cli?.appVersionSource,'local');
 assert.equal(app.expo.android.package,'com.abubassam.librarycamera3');
 assert.equal(app.expo.android.versionCode,432);
 assert.equal(pkg.scripts['eas-build-post-install'],'node scripts/prepare-android-assets.mjs');
+assert.equal(pkg.scripts['eas-build-pre-upload-artifacts'],'node scripts/verify-eas-android-apk.mjs',
+  'Reject invalid APK signatures before an artifact can be uploaded');
 assert.equal(pkg.scripts['eas-build-on-success'],'node scripts/verify-eas-android-apk.mjs');
 for(const marker of ['--print-certs','assets/index.android.bundle','fingerprints[0] !== baseline',
  'APK was signed with a different key','APK SHA-256: ']) {
