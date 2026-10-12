@@ -114,10 +114,10 @@
     return value;
   }
 
-  async function upsert(kind, clientId, data) {
+  async function upsert(kind, clientId, data, expectedUpdatedAt = null) {
     if (String(kind)==='vault') {
       if (!vaultAdapter?.upsert) throw new Error('VAULT_GATEWAY_NOT_READY');
-      return vaultAdapter.upsert(clientId, data);
+      return vaultAdapter.upsert(clientId, data, expectedUpdatedAt);
     }
     if (['operation','device'].includes(String(kind))) throw new Error('LEGACY_SYNC_KIND_BLOCKED');
     await ready();
