@@ -93,14 +93,19 @@ function offlineAllowed(){const trust=localTrust();return trust.device_id===iden
 
 async function fetchDeviceInfo(){try{deviceInfo=Object.assign(deviceInfo,await nativeRequest('deviceInfo')||{})}catch(e){}if($('abuLoginDevice'))$('abuLoginDevice').textContent=`هذا الجهاز: ${deviceInfo.model||deviceInfo.name||'Android'}`;return deviceInfo}
 async function ensureDeviceName(){let id=identity(),name=String(localStorage.getItem(DEVICE_NAME_KEY)||'').trim();if(!name||/^(أ?كرم|akram)$/i.test(name)){const suggested=deviceInfo.model||deviceInfo.name||'هاتف المكتبة';name=String(prompt('اكتب اسم هذا الهاتف ليظهر ضمن الأجهزة الموثوقة:',suggested)||'').trim()||suggested;localStorage.setItem(DEVICE_NAME_KEY,name)}return{name,id:id.id}}
-function normalizeDevice(data){if(!data)return null;return Array.isArray(data)?data[0]||null:data}
+function normalizeDevice(data,expectedId){
+  const row=Array.isArray(data)?data[0]:data;
+  if(!row||typeof row!=='object'||row.device_id!==expectedId||row.active!==true||!['owner','secondary'].includes(row.role))
+    throw new Error('DEVICE_NOT_AUTHORIZED');
+  return row
+}
 async function registerDevice(){
   const c=client();if(!c)throw new Error('خدمة الدخول غير جاهزة');
   const secret=await getSecret(),named=await ensureDeviceName();
   const {data,error}=await c.rpc('abu_bassam_register_device',{p_device_id:named.id,p_secret:secret,p_device_name:named.name,p_model:deviceInfo.model||deviceInfo.name||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});
-  if(error)throw error;currentDevice=normalizeDevice(data);if(!currentDevice)throw new Error('تعذر تسجيل الجهاز');saveTrust(currentDevice);localStorage.setItem(DEVICE_NAME_KEY,currentDevice.device_name||named.name);renderSecurityCard();return currentDevice
+  if(error)throw error;currentDevice=normalizeDevice(data,named.id);saveTrust(currentDevice);localStorage.setItem(DEVICE_NAME_KEY,currentDevice.device_name||named.name);renderSecurityCard();return currentDevice
 }
-async function touchDevice(){if(!cloud()?.isConnected?.()||!navigator.onLine)return;try{const secret=await getSecret(),id=identity(),name=localStorage.getItem(DEVICE_NAME_KEY)||deviceInfo.model||'هاتف';const {data,error}=await client().rpc('abu_bassam_touch_device',{p_device_id:id.id,p_secret:secret,p_device_name:name,p_model:deviceInfo.model||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});if(error)throw error;currentDevice=normalizeDevice(data);saveTrust(currentDevice);if(currentDevice.active===false)lock('تم إيقاف هذا الجهاز من الحساب الرئيسي')}catch(e){if(/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))lock('هذا الجهاز غير مصرح له بالدخول') }}
+async function touchDevice(){if(!unlocked||!cloud()?.isConnected?.()||!navigator.onLine)return;try{const secret=await getSecret(),id=identity(),name=localStorage.getItem(DEVICE_NAME_KEY)||deviceInfo.model||'هاتف';const {data,error}=await client().rpc('abu_bassam_touch_device',{p_device_id:id.id,p_secret:secret,p_device_name:name,p_model:deviceInfo.model||'',p_platform:deviceInfo.os||'Android',p_app_version:APP_VERSION});if(error)throw error;const verified=normalizeDevice(data,id.id);if(!unlocked)return;currentDevice=verified;saveTrust(verified)}catch(e){if(/DEVICE_NOT_AUTHORIZED|DEVICE_DISABLED/i.test(String(e.message||e)))lock('هذا الجهاز غير مصرح له بالدخول') }}
 
 function loginRemaining(){return Math.max(0,Number(localStorage.getItem(LOGIN_LOCK_KEY)||0)-Date.now())}
 function formatWait(ms){const n=Math.max(1,Math.ceil(ms/1000)),digits='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/\d/g,d=>digits[+d])+' ثانية'}
