@@ -38,3 +38,4 @@ for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.j
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
 process.stdout.write('Runtime regression checks passed: persistent removable optional envelope fields, deterministic Cards recovery, native startup watchdog, and canonical login guards.\n');
 require('./device_heartbeat_security_test.js');
+require('./login_recovery_safety_test.js');
