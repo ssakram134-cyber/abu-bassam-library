@@ -50,7 +50,7 @@ if(fs.existsSync('web/encrypted-vault-hardening-runtime.js'))throw new Error('do
 const canonicalVault=read('web/document-vault-runtime.js');
 new Function(canonicalVault);
 for(const token of ['function clearVaultPrivateView()','handleVaultAuthChanged','epoch!==vaultSessionEpoch','folderKey(){return FOLDER_KEY'])need(canonicalVault,token,'account-isolated archive state and folders');
-for(const marker of ["TRASH_RETENTION_MS=30*24*60*60*1000","data-filter=\"trash\"","function restoreTrash(","function purgeTrash(","function purgeExpiredTrash(","deletedAt:now","remoteUpdatedAt:remoteVersion,syncState:'synced'","function render("] )need(canonicalVault,marker,'30-day trash and sync preservation');
+for(const marker of ["TRASH_RETENTION_MS=30*24*60*60*1000","data-filter=\"trash\"","function restoreTrash(","function purgeTrash(","function purgeExpiredTrash(","deletedAt:now","await dbAckPending(item,remoteVersion,false,sessionValid)","function render("] )need(canonicalVault,marker,'30-day trash and sync preservation');
 if(canonicalVault.includes("blob:null,syncState:'pending',deleted:true"))throw new Error('Legacy destructive vault deletion returned');
 (async()=>{
  const store=new Map(),window={addEventListener(){},AbuBassamSecurity:{role:()=> 'owner',device:()=>({device_id:'test-device'})},AbuBassamBranchVault:{localScopeOk:()=>true},AbuBassamCloud:{session:()=>({user:{id:'test-user'}})}},document={getElementById(){return null}},warnings=[];
