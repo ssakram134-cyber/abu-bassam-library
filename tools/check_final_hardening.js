@@ -17,7 +17,8 @@ forbid(backup,"can?.(k)!==false",'backup permission must fail closed');
 need(backup,"const required=kind==='pre_restore'?'backupRestore':'backupCreate'",'pre-restore permission split');
 need(backup,"if(!can('backupRestore'))",'restore guard');
 need(backup,"if(!can('backupDelete'))",'delete guard');
-need(backup,"if(sha!==String(d.backup.sha256||''))",'download SHA-256 verification');
+need(backup,"if(!/^[0-9a-f]{64}$/i.test(String(d.backup.sha256||'')))",'download SHA-256 metadata validation');
+need(backup,"if(sha!==String(d.backup.sha256).toLowerCase())",'download SHA-256 verification');
 need(backup,"if(d.backup.branch_device_id!==cur)",'backup branch binding');
 need(backup,'AbuBassamNativeSecurity','central SecureStore dispatcher');
 
