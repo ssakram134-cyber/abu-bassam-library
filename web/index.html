@@ -191,8 +191,15 @@ async function printDirectly(){
   }
   if(!window.Android||!Android.printPages)return alert('الطباعة المباشرة متاحة داخل تطبيق أندرويد');
   if(telegramReady())telegramSend(await makePdfDataAsync(),'Abu_Bassam_Print.pdf','application/pdf','طباعة');
-  let urls=pageCanvases.map(x=>x.toDataURL('image/png'));
-  return Android.printPages(JSON.stringify(urls),pagePrintMeta?.paperKey||getPaperPrintKey(),pagePrintMeta?.dpi??printDpi())
+  let urls=[],totalSize=0;
+  for(const canvas of pageCanvases){
+   const image=canvas.toDataURL('image/png');
+   totalSize+=image.length;
+   if(totalSize>40*1024*1024)throw Error('الصفحات كبيرة جداً؛ اطبعها على دفعات أصغر للحفاظ على ذاكرة الهاتف.');
+   urls.push(image)
+  }
+  // Pass the array directly: the native bridge serializes exactly once.
+  return Android.printPages(urls,pagePrintMeta?.paperKey||getPaperPrintKey(),pagePrintMeta?.dpi??printDpi())
  }catch(e){alert('تعذرت الطباعة: '+String(e?.message||e))}
 }
 function saveTelegramSettings(){localStorage.setItem('tgEnabled',$('tgEnabled').checked?'1':'0');localStorage.setItem('tgUsername',$('tgUsername').value.trim().replace(/^@/,''));localStorage.setItem('tgLink',$('tgLink').value.trim());localStorage.removeItem('tgToken');localStorage.removeItem('tgChatId');updateTelegramStatus()}
