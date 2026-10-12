@@ -170,6 +170,8 @@ function closeTopLayer(){
   if(recovery?.style.display==='flex'&&window.AbuFeatureRecovery?.closeTool?.())return true;
   const zoom=$('paperZoomOverlay');
   if(zoom?.classList.contains('show')&&typeof window.closePaperZoom==='function'){window.closePaperZoom();return true}
+  const backdrop=$('sheetBackdrop');
+  if(backdrop?.classList.contains('show')&&!document.querySelector('.sheet.show')){backdrop.classList.remove('show');return true}
   const ordered=['#abuDeviceModal.show','#abuTextEditor.show','#abuTypographySettings.show','#abuSettingsModal.show','#opsSheet.show','.v-modal.show','.cs-modal.show','.nat-modal.show','.sheet.show','.ds-sheet.show'];
   for(const sel of ordered){
     const el=document.querySelector(sel);if(!el)continue;
