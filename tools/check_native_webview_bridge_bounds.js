@@ -16,15 +16,15 @@ assert.ok(printSource.includes('MAX_NATIVE_PAGE_COUNT')&&printSource.includes('M
 async function check(){
  const sent=[],notices=[];
  const window={alert:x=>notices.push(String(x)),ReactNativeWebView:{postMessage:x=>sent.push(JSON.parse(x))}};
- const reduced=bridge.replace('var messageLimit = 48 * 1024 * 1024;','var messageLimit = 128;');
+ const reduced=bridge.replace('var messageLimit = 48 * 1024 * 1024;','var messageLimit = 256;');
  new Function('window',reduced)(window);
  window.Android.saveBase64('file.pdf','application/pdf','data:application/pdf;base64,AQIDBA==');
  assert.equal(sent.length,1);assert.equal(sent[0].type,'saveBase64');
- window.Android.saveBase64('huge.pdf','application/pdf','x'.repeat(129));
+ window.Android.saveBase64('huge.pdf','application/pdf','x'.repeat(257));
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('حجم الصور كبير')));
  window.Android.printPages(Array(21).fill('x'),'A4',300);
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('20 صفحة')));
- window.Android.printPages('a'.repeat(100),'A4',300);
+ window.Android.printPages('a'.repeat(300),'A4',300);
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('الحد الآمن')));
  const jobs=[],alerts=[];
  const printer=new Function('useCallback','Print','printDimensions','Alert',
