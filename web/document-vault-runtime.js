@@ -620,7 +620,7 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
      syncSet(LAST_SYNC_KEY,String(Date.now()));setSyncStatus('المزامنة الآمنة مكتملة بين الأجهزة ✓');
     if(manual)logOperation('sync','مزامنة الأرشيف الآمنة بين الأجهزة',state.items.filter(item=>!item.deleted).length+' عنصر');
     return true
-  }catch(error){setSyncStatus('تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+(error?.message||error));return false}
+  }catch(error){const message=String(error?.message||error),casPending=message.includes('VAULT_CAS_NOT_READY')||message.includes('abu_bassam_vault_upsert_cas');setSyncStatus(casPending?'المزامنة السحابية معلّقة: الخادم يحتاج تحديث CAS • ملفاتك محفوظة على هذا الجهاز':'تعذرت الآن • التغييرات المحلية محفوظة');if(manual)alert('تعذرت المزامنة: '+message);return false}
   finally{state.syncing=false}
 }
 function onShow(){if(!updateVaultAccessUi())return false;refresh();let last=Number(syncGet(LAST_SYNC_KEY)||0);if(last)setSyncStatus('آخر مرة '+formatTime(last));return true}
