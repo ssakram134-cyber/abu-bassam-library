@@ -17,7 +17,7 @@ for(const marker of [
  '};refreshOverlay()'
 ])assert.ok(source.includes(marker),'Missing memory/touch guard: '+marker);
 
-let drawCount=0,allocatedLargest=0,animationFrames=0,cancelDuringWarp=false;
+let drawCount=0,allocatedLargest=0,animationFrames=0,cancelDuringWarp=false,forceCancelAtYield=false,cancelled=false;
 const created=[];
 const image={naturalWidth:80,naturalHeight:64,width:80,height:64};
 function expectedPixel(x,y){return [x%256,y%256,(x+y)%256,255]}
@@ -80,6 +80,7 @@ const context={window,document,uploadedImages:[original],selectedIndex:0,
  setTimeout:fn=>Promise.resolve().then(fn),
  requestAnimationFrame:fn=>{
   animationFrames++;
+  if(forceCancelAtYield){cancelled=true;forceCancelAtYield=false}
   if(cancelDuringWarp&&created.length%2===0&&created.length>0){
    cancelDuringWarp=false;
    window.AbuPhotoGeometry.close('abuGeoModal')
@@ -124,16 +125,13 @@ async function rejected(fn,re){await assert.rejects(fn,re);count++}
  result.width=0;result.height=0;
 
  // Abort a partially rendered job: the output must not retain a canvas backing store.
- let cancelled=false;
- const origRaf=context.requestAnimationFrame;
- context.requestAnimationFrame=fn=>{cancelled=true;fn()};
+ cancelled=false;forceCancelAtYield=true;
  const previous=created.length;
  await rejected(()=>geometry.warpFull(image,()=>cancelled),/أُلغيت معالجة المنظور/);
  check(created[previous].width===0&&created[previous].height===0,
   'Canceled perspective must free the source canvas');
  check(created[previous+1].width===0&&created[previous+1].height===0,
   'Canceled perspective must free the incomplete output canvas');
- context.requestAnimationFrame=origRaf;
 
  geometry.setMode('perspective');
  const existingSrc=original.src;
