@@ -23,17 +23,26 @@
       const requestId = 'native-sec-' + Date.now() + '-' + (++nativeSeq);
       const timer = setTimeout(() => { nativePending.delete(requestId); reject(new Error('انتهت مهلة العملية الأمنية')); }, 15000);
       nativePending.set(requestId, { resolve, reject, timer });
-      Android.security(action, requestId, payload || {});
+      try { Android.security(action, requestId, payload || {}); }
+      catch (error) {
+        clearTimeout(timer);
+        nativePending.delete(requestId);
+        reject(error);
+      }
     });
   }
   window.AbuBassamNativeSecurityResult = function (message) {
-    const data = typeof message === 'string' ? (() => { try { return JSON.parse(message); } catch (_) { return {}; } })() : (message || {});
+    let data = message;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch (_) { return; }
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.requestId !== 'string') return;
     const slot = nativePending.get(data.requestId);
     if (!slot) return;
     clearTimeout(slot.timer);
     nativePending.delete(data.requestId);
-    if (data.ok === false) slot.reject(new Error(data.error || 'تعذر تنفيذ العملية الأمنية'));
-    else slot.resolve(data.value);
+    if (data.ok === true) slot.resolve(data.value);
+    else slot.reject(new Error(String(data.error || 'تعذر تنفيذ العملية الأمنية')));
   };
   window.AbuBassamNativeSecurity = { request: nativeRequest, available: nativeAvailable };
 
