@@ -11,7 +11,7 @@ const p1=poster.indexOf('function testPoster(){'),p2=poster.indexOf('function po
 assert.ok(begin>=0&&mid>begin&&printStart>=0&&printEnd>printStart&&p1>=0&&p2>p1,
  'Original photo and poster print handlers must exist');
 const jpeg=home.slice(begin,mid),printing=home.slice(printStart,printEnd),posterTest=poster.slice(p1,p2);
-assert.ok(jpeg.includes("Android.savePagesToGallery('Abu_Bassam_Page',pages,'image/jpeg')"),
+assert.ok(jpeg.includes("Android.savePagesToGallery('Abu_Bassam_Page',pages,'image/jpeg',telegramReady()?currentPage:-1)"),
  'Gallery sends an array without nested JSON serialization');
 assert.ok(printing.includes('Android.printPages(urls,'),
  'Direct print sends image array');
@@ -49,7 +49,8 @@ async function test(){
  assert.ok(Array.isArray(native.saves[0][1]));
  assert.equal(native.saves[0][1].length,2,'Gallery still receives every requested page');
  assert.deepEqual(native.counters,[1,1],'Each JPEG is encoded once');
- assert.ok(native.telegram[0][1].endsWith('2.jpg'));
+ assert.equal(native.telegram.length,0,'Native saving must not trigger an overlapping Telegram export');
+ assert.equal(native.saves[0][3],-1,'Sharing is off in the default photo print fixture');
 
  const tooLarge=fixture({large:true});
  tooLarge.callbacks.downloadJPG();
