@@ -146,25 +146,39 @@ function makePdfData(){let pd=pagePrintMeta?.paper||getPaperSize(),fmt=[pd.w,pd.
 // Preserve makePdfData() as the synchronous compatibility API for older callers.
 async function makePdfDataAsync(){
  if(!pageCanvases.length)throw new Error('لا توجد صفحات لتصدير PDF');
- const pd=pagePrintMeta?.paper||getPaperSize(),fmt=[pd.w,pd.h],
+ const pages=pageCanvases.slice(),revision=pagePrintMeta;
+ const pd=revision?.paper||getPaperSize(),fmt=[pd.w,pd.h],
   orientation=pd.w>pd.h?'landscape':'portrait';
+ const unchanged=()=>pagePrintMeta===revision&&pageCanvases.length===pages.length&&
+  pages.every((cv,i)=>pageCanvases[i]===cv&&cv?.width!==0&&cv?.height!==0);
+ const ensureCurrent=()=>{
+  if(!unchanged())throw new Error('تغيّرت صفحات الطباعة أثناء إنشاء PDF؛ لم يُحفظ مستند مختلط. أعد التصدير من المعاينة الجديدة.')
+ };
  const doc=new jspdf.jsPDF({orientation,unit:'mm',format:fmt});
- for(let i=0;i<pageCanvases.length;i++){
-  const cv=pageCanvases[i];
-  if(i)doc.addPage(fmt,orientation);
+ let imageBytes=0;
+ for(let i=0;i<pages.length;i++){
+  ensureCurrent();
+  const cv=pages[i];
   let jpeg;
   if(typeof cv.toBlob==='function'){
    const blob=await new Promise((resolve,reject)=>cv.toBlob(
     file=>file?resolve(file):reject(new Error('تعذر ترميز إحدى صفحات PDF')),
     'image/jpeg',.96
    ));
+   ensureCurrent();
    jpeg=new Uint8Array(await blob.arrayBuffer())
   }else jpeg=cv.toDataURL('image/jpeg',.96);
+  ensureCurrent();
+  imageBytes+=typeof jpeg==='string'?Math.ceil(jpeg.length*.75):jpeg.byteLength;
+  if(imageBytes>28*1024*1024)
+   throw new Error('حجم صور PDF يتجاوز الحد الآمن (28MB). قسّم الصفحات إلى دفعات أصغر دون خفض جودة الصور الأصلية.');
+  if(i)doc.addPage(fmt,orientation);
   doc.addImage(jpeg,'JPEG',0,0,pd.w,pd.h);
   jpeg=null;
   // Yield between large pages so Android can process input and show progress.
-  if(i+1<pageCanvases.length)await new Promise(resolve=>setTimeout(resolve,0))
+  if(i+1<pages.length)await new Promise(resolve=>setTimeout(resolve,0))
  }
+ ensureCurrent();
  return doc.output('datauristring')
 }
 function tgCaption(action){let ps=getPhotoSize(),pd=getPaperSize(),d=new Date().toLocaleString('ar-IQ');return `مكتبة أبو بسام للقرطاسية والتصوير\n${action}\n${d}\nالورق: ${pd.w/10}×${pd.h/10} سم | الصورة: ${ps.w/10}×${ps.h/10} سم${dpiIsEnabled()?' | '+manualDpi()+' DPI':''}`}
