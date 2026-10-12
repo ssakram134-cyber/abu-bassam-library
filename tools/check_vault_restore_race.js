@@ -17,6 +17,7 @@ for(const marker of [
  "if(!isCurrent())return rejectTransaction"
 ])assert.ok(script.includes(marker),'Missing atomic restore gate: '+marker);
 assert.ok(src.includes("expectedBefore:existing"),'Backup restore must pass its original local snapshot to the transaction');
+assert.ok(src.includes("if(restoreIdentity()!==initialRestoreIdentity||!allowed('vaultRestoreBackup'))throw new Error('تغيّر الحساب أثناء تجهيز الإعدادات"),'Settings restoration must not cross a login change during ZIP extraction');
 
 const rows=new Map(),clone=v=>v==null?v:{...v};
 const micro=fn=>Promise.resolve().then(fn);
