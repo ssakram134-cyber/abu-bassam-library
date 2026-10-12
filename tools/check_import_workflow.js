@@ -5,6 +5,18 @@ const workflow=fs.readFileSync(path.join(root,'.github','workflows','import-sour
 const validator=fs.readFileSync(path.join(root,'tools','validate_imported_source.js'),'utf8');
 function need(src,marker,label){if(!src.includes(marker))throw new Error(`source import check failed: ${label}`)}
 function forbid(src,marker,label){if(src.includes(marker))throw new Error(`source import check failed: forbidden ${label}`)}
+const sourceChecks=fs.readFileSync(path.join(root,'.github','workflows','source-code-checks.yml'),'utf8');
+function checkSourceBranchGate(){
+  need(sourceChecks,'pull_request:','source-check workflow must run before PR merge');
+  need(sourceChecks,'branches: [main]','source-check workflow must target main');
+  need(sourceChecks,"'.github/workflows/**'",'workflow edits must run source checks');
+  need(sourceChecks,"'AGENTS.md'",'approved project contract edits must run source checks');
+  need(sourceChecks,'permissions:\\n  contents: read'.replace('\\\\n','\\n'),'source checks must be read-only');
+  need(sourceChecks,'npm run check:web','source checks must run canonical validation');
+  forbid(sourceChecks,'contents: write','source checks must never have source write permission');
+  forbid(sourceChecks,'git push','source checks must not push commits');
+}
+checkSourceBranchGate();
 need(workflow,'workflow_dispatch:','manual-only trigger');
 need(workflow,'pull-requests: write','PR permission');
 need(workflow,'Capture trusted validator before extraction','trusted validator capture');
@@ -24,4 +36,4 @@ need(validator,"app.android?.package!=='com.abubassam.librarycamera3'",'Android 
 need(validator,"app.slug!=='abu-bassam-library'",'Expo slug validation');
 need(validator,"forbiddenExt",'signing/secret file rejection');
 need(validator,"cp.spawnSync(process.execPath,['--check',file]",'JavaScript syntax validation');
-console.log('Source ZIP import workflow check passed: manual preflight, trusted validation, no lifecycle scripts, branch-only write, and PR review.');
+console.log('Source ZIP and PR source-check workflows passed: trusted validation, read-only PR verification, and no write to main.');
