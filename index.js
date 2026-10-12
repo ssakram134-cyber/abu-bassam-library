@@ -73,17 +73,7 @@ function splitDataUrl(dataUrl) {
   if (!raw.startsWith('data:') || at < 6) throw new Error('صيغة الملف غير مدعومة');
   const mime = raw.slice(5, at).split(';')[0].trim().toLowerCase();
   const base64 = raw.slice(at + marker.length);
-  if (!/^[a-z0-9!#function splitDataUrl(dataUrl) {
-  const marker = ';base64,';
-  const at = String(dataUrl || '').indexOf(marker);
-  if (at < 0) throw new Error('صيغة الملف غير مدعومة');
-  return { mime: String(dataUrl).slice(5, at).split(';')[0] || 'application/octet-stream', base64: String(dataUrl).slice(at + marker.length) };
-}^_.+-]+\/[a-z0-9!#function splitDataUrl(dataUrl) {
-  const marker = ';base64,';
-  const at = String(dataUrl || '').indexOf(marker);
-  if (at < 0) throw new Error('صيغة الملف غير مدعومة');
-  return { mime: String(dataUrl).slice(5, at).split(';')[0] || 'application/octet-stream', base64: String(dataUrl).slice(at + marker.length) };
-}^_.+-]+$/i.test(mime)
+  if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i.test(mime)
       || !base64 || base64.length % 4 !== 0 || !/^[a-z0-9+/]+={0,2}$/i.test(base64)) {
     throw new Error('بيانات الملف غير صالحة أو غير مكتملة');
   }
