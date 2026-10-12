@@ -24,6 +24,15 @@ forbid(runtime,'SUPABASE_SERVICE_ROLE_KEY','client server key');
 need(runtime,'MAX_ITEMS=1000,MAX_BACKUP_RECORDS=2000','active archive capacity must be distinct from trash snapshot capacity');
 need(edge,'MAX_BACKUP_RECORDS=2000','backup server must accept trash-inclusive 2000-record snapshots');
 need(edge,'count>MAX_BACKUP_RECORDS','backup server must enforce its explicit total-record cap');
+
+for(const marker of [
+ 'd.backup?.branch_device_id!==branch',
+ 'total>MAX_ZIP',
+ 'parts.length>Math.ceil(MAX_ZIP/CHUNK)',
+ "if(!/^https:\\/\\//i.test(url))",
+ 'got+a.length>total',
+ "sha!==String(d.backup.sha256).toLowerCase()"
+])need(runtime,marker,'cloud snapshot download must reject unsafe or oversized files');
 const capRule=runtime.match(/if\((items\.filter\(item=>!item\.deleted\)\.length>MAX_ITEMS\|\|items\.length>MAX_BACKUP_RECORDS)\)throw Error/);
 if(!capRule)throw new Error('backup center check failed: expected canonical trash-aware active and total count checks');
 const tooLarge=new Function('items','MAX_ITEMS','MAX_BACKUP_RECORDS','return '+capRule[1]);
