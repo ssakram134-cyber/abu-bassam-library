@@ -41,7 +41,7 @@ function harness(first,second,{onYield=()=>{},scaledLimit=false}={}){
 (async()=>{
  const stable=harness(canvas('A'),canvas('B'));
  const good=await stable.run();
- check(good==='pdf'&&stable.images.join('')==='AB'&&stable.events.includes('output'),
+ check(good==='pdf'&&stable.images.map(v=>String.fromCharCode(v)).join('')==='AB'&&stable.events.includes('output'),
   'Unchanged preview must export both original pages in order');
 
  let duringRead;
@@ -56,7 +56,7 @@ function harness(first,second,{onYield=()=>{},scaledLimit=false}={}){
  const switched=harness(canvas('A'),canvas('B'),{onYield:()=>afterYield.replacePages([canvas('C'),canvas('D')])});
  afterYield=switched;
  await assert.rejects(switched.run(),/تغيّرت صفحات الطباعة/);
- check(switched.images.join('')==='A'&&!switched.events.includes('output'),
+ check(switched.images.map(v=>String.fromCharCode(v)).join('')==='A'&&!switched.events.includes('output'),
   'Rebuild between PDF pages must abort before adding a page from a newer layout');
 
  let metaChange;
@@ -80,7 +80,7 @@ function harness(first,second,{onYield=()=>{},scaledLimit=false}={}){
  const short=harness(canvas('A'),canvas('B'));
  short.replacePages([canvas('C')]);
  const afterChange=await short.run();
- check(afterChange==='pdf'&&short.images.join('')==='C',
+ check(afterChange==='pdf'&&short.images.map(v=>String.fromCharCode(v)).join('')==='C',
   'Rebuilding before export begins must use the fresh snapshot normally');
  console.log('PDF export revision checks passed: '+cases+
   ' cases; mixed generations, paper mutation, freed canvases and size limit fail closed.')
