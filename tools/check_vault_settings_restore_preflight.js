@@ -10,6 +10,9 @@ function between(start,end){
 const helper=between('async function readValidatedBackupSettings(zip){','async function safeRestore(file,options={}){');
 const restore=between('async function safeRestore(file,options={}){','\nwindow.AbuDocumentVaultHardening=');
 const parser=between('function packedLength(entry){','function validateZipCatalog(zip){');
+const safeValueImpl=between('function safeSettingValue(value){','function settings(){');
+const safeKeyImplForPreflight=between('function safeSettingKey(k){','function safeSettingValue(value){');
+const validator=new Function(safeKeyImplForPreflight+safeValueImpl+'return {safeSettingKey,safeSettingValue};')();
 assert.ok(restore.indexOf('await readValidatedBackupSettings(zip)')<restore.indexOf('await applyAtomic(prepared,'),
  'Settings metadata must be validated before committing archive files');
 assert.ok(restore.includes("catch(settingsError){"),'Settings failures after file commit must be reported separately');
@@ -49,7 +52,8 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
   restoreSettings:()=>{settingsApplied++;calls.push('apply-settings');if(settingsFailure)throw Error('quota denied')},
   alert:m=>alerts.push(String(m)),
   '$':()=>null,
-  packedLength:new Function(parser+'return packedLength;')()
+  packedLength:new Function(parser+'return packedLength;')(),
+  safeSettingKey:validator.safeSettingKey,safeSettingValue:validator.safeSettingValue
  };
  const names=Object.keys(locals);
  const safeRestore=new Function(...names,helper+restore+'\nreturn safeRestore;')(...names.map(x=>locals[x]));
@@ -69,6 +73,13 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  const badShape=await scenario({settings:'{"format":"AbuBassamSettings","settings":[]}' }).run();
  assert.equal(badShape.result,false);
  assert.equal(badShape.committed,false,'Invalid settings object cannot trigger file commit');
+
+ const unsafeSnapshot=await scenario({settings:JSON.stringify({format:'AbuBassamSettings',settings:{abuBassamPrintSettingsV1:JSON.stringify({paper:'A4',credentials:{password:'private-value'}})}})}).run();
+ assert.equal(unsafeSnapshot.result,false,'Nested credentials must be rejected before archive file commit');
+ assert.equal(unsafeSnapshot.committed,false,'Credential-bearing snapshot must never overwrite existing files');
+ const unsafeText=await scenario({settings:JSON.stringify({format:'AbuBassamSettings',settings:{abuBassamTypographyV5:'Authorization: Bearer exampleABCDEF012345'}})}).run();
+ assert.equal(unsafeText.result,false,'Bearer tokens in allowed settings must be rejected before commit');
+ assert.equal(unsafeText.committed,false,'Bearer token must not commit archive files');
 
  const good=await scenario().run();
  assert.equal(good.result,true);
@@ -108,7 +119,7 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
    setItem:(key,value)=>{if(key===blockedKey)throw Error('QuotaExceededError');entries.set(key,String(value))},
    removeItem:key=>entries.delete(key)
   };
-  const apply=new Function('localStorage',safeKeyImpl+restoreImpl+';return restoreSettings')(storage);
+  const apply=new Function('localStorage',safeKeyImpl+safeValueImpl+restoreImpl+';return restoreSettings')(storage);
   let error=null;
   try{apply({settings:snapshot},mode)}catch(e){error=e}
   return{entries:Object.fromEntries(entries),error}
@@ -132,6 +143,19 @@ function scenario({settings='{"format":"AbuBassamSettings","settings":{"theme":"
  const oversize=exerciseSettings({theme:'old'},{theme:'a'.repeat(500001)});
  assert.match(String(oversize.error),/يتجاوز الحد/,'Oversized setting must be rejected before commit');
  assert.equal(oversize.entries.theme,'old','Oversized values must not partially write settings');
- console.log('Archive restore settings preflight passed: 8 restore scenarios and 4 direct localStorage rollback tests.');
+ const blocked=exerciseSettings({theme:'old'},{theme:'new',abuBassamPrintSettingsV1:'{"user":{"token":"hidden"}}'});
+ assert.match(String(blocked.error),/غير آمن/,'Nested secrets must be blocked without partial writes');
+ assert.equal(blocked.entries.theme,'old','A rejected setting must not change earlier settings');
+ const entries=new Map(Object.entries({
+  theme:'dark',abuBassamPrintSettingsV1:'{"paper":"A4","dpi":300}',
+  abuBassamTypographyV5:'{"password":"accidental"}',
+  abuBassamDefaultPrinterV1:'Authorization: Bearer abcdefghijklmnop',
+  abuBassamSessionV2:'{"token":"should-not-export"}'
+ }));
+ const mockStorage={get length(){return entries.size},key:n=>[...entries.keys()][n],getItem:k=>entries.get(k)||null};
+ const collect=new Function('localStorage',safeKeyImpl+safeValueImpl+between('function settings(){','function bytesToB64(')+'return settings;')(mockStorage);
+ assert.deepEqual(collect(),{theme:'dark',abuBassamPrintSettingsV1:'{"paper":"A4","dpi":300}'},
+  'Only safe allowlisted preferences can leave the device');
+ console.log('Archive restore settings preflight passed: unsafe nested credentials and bearer tokens rejected before file commit, rollback and safe export covered.');
 
 })().catch(e=>{console.error(e);process.exitCode=1});

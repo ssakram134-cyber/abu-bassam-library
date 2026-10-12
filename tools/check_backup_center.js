@@ -43,4 +43,34 @@ if(tooLarge([...live,...trash],1000,2000))throw new Error('backup center check f
 if(!tooLarge([...live,{id:'live-over-limit',deleted:false}],1000,2000))throw new Error('backup center check failed: 1001 active files must be refused');
 if(!tooLarge([...live,...trash,{id:'trash-over-limit',deleted:true}],1000,2000))throw new Error('backup center check failed: more than 2000 records must be refused');
 
+
+const hardening=read('web/document-vault-hardening-runtime.js');
+const guardStart=hardening.indexOf('function safeSettingKey(k){');
+const guardEnd=hardening.indexOf('function bytesToB64(',guardStart);
+if(guardStart<0||guardEnd<=guardStart)throw Error('Missing settings validator');
+const guards=new Function(hardening.slice(guardStart,guardEnd)+';return {safeSettingKey,safeSettingValue};')();
+const exporterLine=runtime.split('\n').find(line=>line.startsWith('function safeSettings(){'));
+if(!exporterLine)throw Error('Missing cloud settings exporter');
+const values=new Map(Object.entries({
+ theme:'dark',
+ abuBassamPrintSettingsV1:'{"paper":"A4","dpi":300}',
+ abuBassamTypographyV5:'{"password":"not-for-export"}',
+ abuBassamDefaultPrinterV1:'Authorization: Bearer TEST0123456789012',
+ abuBassamSessionV2:'{"access_token":"not-for-export"}'
+}));
+const storage={
+ get length(){return values.size},
+ key:index=>[...values.keys()][index],
+ getItem:key=>values.has(key)?values.get(key):null
+};
+const exporter=new Function('window','localStorage',exporterLine+';return safeSettings;')(
+ {AbuDocumentVaultHardening:guards},storage);
+const cleaned=exporter();
+if(JSON.stringify(cleaned)!==JSON.stringify({theme:'dark',abuBassamPrintSettingsV1:'{"paper":"A4","dpi":300}'}))
+ throw Error('Cloud backup must exclude unsafe setting values while keeping safe print settings');
+const withoutGuards=new Function('window','localStorage',exporterLine+';return safeSettings;')({},storage);
+let rejected=false;
+try{withoutGuards()}catch(e){rejected=/خدمة التحقق من إعدادات النسخ/.test(String(e))}
+if(!rejected)throw Error('Cloud backup must refuse to export preferences when its validator is missing');
+
 console.log('backup center checks passed: scoped state, real blob validation, SecureStore-only identity, server-side multipart SHA-256 commit verification, safe pre-restore ordering, branch scope, retention after successful restore, and direct metadata/storage denial.');
