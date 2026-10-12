@@ -11,6 +11,8 @@ for(const kind of ['saveBase64','saveToGallery','savePagesToGallery','printPages
  assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => "+kind+"(message))"),
   'Operation must be serialized: '+kind);
 }
+assert.ok(inbox.includes("runNativeExport(nativeExportBusyRef, () => cleanCache())"),
+ 'Cache cleanup must be locked with active print/share files');
 function deferred(){
  let resolve,reject;
  const promise=new Promise((res,rej)=>{resolve=res;reject=rej});
@@ -20,7 +22,7 @@ function fixture(){
  const activities=[],alerts=[],pending=[],busy={current:false};
  const Alert={alert:(...args)=>alerts.push(args)};
  const exports=Object.fromEntries(['scanBarcodeImage','saveBase64','saveToGallery',
-  'savePagesToGallery','printPages','printBase64','printHtml','savePdfHtml','shareBase64'].map(kind=>
+  'savePagesToGallery','printPages','printBase64','printHtml','savePdfHtml','shareBase64','cleanCache'].map(kind=>
   [kind,()=>{activities.push(kind);const p=deferred();pending.push(p);return p.promise}]));
  const callback={
   setWebReady:()=>activities.push('ready'),
@@ -28,7 +30,6 @@ function fixture(){
   openExternal:()=>activities.push('external'),
   openAppSettings:()=>activities.push('settings'),
   getDeviceInfo:()=>activities.push('device'),
-  cleanCache:()=>activities.push('cache'),
   handleSecurity:()=>activities.push('security'),
   BackHandler:{exitApp:()=>activities.push('exit')},
   ...exports
@@ -50,6 +51,9 @@ async function check(){
  const duplicate=await f.dispatch('saveBase64');
  assert.equal(duplicate,false,'Second heavy export must be rejected');
  assert.deepEqual(f.activities,['printPages'],'Rejected request must not call other exporter');
+ const destructiveCleanup=await f.dispatch('cleanCache');
+ assert.equal(destructiveCleanup,false,'Cache cleanup must not delete a PDF while printing');
+ assert.ok(!f.activities.includes('cleanCache'),'No cleanup is allowed before print releases temporary files');
  assert.ok(f.alerts.some(a=>a[0].includes('عملية حفظ أو طباعة جارية')));
  await f.dispatch('getDeviceInfo');
  await f.dispatch('security');
@@ -85,6 +89,14 @@ async function check(){
  f.pending[3].resolve(true);
  await recovered;
  assert.equal(f.busy.current,false);
+ const cleaning=f.dispatch('cleanCache');
+ assert.equal(f.busy.current,true,'Cache cleanup locks native file operations');
+ assert.equal(f.activities.at(-1),'cleanCache');
+ const printDuringCleanup=await f.dispatch('printPages');
+ assert.equal(printDuringCleanup,false,'Printing must not start while cache cleanup is deleting files');
+ f.pending[4].resolve(true);
+ await cleaning;
+ assert.equal(f.busy.current,false,'Completed cache cleanup must release the lock');
  console.log('Native export concurrency passed: print/save/scan serialization, security responsiveness, recovery after errors, and oversized message rejection.');
 }
 check().catch(error=>{console.error(error);process.exitCode=1});
