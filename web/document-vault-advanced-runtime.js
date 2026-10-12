@@ -2,7 +2,7 @@
 'use strict';
 if(window.__ABU_DOCUMENT_VAULT_ADVANCED_V1__)return;
 window.__ABU_DOCUMENT_VAULT_ADVANCED_V1__=true;
-const DB_NAME='AbuBassamDocumentVaultV4',STORE='items',MAX_SOURCE_PIXELS=12000000,MAX_OUTPUT_PIXELS=8000000;
+const DB_NAME='AbuBassamDocumentVaultV4',STORE='items',MAX_ITEMS=1000,MAX_SOURCE_PIXELS=12000000,MAX_OUTPUT_PIXELS=8000000;
 let st=null,url='',sessionEpoch=0;
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
@@ -27,7 +27,23 @@ async function putItem(item,expected=null,isCurrent=()=>true){
     conflict=new Error('تم تعديل الملف أثناء التحرير؛ لم يُستبدل التعديل الأحدث. افتح الملف مجددًا أو احفظ نسخة مستقلة.');
     tx.abort();return
    }
-   store.put({...item,_localWriteRev:newWriteRevision()})
+   const write=()=>store.put({...item,_localWriteRev:newWriteRevision()});
+   // New copies and restored images need their own slot; existing active
+   // images can be replaced without consuming an additional slot.
+   if(item.deleted||(current&&!current.deleted)){write();return}
+   const scan=store.getAll();
+   scan.onsuccess=()=>{
+    if(!isCurrent()){
+     conflict=new Error('تغيّر الحساب أو الفرع أثناء الحفظ؛ لم تُكتب الصورة في جلسة أخرى.');
+     tx.abort();return
+    }
+    if((scan.result||[]).filter(row=>!row.deleted).length>=MAX_ITEMS){
+     conflict=new Error('الأرشيف ممتلئ (1000 ملف نشط). لم تُحفظ نسخة الصورة الجديدة.');
+     tx.abort();return
+    }
+    write()
+   };
+   scan.onerror=()=>tx.abort()
   };
   read.onerror=()=>tx.abort();
   tx.oncomplete=resolve;
