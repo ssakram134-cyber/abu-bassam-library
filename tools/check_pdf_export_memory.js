@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
+const {jsPDF:BundledJsPdf}=require('../web/jspdf.umd.min.js');
 const html=fs.readFileSync('web/index.html','utf8');
 function segment(start,end){
  const a=html.indexOf(start),b=html.indexOf(end,a+start.length);
@@ -87,6 +88,18 @@ let count=0;function check(b,message){assert.ok(b,message);count++}
   main,()=>{},()=>false,()=> 'A4',()=>0,pagePrintMeta,0,()=>({w:210,h:297}));
  await falseNative.printDirectly();
  check(pdfEvents.length===expectedPdfEvents,'Printing without native bridge must not allocate a PDF');
+
+ const exampleJPEG=Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/ALLAB//Z',
+  'base64'
+ );
+ const actualPdf=new BundledJsPdf({unit:'mm',format:[297,210],orientation:'landscape'});
+ actualPdf.addImage(new Uint8Array(exampleJPEG),'JPEG',0,0,297,210);
+ actualPdf.addPage([297,210],'landscape');
+ actualPdf.addImage(new Uint8Array(exampleJPEG),'JPEG',0,0,297,210);
+ const actualBytes=new Uint8Array(actualPdf.output('arraybuffer'));
+ check(actualPdf.getNumberOfPages()===2&&actualBytes[0]===37&&actualBytes[1]===80&&
+   actualBytes[2]===68&&actualBytes[3]===70,'Bundled jsPDF 2.5.1 must accept real Uint8Array JPEG bytes and produce a two-page PDF');
  console.log('PDF export memory checks passed: '+count+
   ' cases; binary JPEG, UI yields, landscape metadata, legacy fallback and native paths.')
 })().catch(error=>{console.error(error);process.exitCode=1});
