@@ -295,10 +295,11 @@ function App() {
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return { status: 'cancelled' };
       await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
       Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
+      return { status: 'saved', name: finalName, count: 1 };
+    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, []);
 
   const saveToGallery = useCallback(async ({ name, mime, data }) => {
@@ -308,10 +309,11 @@ function App() {
       const finalName = safeName(name || `Abu_Bassam_${Date.now()}.png`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return { status: 'cancelled' };
       await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
       Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
-    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
+      return { status: 'saved', name: finalName, count: 1 };
+    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, []);
 
   const savePagesToGallery = useCallback(async ({ prefix, pages, mime }) => {
@@ -321,7 +323,7 @@ function App() {
       if (imagePages.length > 20) throw new Error('عدد الصور أكبر من الحد المسموح');
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return { status: 'cancelled' };
       let saved = 0, failed = 0;
       for (let index = 0; index < imagePages.length; index += 1) {
         try {
@@ -345,7 +347,8 @@ function App() {
       }
       if (!saved) throw new Error('تعذر حفظ الصور المحددة');
       Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
-    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
+      return { status: failed ? 'partial' : 'saved', count: saved, failed };
+    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
   }, []);
 
   const printPages = useCallback(async ({ pages, paper }) => {
@@ -384,10 +387,11 @@ function App() {
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return { status: 'cancelled' };
       await writeSafFile(permission.directoryUri, displayName, 'application/pdf', base64);
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
-    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+      return { status: 'saved', name: finalName, count: 1 };
+    } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); return { status: 'failed', error: String(error?.message || error) }; }
     finally {
       if (temporaryPdfUri && FileSystem.cacheDirectory && temporaryPdfUri.startsWith(FileSystem.cacheDirectory)) {
         await FileSystem.deleteAsync(temporaryPdfUri, { idempotent: true }).catch(() => {});
