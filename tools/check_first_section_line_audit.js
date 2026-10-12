@@ -61,6 +61,9 @@ const required=[
  [geo,"if(startY+rows<oh)await new Promise(resolve=>requestAnimationFrame(resolve));",'projective correction must yield for responsive touch'],
  [geo,"const strip=outCtx.createImageData(ow,rows)",'perspective must render strips rather than allocate whole output twice'],
  [geo,"if(!finished&&output){output.width=0;output.height=0}",'canceled perspective must release backing store'],
+ [geo,"stopDrag?.()",'closing editor releases pointer drag listeners'],
+ [geo,"function rulerPreviewData(source){",'paper ruler must render a compact preview'],
+ [geo,"if(id==='abuRulerModal'){const paper=",'closing ruler must clear preview image'],
  [geo,"}else pts[i]={x,y};refreshOverlay()",'pointer movement must not rerasterize the source image'],
 ];for(const [src,needle,reason] of required)if(!src.includes(needle))issues.push('Regression guard missing: '+reason);
 if(issues.length){console.error(issues.join('\n'));process.exitCode=1}else console.log('First-section photo/print code audit passed\n'+rows.join('\n')+'\nTotal physical lines examined by static checks: '+total+'; critical regression guards: '+required.length);
