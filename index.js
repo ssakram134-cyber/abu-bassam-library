@@ -169,6 +169,7 @@ function App() {
   const barcodeScanLockRef = useRef(false);
   const cameraCaptureLockRef = useRef(false);
   const cameraSessionEpochRef = useRef(0);
+  const cameraActiveRef = useRef(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMode, setCameraMode] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -189,6 +190,7 @@ function App() {
   const cameraError = useCallback((message) => inject('AbuBassamNativeCameraError', String(message || 'تعذر تشغيل الكاميرا.')), [inject]);
   const closeCamera = useCallback(() => {
     cameraSessionEpochRef.current += 1;
+    cameraActiveRef.current = false;
     cameraCaptureLockRef.current = false;
     barcodeScanLockRef.current = false;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
@@ -229,6 +231,7 @@ function App() {
       if (!permission?.granted) { cameraError('يجب منح إذن الكاميرا حتى يعمل المسح الضوئي وقارئ الباركود.'); return; }
       cameraCaptureLockRef.current = false;
       barcodeScanLockRef.current = false;
+      cameraActiveRef.current = true;
       setCameraReady(false); setCameraBusy(false); setBarcodeLocked(false); setTorch(false); setCameraFacing('back');
       setCameraFrameKind(['card','photo','paper'].includes(frameKind) ? frameKind : 'paper');
       setCameraMode(['barcode','maker','cardPhoto','ocr'].includes(mode) ? mode : 'scan');
@@ -240,7 +243,7 @@ function App() {
 
   const captureDocument = useCallback(async () => {
     // React state is not an immediate lock: two taps can occur before re-render.
-    if (!cameraReady || cameraCaptureLockRef.current || !cameraRef.current) return;
+    if (!cameraReady || !cameraActiveRef.current || cameraCaptureLockRef.current || !cameraRef.current) return;
     const epoch = cameraSessionEpochRef.current;
     cameraCaptureLockRef.current = true;
     setCameraBusy(true);
@@ -270,6 +273,8 @@ function App() {
     // Keep a synchronous lock until the camera session is explicitly reset.
     barcodeScanLockRef.current = true;
     setBarcodeLocked(true);
+    cameraActiveRef.current = false;
+    cameraSessionEpochRef.current += 1;
     setCameraMode(null); setCameraReady(false); setCameraBusy(false); setTorch(false); setCameraFacing('back'); setCameraFrameKind('paper');
     inject('AbuBassamNativeCameraResult', { mode: 'barcode', data: String(result.data), barcodeType: result.type || '' });
   }, [inject]);
