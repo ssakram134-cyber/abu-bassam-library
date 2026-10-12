@@ -22,6 +22,14 @@ function setLoginMessage(message,bad=false){
 }
 function cloud(){return window.AbuBassamCloud||null}
 function client(){return cloud()?.client||null}
+async function verifyRecoveryAccount(c){
+  if(!c?.auth?.getUser)throw new Error('خدمة التحقق من هوية الحساب غير جاهزة');
+  const {data,error}=await c.auth.getUser();
+  if(error)throw error;
+  const email=String(data?.user?.email||'').trim().toLowerCase();
+  if(!email||email!==accountEmail())throw new Error('الحساب المفتوح لا يطابق البريد المعتمد');
+  return email;
+}
 
 function native(action,payload={}){const api=window.AbuBassamNativeSecurity;if(!api?.request)return Promise.reject(new Error('NATIVE_SECURITY_REQUIRED'));return api.request(action,payload)}
 function addUi(){
@@ -97,10 +105,11 @@ async function consumeRecoveryCallback(){
     const {data,error}=await c.auth.exchangeCodeForSession(code);
     if(error)throw error;
     const email=String(data?.session?.user?.email||data?.user?.email||'').toLowerCase();
-    if(email&&email!==accountEmail()){
+    if(!email||email!==accountEmail()){
       await c.auth.signOut({scope:'local'}).catch(()=>{});
       throw new Error('رابط الاستعادة لا يخص حساب مكتبة أبو بسام المعتمد');
     }
+    await verifyRecoveryAccount(c);
     await native('secureDelete',{key:CALLBACK_KEY});
     openResetModal();
     setLoginMessage('تم التحقق من رابط الاستعادة. عيّن كلمة المرور الجديدة.');
@@ -122,6 +131,7 @@ async function saveNewPassword(){
   passwordBusy=true;const button=$('abuSaveNewPassword');if(button)button.disabled=true;resetStatus('جاري حفظ كلمة المرور الجديدة...');
   try{
     const c=client();if(!c?.auth?.updateUser)throw new Error('خدمة تغيير كلمة المرور غير جاهزة');
+    await verifyRecoveryAccount(c);
     const {data,error}=await c.auth.updateUser({password});
     if(error)throw error;
     const email=String(data?.user?.email||'').toLowerCase();
@@ -141,7 +151,7 @@ function installAuthListener(){
   c.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){
       const email=String(session?.user?.email||'').toLowerCase();
-      if(!email||email===accountEmail())openResetModal();
+      if(email&&email===accountEmail())openResetModal();
     }
   });
 }
