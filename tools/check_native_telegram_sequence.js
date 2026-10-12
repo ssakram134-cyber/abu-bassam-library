@@ -9,23 +9,17 @@ assert.ok(guard&&inbox&&bridge,'Real native export sources must be discoverable'
 
 let passed=0;const check=(bool,msg)=>{assert.ok(bool,msg);passed++};
 const events=[],alerts=[],printed=[],shared=[],pagesSaved=[];
-let permission=true,saveFails=false,shareFails=false,release=null;
-const hold=()=>new Promise(done=>{release=done});
+let shareFails=false,saveBehavior=async()=>true,batchBehavior=async()=>({saved:2,savedIndexes:[0,1]}),printBehavior=async()=>true;
 const Alert={alert:(...parts)=>alerts.push(parts)};
 const runNativeExport=new Function('Alert',guard+';return runNativeExport')(Alert);
 const busy={current:false};
 const actions={
  setWebReady:()=>{},openCamera:()=>{},scanBarcodeImage:async()=>true,
- saveBase64:async message=>{
-  events.push('save-start');
-  if(release)await hold();
-  events.push('save-end');
-  return permission&&!saveFails
- },
- saveToGallery:async()=>permission,
- savePagesToGallery:async()=>({saved:2,savedIndexes:[0,1]}),
+ saveBase64:async message=>saveBehavior(message),
+ saveToGallery:async()=>true,
+ savePagesToGallery:async message=>batchBehavior(message),
  printPages:async msg=>{printed.push(msg);return true},
- printBase64:async()=>!saveFails,
+ printBase64:async message=>printBehavior(message),
  printHtml:async()=>true,savePdfHtml:async()=>true,
  shareBase64:async msg=>{events.push('share');shared.push(msg);if(shareFails)throw Error('Share failure');return true},
  openExternal:()=>{},openAppSettings:()=>{},getDeviceInfo:()=>{},cleanCache:async()=>true,
@@ -42,7 +36,7 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
 (async()=>{
  // Saving and sharing must be one serialized operation, not two WebView messages.
  let allow;
- actions.saveBase64=async()=>{events.push('save-start');await new Promise(r=>allow=r);events.push('save-end');return true};
+ saveBehavior=async()=>{events.push('save-start');await new Promise(r=>allow=r);events.push('save-end');return true};
  const promise=dispatch('saveBase64',{name:'test.pdf',mime:'application/pdf',data:'data:application/pdf;base64,AQID',shareAfter:true});
  check(busy.current&&events.join(',')==='save-start','Save must hold native export lock before sharing');
  const duplicate=await dispatch('printPages',{pages:[]});
@@ -51,29 +45,29 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
  check(events.join(',')==='save-start,save-end,share'&&!busy.current,
   'Optional share happens only AFTER primary save inside same native export lock');
  check(shared.length===1&&shared[0].name==='test.pdf','Post-save sharing reuses original payload');
- actions.saveBase64=async()=>false;
+ saveBehavior=async()=>false;
  await dispatch('saveBase64',{shareAfter:true});
  check(shared.length===1,'Canceled file picker cannot open sharing');
- actions.saveBase64=async()=>true;
+ saveBehavior=async()=>true;
  await dispatch('saveBase64',{shareAfter:false});
  check(shared.length===1,'Telegram disabled must not open sharing');
- actions.saveBase64=async()=>true;
+ saveBehavior=async()=>true;
 
  const mixed=['data:image/png;base64,AQID','data:image/jpeg;base64,BAUG'];
  await dispatch('savePagesToGallery',{prefix:'Page',pages:mixed,mime:'image/jpeg',shareIndex:1});
  check(shared.length===2&&shared.at(-1).data===mixed[1]&&shared.at(-1).mime==='image/jpeg',
   'Batch share reuses only the selected saved image, not the entire batch');
- actions.savePagesToGallery=async()=>({saved:1,savedIndexes:[0]});
+ batchBehavior=async()=>({saved:1,savedIndexes:[0]});
  await dispatch('savePagesToGallery',{pages:mixed,shareIndex:1});
  check(shared.length===2,'A failed selected image must never be shared as if it had saved');
- actions.savePagesToGallery=async()=>({saved:2,savedIndexes:[0,1]});
+ batchBehavior=async()=>({saved:2,savedIndexes:[0,1]});
 
  await dispatch('printBase64',{shareAfter:true,name:'print.pdf',data:'data:application/pdf;base64,AQID'});
  check(shared.length===3,'Print share must run under the same print export lock');
- actions.printBase64=async()=>false;
+ printBehavior=async()=>false;
  await dispatch('printBase64',{shareAfter:true});
  check(shared.length===3,'Failed print must not trigger sharing');
- actions.printBase64=async()=>true;
+ printBehavior=async()=>true;
  shareFails=true;
  await dispatch('saveBase64',{shareAfter:true});
  check(busy.current===false&&alerts.some(a=>a[0].includes('تعذرت معالجة الملف')),
@@ -82,7 +76,6 @@ function flush(){return Promise.resolve().then(()=>Promise.resolve())}
 
  // One bridge message includes the sharing preference; no competing postMessage.
  const sent=[];
- new Function('window',bridge)({alert:()=>{},ReactNativeWebView:{postMessage:payload=>sent.push(JSON.parse(payload))}});
  const win={alert:()=>{},ReactNativeWebView:{postMessage:x=>sent.push(JSON.parse(x))}};
  new Function('window',bridge)(win);
  win.Android.saveBase64('doc.pdf','application/pdf','data:application/pdf;base64,AQID',true);
