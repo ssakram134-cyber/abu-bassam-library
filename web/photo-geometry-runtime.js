@@ -13,8 +13,53 @@ function openGeo(){if(geometryBusy)return;let it=item();if(!it)return alert('أ�
 function close(id){$(id)?.classList.remove('show');if(id==='abuGeoModal'){geoTarget=null;geoSourceAtOpen='';drawToken++;geoOperationId++}}
 function setMode(m){if(geometryBusy)return;mode=m==='perspective'?'perspective':'crop';$('abuModeCrop').classList.toggle('on',mode==='crop');$('abuModePerspective').classList.toggle('on',mode==='perspective');reset()}
 function reset(){if(geometryBusy)return;pts=[{x:.05,y:.05},{x:.95,y:.05},{x:.95,y:.95},{x:.05,y:.95}];draw()}
-function draw(){let it=geoTarget,cv=$('abuGeoCanvas'),stage=$('abuGeoStage');if(!it||!cv||!stage)return;let im=it.img,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,sc=Math.min(1,1000/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);let c=cv.getContext('2d');c.drawImage(im,0,0,cv.width,cv.height);stage.querySelectorAll('.abu-geo-handle,.abu-geo-line').forEach(n=>n.remove());const token=++drawToken;requestAnimationFrame(()=>{if(token!==drawToken||!stage.isConnected)return;let sr=stage.getBoundingClientRect(),cr=cv.getBoundingClientRect(),ox=cr.left-sr.left,oy=cr.top-sr.top;let local=pts.map(p=>({x:ox+p.x*cr.width,y:oy+p.y*cr.height}));local.forEach((p,i)=>{let h=document.createElement('span');h.className='abu-geo-handle';h.style.left=p.x+'px';h.style.top=p.y+'px';h.dataset.i=i;stage.appendChild(h);bind(h,i,cr,sr,ox,oy)});for(let i=0;i<4;i++){let a=local[i],b=local[(i+1)%4],line=document.createElement('span');line.className='abu-geo-line';let dx=b.x-a.x,dy=b.y-a.y;line.style.left=a.x+'px';line.style.top=a.y+'px';line.style.width=Math.hypot(dx,dy)+'px';line.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;stage.appendChild(line)}})}
-function bind(h,i,cr,sr,ox,oy){h.addEventListener('pointerdown',e=>{if(geometryBusy)return;e.preventDefault();e.stopPropagation();if(drag!==-1)return;drag=i;const pointerId=e.pointerId;let move=ev=>{if(geometryBusy||ev.pointerId!==pointerId)return;let x=clamp((ev.clientX-cr.left)/cr.width,0,1),y=clamp((ev.clientY-cr.top)/cr.height,0,1);if(mode==='crop'){if(i===0){pts[0]={x,y};pts[1].y=y;pts[3].x=x}else if(i===1){pts[1]={x,y};pts[0].y=y;pts[2].x=x}else if(i===2){pts[2]={x,y};pts[1].x=x;pts[3].y=y}else{pts[3]={x,y};pts[0].x=x;pts[2].y=y}let l=Math.min(pts[0].x,pts[3].x),r=Math.max(pts[1].x,pts[2].x),t=Math.min(pts[0].y,pts[1].y),b=Math.max(pts[2].y,pts[3].y);pts=[{x:l,y:t},{x:r,y:t},{x:r,y:b},{x:l,y:b}]}else pts[i]={x,y};draw()};let up=ev=>{if(ev?.pointerId!=null&&ev.pointerId!==pointerId)return;drag=-1;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);window.removeEventListener('blur',up)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);window.addEventListener('blur',up)})}
+function draw(){
+ const it=geoTarget,cv=$('abuGeoCanvas');
+ if(!it||!cv)return;
+ const im=it.img,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;
+ if(!(w>0&&h>0))throw new Error('أبعاد معاينة الصورة غير صالحة');
+ const scale=Math.min(1,1000/Math.max(w,h));
+ cv.width=Math.max(1,Math.round(w*scale));cv.height=Math.max(1,Math.round(h*scale));
+ const ctx=cv.getContext('2d');if(!ctx)throw new Error('محرك معاينة القص غير متاح');
+ ctx.drawImage(im,0,0,cv.width,cv.height);
+ refreshOverlay()
+}
+function refreshOverlay(){
+ const token=++drawToken;
+ requestAnimationFrame(()=>{
+  const stage=$('abuGeoStage'),cv=$('abuGeoCanvas');
+  if(token!==drawToken||!stage?.isConnected||!cv||!pts||!geoTarget)return;
+  const sr=stage.getBoundingClientRect(),cr=cv.getBoundingClientRect();
+  const ox=cr.left-sr.left,oy=cr.top-sr.top;
+  const local=pts.map(p=>({x:ox+p.x*cr.width,y:oy+p.y*cr.height}));
+  let handles=[...stage.querySelectorAll('.abu-geo-handle')];
+  if(handles.length!==4){
+   handles.forEach(h=>h.remove());handles=[];
+   for(let i=0;i<4;i++){
+    const h=document.createElement('span');
+    h.className='abu-geo-handle';h.dataset.i=i;stage.appendChild(h);
+    bind(h,i,cr,sr,ox,oy);handles.push(h)
+   }
+  }
+  let lines=[...stage.querySelectorAll('.abu-geo-line')];
+  if(lines.length!==4){
+   lines.forEach(line=>line.remove());lines=[];
+   for(let i=0;i<4;i++){
+    const line=document.createElement('span');
+    line.className='abu-geo-line';stage.appendChild(line);lines.push(line)
+   }
+  }
+  for(let i=0;i<4;i++){
+   const p=local[i],next=local[(i+1)%4];
+   handles[i].style.left=p.x+'px';handles[i].style.top=p.y+'px';
+   const dx=next.x-p.x,dy=next.y-p.y;
+   const line=lines[i];line.style.left=p.x+'px';line.style.top=p.y+'px';
+   line.style.width=Math.hypot(dx,dy)+'px';
+   line.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`
+  }
+ })
+}
+function bind(h,i,cr,sr,ox,oy){h.addEventListener('pointerdown',e=>{if(geometryBusy)return;e.preventDefault();e.stopPropagation();if(drag!==-1)return;drag=i;const pointerId=e.pointerId;let move=ev=>{if(geometryBusy||ev.pointerId!==pointerId)return;const rect=$('abuGeoCanvas')?.getBoundingClientRect()||cr;let x=clamp((ev.clientX-rect.left)/rect.width,0,1),y=clamp((ev.clientY-rect.top)/rect.height,0,1);if(mode==='crop'){if(i===0){pts[0]={x,y};pts[1].y=y;pts[3].x=x}else if(i===1){pts[1]={x,y};pts[0].y=y;pts[2].x=x}else if(i===2){pts[2]={x,y};pts[1].x=x;pts[3].y=y}else{pts[3]={x,y};pts[0].x=x;pts[2].y=y}let l=Math.min(pts[0].x,pts[3].x),r=Math.max(pts[1].x,pts[2].x),t=Math.min(pts[0].y,pts[1].y),b=Math.max(pts[2].y,pts[3].y);pts=[{x:l,y:t},{x:r,y:t},{x:r,y:b},{x:l,y:b}]}else pts[i]={x,y};refreshOverlay()};let up=ev=>{if(ev?.pointerId!=null&&ev.pointerId!==pointerId)return;drag=-1;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);window.removeEventListener('blur',up)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);window.addEventListener('blur',up)})}
 async function apply(){
  if(geometryBusy)return;
  const it=geoTarget,originalSrc=geoSourceAtOpen;
