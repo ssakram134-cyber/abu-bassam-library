@@ -11,7 +11,7 @@ create or replace function public.abu_bassam_vault_upsert_cas(
 ) returns table(kind text, client_id text, data jsonb, updated_at timestamptz)
 language plpgsql
 security definer
-set search_path to 'pg_catalog', 'public', 'extensions'
+set search_path to 'pg_catalog', 'extensions'
 as $function$
 declare
   v_uid uuid := auth.uid();
