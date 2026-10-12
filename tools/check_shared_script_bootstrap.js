@@ -4,6 +4,11 @@ const text=fs.readFileSync(path.join(__dirname,'..','web/device-name-runtime.js'
 const a=text.indexOf('  function loadScript(id,src,guard){'),b=text.indexOf('\n  const loadFeatureRecovery=',a);
 assert.ok(a>=0&&b>a,'shared loader source missing');
 const fn=text.slice(a,b);
+const productivity=fs.readFileSync(path.join(__dirname,'..','web/productivity-tools-runtime.js'),'utf8');
+const advancedStart=productivity.indexOf('function loadOne(id,src,flag){');
+const advancedEnd=productivity.indexOf('\nasync function loadAdvancedRuntime(){',advancedStart);
+assert.ok(advancedStart>=0&&advancedEnd>advancedStart,'second loader source missing');
+const advancedFn=productivity.slice(advancedStart,advancedEnd);
 let count=0;
 function eq(a,b,m){assert.equal(a,b,m);count++}
 async function status(p){let state='pending';p.then(()=>state='resolved',()=>state='rejected');await Promise.resolve();await Promise.resolve();return state}
@@ -21,8 +26,10 @@ function harness(){
   head:{appendChild(el){all.set(el.id,el);append.push(el)}},
   dispatchEvent:ev=>events.push(ev.detail)};
  const CustomEvent=function(type,options){this.detail=options.detail};
+ document.body=document.head;
  const load=new Function('window','document','CustomEvent',fn+'\nreturn loadScript;')(window,document,CustomEvent);
- return{all,node,append,events,window,load};
+ const advanced=new Function('window','document','CustomEvent',advancedFn+'\nreturn loadOne;')(window,document,CustomEvent);
+ return{all,node,append,events,window,load,advanced};
 }
 (async()=>{
  const guard=harness();guard.window.__SHARED__=true;
@@ -73,5 +80,21 @@ function harness(){
  badNode.fire('error');
  await assert.rejects(reject,/badexternal.js failed to load/);count++;
  eq(externalFailure.all.has('foreignFail'),false,'foreign failed script cleared');
+
+ const advancedFirst=harness(),ar=advancedFirst.advanced('dual','dual-runtime.js','__DUAL__');
+ const dr=advancedFirst.load('dual','dual-runtime.js','__DUAL__');
+ eq(advancedFirst.append.length,1,'one script shared with advanced loader');
+ eq(await status(dr),'pending','approved loader waits when advanced loader owns script');
+ advancedFirst.append[0].fire('load');
+ eq(await ar,true,'advanced-owned load completes');
+ eq(await dr,true,'approved loader completes on same event');
+
+ const deviceFirst=harness(),dc=deviceFirst.load('dualDevice','dual-runtime.js','__DUAL__');
+ const ac=deviceFirst.advanced('dualDevice','dual-runtime.js','__DUAL__');
+ eq(deviceFirst.append.length,1,'advanced loader does not duplicate approved script');
+ eq(await status(ac),'pending','advanced waits for approved loader');
+ deviceFirst.append[0].fire('load');
+ eq(await dc,true,'approved-owned load completes');
+ eq(await ac,true,'advanced completes on same event');
  console.log('Shared script loader regression: '+count+'/'+count+' focused checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1});
