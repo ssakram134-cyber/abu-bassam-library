@@ -466,8 +466,9 @@ async function syncNow(manual=true){if(!requireVault('vaultSync'))return false;
       const oldPath=String(remote?.storagePath||''),newPath=await service.uploadVault(item.id,item.blob,item.mime);ensureSyncSession();
       const data={id:item.id,name:item.name,category:item.category,mime:item.mime,size:item.size,createdAt:item.createdAt,updatedAt:item.updatedAt,folder:item.folder||'',favorite:!!item.favorite,lastOpenedAt:item.lastOpenedAt||'',deleted:false,storagePath:newPath};
       let saved;
-      try{saved=await service.upsert('vault',item.id,data);ensureSyncSession()}
+      try{saved=await service.upsert('vault',item.id,data)}
       catch(error){await service.removeVault(newPath).catch(()=>{});throw error}
+      ensureSyncSession();
       await dbAckPending(item,String(saved?.updated_at||''));
       if(oldPath&&oldPath!==newPath)await service.removeVault(oldPath).catch(()=>{})
     }
