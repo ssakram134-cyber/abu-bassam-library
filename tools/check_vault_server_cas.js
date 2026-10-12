@@ -37,7 +37,7 @@ const line=branch.split(/\r?\n/).find(x=>x.startsWith('async function vaultUpser
 assert.ok(line,'CAS branch-vault adapter function must exist');
 const captured=[];
 let answer={client_id:'a',data:{id:'a',storagePath:'rev-path'},updated_at:'2026-10-12T10:21:00.123456+00:00'};
-const rpc=async(name,payload)=>{captured.push({name,payload});return answer};
+const rpc=async(name,payload)=>{captured.push({name,payload});return {...answer,client_id:payload.p_client_id,data:{...payload.p_data,storagePath:'rev-path'}}};
 const branchFn=new Function('allowed','credentials','rpc','recordPaths',line+';return vaultUpsert')(
  ()=>true,async()=>({deviceId:'device',secret:'test-secret'}),rpc,()=>{}
 );
@@ -105,6 +105,23 @@ async function run(){
  );
  await assert.rejects(()=>rejectedFn('a',{id:'a'},unchanged),/VAULT_VERSION_CONFLICT/,
   'Conflicting update must fail, not silently revert to last-write-wins');
+
+ const ack={client_id:'test',data:{id:'test',storagePath:'file',updatedAt:'2026-10-12T20:00:00Z',deleted:false},updated_at:'2026-10-12T20:00:00.123456+00:00'};
+ const local={id:'test',storagePath:'file',updatedAt:'2026-10-12T20:00:00Z',deleted:false};
+ const faults=[null,[],[ack,ack],{...ack,client_id:'wrong'},{...ack,data:{...ack.data,id:'wrong'}},{...ack,updated_at:''},{...ack,updated_at:null},{...ack,data:{...ack.data,storagePath:'wrong'}},{...ack,data:{...ack.data,deleted:true}},{...ack,data:{...ack.data,updatedAt:'older'}}];
+ for(const receipt of faults){
+  let recorded=0;
+  const guarded=new Function('allowed','credentials','rpc','recordPaths',line+';return vaultUpsert')(
+   ()=>true,async()=>({deviceId:'dev',secret:'test-secret'}),async()=>receipt,()=>{recorded++});
+  await assert.rejects(()=>guarded('test',local,null),/VAULT_CAS_INVALID_ACK/);
+  assert.equal(recorded,0,'Invalid acknowledgement must never record cloud paths');
+ }
+ let recorded=0;
+ const guarded=new Function('allowed','credentials','rpc','recordPaths',line+';return vaultUpsert')(
+  ()=>true,async()=>({deviceId:'dev',secret:'test-secret'}),async()=>[ack],()=>{recorded++});
+ assert.equal((await guarded('test',local,null)).updated_at,ack.updated_at);
+ assert.equal(recorded,1,'Valid server CAS receipt may be recorded');
+ console.log('CAS acknowledgement guard passed: ten invalid receipts rejected and one valid receipt accepted.');
  console.log('Vault server CAS contract checks passed: SQL locking/permissions, 4 CAS calls and 4 upload-preflight scenarios. Database migration NOT deployed or SQL-executed.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1});
