@@ -34,3 +34,4 @@ for(const dep of ['expo-local-authentication','expo-secure-store','expo-screen-c
 if(failures.length){process.stderr.write(failures.join('\n')+'\n');process.exit(1)}
 console.log('Security/control checks passed: one native security dispatcher, SecureStore-backed auth/device secrets, fail-closed device and vault authorization, deterministic startup, core login throttling, HMAC offline trust, and no legacy patch runtimes.');
 require('./offline_device_revalidation_test.js');
+require('./offline_lock_transition_test.js');
