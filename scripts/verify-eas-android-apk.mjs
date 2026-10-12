@@ -56,6 +56,10 @@ const requiredOfflineAssets = [
   'assets/library/image-compressor.html',
   'assets/library/vendor/tesseract/tesseract.min.js',
   'assets/library/vendor/tesseract/worker.min.js',
+  'assets/library/vendor/tesseract/core/tesseract-core.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-simd.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-lstm.wasm.js',
+  'assets/library/vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js',
   'assets/library/vendor/tesseract/lang/ara.traineddata.gz',
   'assets/library/vendor/tesseract/lang/eng.traineddata.gz',
   'assets/library/vendor/documents/pdf.min.js',
@@ -69,4 +73,4 @@ if (missingAssets.length) {
 }
 const sha = createHash('sha256').update(readFileSync(apk)).digest('hex');
 console.log('Verified Android APK signing certificate matches the pinned production key.');
-console.log('Embedded offline JS bundle is present. APK SHA-256: ' + sha);
+console.log('Verified React Native bundle and all required offline library assets. APK SHA-256: ' + sha);
