@@ -15,12 +15,20 @@
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
+    if(guard&&window[guard])return Promise.resolve(true);
+    const existing=document.getElementById(id);
+    if(existing){
+      if(existing.dataset?.abuLoaded==='1')return Promise.resolve(true);
+      return new Promise((resolve,reject)=>{
+        existing.addEventListener('load',()=>{existing.dataset.abuLoaded='1';resolve(true)},{once:true});
+        existing.addEventListener('error',()=>{existing.remove();reject(new Error(src+' failed to load'))},{once:true});
+      })
+    }
     return new Promise((resolve,reject)=>{
-      if(document.getElementById(id)||(guard&&window[guard])){resolve(true);return}
       const script=document.createElement('script');
       script.id=id;script.src=src;script.async=false;
-      script.onload=()=>{document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-      script.onerror=()=>reject(new Error(src+' failed to load'));
+      script.onload=()=>{script.dataset.abuLoaded='1';document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
+      script.onerror=()=>{script.remove();reject(new Error(src+' failed to load'))};
       (document.head||document.documentElement).appendChild(script)
     })
   }
