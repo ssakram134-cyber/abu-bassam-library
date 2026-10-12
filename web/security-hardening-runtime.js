@@ -11,7 +11,7 @@ const APP_VERSION='4.3.2';
 const OFFLINE_GRACE_MS=12*60*60*1000;
 const CLOCK_SKEW_MS=5*60*1000;
 const LOCK_MINUTES_KEY='abuBassamSecurityLockMinutesV1';
-let patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0;
+let patched=false,lastSealAt=0,offlineSession=false,offlineBackgroundAt=0,revalidationPromise=null;
 
 function currentId(){return window.AbuBassamDevices?.ensure?.().id||localStorage.getItem('abuBassamLockedDeviceIdV3')||''}
 function nativeAvailable(){return window.AbuBassamNativeSecurity?.available?.()===true}
@@ -32,12 +32,41 @@ function applyOfflineDevice(trust){const sec=window.AbuBassamSecurity;if(!sec)re
 function clearOfflineState(){const sec=window.AbuBassamSecurity;offlineSession=false;offlineBackgroundAt=0;if(sec){sec.__offlineTrust=null;sec.__offlineRole='';sec.__offlinePermissions={}}}
 function lockOffline(reason){const sec=window.AbuBassamSecurity;clearOfflineState();try{sec?.lockNow?.()}catch(_){}const gate=$('abuSecurityGate');gate?.classList.remove('hide');const err=$('abuLoginError');if(err)err.textContent=reason||'تم قفل الجلسة الآمنة.'}
 async function secureOfflineUnlock(){const err=$('abuLoginError');try{if(online())throw new Error('الإنترنت متاح؛ استخدم تسجيل الدخول أو البصمة العادية.');const trust=await loadTrust();if(!trust)throw new Error('انتهت أو لم تعد صالحة الثقة دون إنترنت. اتصل بالإنترنت وسجّل الدخول مرة واحدة.');await biometricCheck();applyOfflineDevice(trust);offlineSession=true;offlineBackgroundAt=0;const gate=$('abuSecurityGate');gate?.classList.add('hide');if(err)err.textContent='';const label=$('abuLoginDevice');if(label)label.textContent=`هذا الجهاز: ${trust.device_name||'Android'} • ${trust.role==='owner'?'رئيسي':'فرعي'} • Offline آمن`;window.AbuBassamOps?.add?.({type:'settings',title:'فتح آمن دون إنترنت',section:'الأمان',details:`بصمة + SecureStore + HMAC • صلاحية ${Math.round(OFFLINE_GRACE_MS/3600000)} ساعة`});return true}catch(e){if(err)err.textContent=String(e?.message||e);return false}}
-function effectiveRole(){const sec=window.AbuBassamSecurity,d=sec?.__baseDevice?.();return d?.role||sec?.__offlineRole||''}
-function effectiveDevice(){const sec=window.AbuBassamSecurity;return sec?.__baseDevice?.()||sec?.__offlineTrust||null}
-function effectiveCan(name){const sec=window.AbuBassamSecurity,device=sec?.__baseDevice?.();if(device)return !!sec.__baseCan?.(name);const role=sec?.__offlineRole;if(role==='owner')return true;return !!sec?.__offlinePermissions?.[name]}
+function effectiveRole(){const sec=window.AbuBassamSecurity;if(offlineSession)return sec?.__offlineTrust?.role||'';const d=sec?.__baseDevice?.();return d?.role||''}
+function effectiveDevice(){const sec=window.AbuBassamSecurity;if(offlineSession)return sec?.__offlineTrust||null;return sec?.__baseDevice?.()||null}
+function effectiveCan(name){const sec=window.AbuBassamSecurity;if(offlineSession){const trust=sec?.__offlineTrust;if(!trust)return false;if(trust.role==='owner')return true;return trust.permissions?.[name]===true}const device=sec?.__baseDevice?.();if(device)return !!sec.__baseCan?.(name);return false}
 async function refreshLimit(){const sec=window.AbuBassamSecurity;if(!sec)return 5;let limit=Number(localStorage.getItem('abuBassamDeviceLimitV1')||5)||5;try{if(window.AbuBassamDeviceRegistry?.readLimit)limit=Number(await AbuBassamDeviceRegistry.readLimit())||limit}catch(_){}limit=Math.max(1,Math.min(50,limit));sec.maxDevices=limit;document.querySelectorAll('#abuDeviceModal .abu-device-head div div').forEach(el=>{if(/الحد الأقصى/.test(el.textContent||''))el.textContent=`الحد الأقصى ${limit} أجهزة • الرئيسي يتحكم بالفرعية`});const error=$('abuLoginError');if(error&&/الحد الأقصى/.test(error.textContent||''))error.textContent=`وصل الحساب إلى الحد الأقصى المسموح (${limit} جهازًا). غيّر الحد من الجهاز الرئيسي أو احذف جهازًا فرعيًا.`;return limit}
 async function updateOfflineButton(){const b=$('abuOfflineBtn');if(!b)return;if(online()||!nativeAvailable()){b.style.display='none';return}try{b.style.display=(await loadTrust())?'block':'none'}catch(_){b.style.display='none'}}
-async function revalidateOfflineSession(){if(!offlineSession||!online())return true;const sec=window.AbuBassamSecurity,c=window.AbuBassamCloud?.client,trust=sec?.__offlineTrust;if(!c||!trust){lockOffline('عاد الإنترنت ويجب تسجيل الدخول للتحقق من الجهاز.');return false}try{const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');if(!secret)throw new Error('DEVICE_SECRET_MISSING');const {data,error}=await c.rpc('abu_bassam_touch_device',{p_device_id:currentId(),p_secret:secret,p_device_name:trust.device_name||'هاتف المكتبة',p_model:'',p_platform:'Android',p_app_version:APP_VERSION});if(error)throw error;const row=Array.isArray(data)?data[0]:data;if(!row||row.active===false)throw new Error('DEVICE_DISABLED');const refreshed=normalizeDevice(row);if(!refreshed)throw new Error('DEVICE_NOT_AUTHORIZED');applyOfflineDevice(refreshed);await seal(row);return true}catch(_){lockOffline('تعذر التحقق من صلاحية هذا الجهاز بعد عودة الإنترنت. سجّل الدخول من جديد.');return false}}
+async function revalidateOfflineSession(){
+  if(!offlineSession||!online())return true;
+  if(revalidationPromise)return revalidationPromise;
+  revalidationPromise=(async()=>{
+    const sec=window.AbuBassamSecurity,c=window.AbuBassamCloud?.client,trust=sec?.__offlineTrust;
+    if(!c||!trust){lockOffline('عاد الإنترنت ويجب تسجيل الدخول للتحقق من الجهاز.');return false}
+    try{
+      const deviceId=currentId();
+      const secret=String(await nativeRequest('secureGet',{key:SECRET_KEY})||'');
+      if(!secret)throw new Error('DEVICE_SECRET_MISSING');
+      const {data,error}=await c.rpc('abu_bassam_touch_device',{
+        p_device_id:deviceId,p_secret:secret,p_device_name:trust.device_name||'هاتف المكتبة',
+        p_model:'',p_platform:'Android',p_app_version:APP_VERSION
+      });
+      if(error)throw error;
+      const row=Array.isArray(data)?data[0]:data;
+      if(!row||row.active!==true||row.device_id!==deviceId)throw new Error('DEVICE_NOT_AUTHORIZED');
+      const refreshed=normalizeDevice(row);
+      if(!refreshed||!offlineSession)throw new Error('OFFLINE_SESSION_ENDED');
+      if(!await seal(row))throw new Error('OFFLINE_TRUST_SEAL_FAILED');
+      if(!offlineSession)throw new Error('OFFLINE_SESSION_ENDED');
+      applyOfflineDevice(refreshed);
+      return true;
+    }catch(_){
+      if(offlineSession)lockOffline('تعذر التحقق من صلاحية هذا الجهاز بعد عودة الإنترنت. سجّل الدخول من جديد.');
+      return false;
+    }
+  })();
+  try{return await revalidationPromise}finally{revalidationPromise=null}
+}
 function patchSecurity(){const sec=window.AbuBassamSecurity;if(!sec||patched)return false;patched=true;sec.__baseCan=sec.can;sec.__baseDevice=sec.device;const baseLogin=sec.login?.bind(sec),baseBio=sec.unlockWithBiometric?.bind(sec),baseLogout=sec.logout?.bind(sec);
   sec.role=effectiveRole;sec.device=effectiveDevice;sec.can=effectiveCan;sec.offlineUnlock=secureOfflineUnlock;sec.clearOfflineTrust=clearTrust;sec.refreshDeviceLimit=refreshLimit;sec.offlineGraceHours=OFFLINE_GRACE_MS/3600000;
   if(baseLogin)sec.login=async function(...args){if(/Android/i.test(navigator.userAgent||'')&&!nativeAvailable()){const e=$('abuLoginError');if(e)e.textContent='تعذر الوصول إلى طبقة الأمان في Android. أعد فتح التطبيق أو أعد تثبيته.';return false}const result=await baseLogin(...args);await refreshLimit();const d=sec.__baseDevice?.();if(d&&online()&&d.active!==false){clearOfflineState();await seal(d).catch(()=>{})}cleanLegacy();return result};
