@@ -486,6 +486,16 @@ function App() {
       Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل طلب طباعة أو حفظ ملف آخر، لتجنب تجمّد الهاتف.');
       return false;
     }
+    // The bundled bridge serializes the type first. If a large second export
+    // arrives while another export is active, reject it before JSON.parse
+    // allocates another potentially enormous image or PDF object.
+    if (nativeExportBusyRef.current && raw.length > 1024) {
+      const declaredType = /^\s*\{\s*"type"\s*:\s*"([a-zA-Z][a-zA-Z0-9]*)"/.exec(raw.slice(0, 128))?.[1];
+      if (!declaredType || /^(scanBarcodeImage|saveBase64|saveToGallery|savePagesToGallery|printPages|printBase64|printHtml|savePdfHtml|shareBase64|cleanCache)$/.test(declaredType)) {
+        Alert.alert('عملية حفظ أو طباعة جارية', 'أكمل العملية الحالية قبل إرسال ملف جديد إلى Android.');
+        return false;
+      }
+    }
     let message; try { message = JSON.parse(raw); } catch (_) { return; }
     if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
     if (message.type === 'webBootReady') { setWebReady(true); return; }
