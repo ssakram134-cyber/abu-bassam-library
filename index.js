@@ -64,11 +64,11 @@ const ANDROID_BRIDGE = `
     }
   }
   window.Android = {
-    saveBase64: function (name, mime, data) { send('saveBase64', { name: name, mime: mime, data: data }); },
-    saveToGallery: function (name, mime, data) { send('saveToGallery', { name: name, mime: mime, data: data }); },
-    savePagesToGallery: function (prefix, pages, mime) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime }); },
-    printPages: function (pages, paper, dpi) { send('printPages', { pages: pages, paper: paper, dpi: dpi }); },
-    printBase64: function (name, mime, data) { send('printBase64', { name: name, mime: mime, data: data }); },
+    saveBase64: function (name, mime, data, shareAfter) { send('saveBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
+    saveToGallery: function (name, mime, data, shareAfter) { send('saveToGallery', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
+    savePagesToGallery: function (prefix, pages, mime, shareIndex) { send('savePagesToGallery', { prefix: prefix, pages: pages, mime: mime, shareIndex: Number.isInteger(shareIndex) ? shareIndex : -1 }); },
+    printPages: function (pages, paper, dpi, shareAfter) { send('printPages', { pages: pages, paper: paper, dpi: dpi, shareAfter: !!shareAfter }); },
+    printBase64: function (name, mime, data, shareAfter) { send('printBase64', { name: name, mime: mime, data: data, shareAfter: !!shareAfter }); },
     scanBarcodeImage: function (data) { send('scanBarcodeImage', { data: data }); },
     printHtml: function (html) { send('printHtml', { html: html }); },
     savePdfHtml: function (name, html) { send('savePdfHtml', { name: name, html: html }); },
@@ -275,40 +275,42 @@ function App() {
   }, [inject]);
   const onCameraMountError = useCallback(() => { closeCamera(); cameraError('تعذر تشغيل الكاميرا الخلفية على هذا الجهاز.'); }, [cameraError, closeCamera]);
 
-  const saveBase64 = useCallback(async ({ name, mime, data }) => {
+  const saveBase64 = useCallback(async ({ name, mime, data, shareAfter }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime, finalName = safeName(name);
       const dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return false;
       await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
-      Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
-    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
+      if (!shareAfter) Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
+      return true;
+    } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); return false; }
   }, []);
 
-  const saveToGallery = useCallback(async ({ name, mime, data }) => {
+  const saveToGallery = useCallback(async ({ name, mime, data, shareAfter }) => {
     try {
       const parsed = splitDataUrl(data), finalMime = mime || parsed.mime;
       if (!String(finalMime).startsWith('image/')) throw new Error('هذا الملف ليس صورة');
       const finalName = safeName(name || `Abu_Bassam_${Date.now()}.png`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
+      if (!permission.granted) return false;
       await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
-      Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
-    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
+      if (!shareAfter) Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
+      return true;
+    } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); return false; }
   }, []);
 
-  const savePagesToGallery = useCallback(async ({ prefix, pages, mime }) => {
+  const savePagesToGallery = useCallback(async ({ prefix, pages, mime, shareIndex }) => {
     try {
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
       if (!Array.isArray(imagePages) || !imagePages.length) throw new Error('لا توجد صور للحفظ');
       if (imagePages.length > 20) throw new Error('عدد الصور أكبر من الحد المسموح');
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-      if (!permission.granted) return;
-      let saved = 0, failed = 0;
+      if (!permission.granted) return { saved: 0, savedIndexes: [] };
+      let saved = 0, failed = 0, savedIndexes = [];
       for (let index = 0; index < imagePages.length; index += 1) {
         try {
           const raw = String(imagePages[index] || '');
@@ -326,15 +328,16 @@ function App() {
           const dot = finalName.lastIndexOf('.');
           const displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
           await writeSafFile(permission.directoryUri, displayName, itemMime, parsed.base64);
-          saved += 1;
+          saved += 1; savedIndexes.push(index);
         } catch (_) { failed += 1; }
       }
       if (!saved) throw new Error('تعذر حفظ الصور المحددة');
-      Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
-    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); }
+      if (!Number.isInteger(shareIndex) || shareIndex < 0 || !savedIndexes.includes(shareIndex)) Alert.alert('تم الحفظ في المعرض', failed ? 'تم حفظ ' + saved + ' صورة وتعذر حفظ ' + failed + '.' : 'تم حفظ ' + saved + ' صورة داخل المجلد الذي اخترته.');
+      return { saved, savedIndexes };
+    } catch (error) { Alert.alert('تعذر حفظ الصفحات', String(error?.message || error)); return { saved: 0, savedIndexes: [] }; }
   }, []);
 
-  const printPages = useCallback(async ({ pages, paper }) => {
+  const printPages = useCallback(async ({ pages, paper, shareAfter }) => {
     try {
       if (typeof pages === 'string' && pages.length > MAX_NATIVE_PAGE_CHARS) throw new Error('حجم الصور كبير؛ اطبع دفعات أصغر');
       const imagePages = typeof pages === 'string' ? JSON.parse(pages) : pages;
@@ -352,7 +355,24 @@ function App() {
       const body = imagePages.map((src) => `<section><img alt="صفحة للطباعة" src="${String(src).replace(/"/g, '&quot;')}"></section>`).join('');
       const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:${size.width}mm ${size.height}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}section{width:${size.width}mm;height:${size.height}mm;margin:0;page-break-after:always;display:flex;align-items:center;justify-content:center;overflow:hidden}section:last-child{page-break-after:auto}img{width:100%;height:100%;object-fit:contain;display:block}</style></head><body>${body}</body></html>`;
       await Print.printAsync({ html });
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
+      if (shareAfter) {
+        let temporaryPdfUri = '';
+        try {
+          if (!(await Sharing.isAvailableAsync())) throw new Error('مشاركة Android غير متاحة');
+          const generated = await Print.printToFileAsync({ html });
+          temporaryPdfUri = String(generated.uri || '');
+          if (!temporaryPdfUri) throw new Error('تعذر تجهيز ملف المشاركة');
+          await Sharing.shareAsync(temporaryPdfUri, { mimeType: 'application/pdf', dialogTitle: 'مشاركة نسخة من صفحات الطباعة' });
+        } catch (shareError) {
+          Alert.alert('تعذرت المشاركة بعد الطباعة', String(shareError?.message || shareError));
+        } finally {
+          if (temporaryPdfUri && FileSystem.cacheDirectory && temporaryPdfUri.startsWith(FileSystem.cacheDirectory)) {
+            await FileSystem.deleteAsync(temporaryPdfUri, { idempotent: true }).catch(() => {});
+          }
+        }
+      }
+      return true;
+    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); return false; }
   }, []);
 
   const printHtml = useCallback(async ({ html }) => {
@@ -403,7 +423,7 @@ function App() {
       if (finalMime.startsWith('image/')) {
         if (!parsed.mime.startsWith('image/')) throw new Error('نوع الصورة لا يطابق بيانات الملف');
         const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}body{display:flex;align-items:center;justify-content:center;min-height:270mm}img{max-width:100%;max-height:270mm;object-fit:contain}</style></head><body><img src="${String(data).replace(/"/g, '&quot;')}"></body></html>`;
-        await Print.printAsync({ html }); return;
+        await Print.printAsync({ html }); return true;
       }
       // expo-print accepts a URI only for PDF files, never for DOCX/XLSX/ZIP or text.
       // Fail before writing a temporary file, so unsupported print requests cannot
@@ -413,7 +433,8 @@ function App() {
       }
       const file = await writeTemporaryFile(name, finalMime, data);
       try { await Print.printAsync({ uri: file.uri }); } finally { await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }
-    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); }
+      return true;
+    } catch (error) { Alert.alert('تعذرت الطباعة', String(error?.message || error)); return false; }
   }, [writeTemporaryFile]);
 
   const openExternal = useCallback(async ({ url }) => {
@@ -526,11 +547,34 @@ function App() {
     if (message.type === 'webBootReady') { setWebReady(true); return; }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return runNativeExport(nativeExportBusyRef, () => scanBarcodeImage(message));
-    if (message.type === 'saveBase64') return runNativeExport(nativeExportBusyRef, () => saveBase64(message));
-    if (message.type === 'saveToGallery') return runNativeExport(nativeExportBusyRef, () => saveToGallery(message));
-    if (message.type === 'savePagesToGallery') return runNativeExport(nativeExportBusyRef, () => savePagesToGallery(message));
+    if (message.type === 'saveBase64') return runNativeExport(nativeExportBusyRef, async () => {
+      const saved = await saveBase64(message);
+      if (saved === true && message.shareAfter) await shareBase64(message);
+      return saved;
+    });
+    if (message.type === 'saveToGallery') return runNativeExport(nativeExportBusyRef, async () => {
+      const saved = await saveToGallery(message);
+      if (saved === true && message.shareAfter) await shareBase64(message);
+      return saved;
+    });
+    if (message.type === 'savePagesToGallery') return runNativeExport(nativeExportBusyRef, async () => {
+      const result = await savePagesToGallery(message);
+      const index = message.shareIndex;
+      if (Number.isInteger(index) && index >= 0 && result?.savedIndexes?.includes(index)) {
+        const items = Array.isArray(message.pages) ? message.pages : JSON.parse(message.pages);
+        const data = items[index];
+        const parsedMime = /^data:(image\/(?:png|jpeg|webp))/i.exec(String(data || ''))?.[1] || 'image/jpeg';
+        const ext = parsedMime === 'image/png' ? 'png' : parsedMime === 'image/webp' ? 'webp' : 'jpg';
+        await shareBase64({ name: `Abu_Bassam_Page_${index + 1}.${ext}`, mime: parsedMime, data });
+      }
+      return result;
+    });
     if (message.type === 'printPages') return runNativeExport(nativeExportBusyRef, () => printPages(message));
-    if (message.type === 'printBase64') return runNativeExport(nativeExportBusyRef, () => printBase64(message));
+    if (message.type === 'printBase64') return runNativeExport(nativeExportBusyRef, async () => {
+      const printed = await printBase64(message);
+      if (printed === true && message.shareAfter) await shareBase64(message);
+      return printed;
+    });
     if (message.type === 'printHtml') return runNativeExport(nativeExportBusyRef, () => printHtml(message));
     if (message.type === 'savePdfHtml') return runNativeExport(nativeExportBusyRef, () => savePdfHtml(message));
     if (message.type === 'shareBase64') return runNativeExport(nativeExportBusyRef, () => shareBase64(message));
