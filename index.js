@@ -35,6 +35,7 @@ const BARCODE_TYPES = [
 const SECURE_KEY = /^abu_bassam_[a-z0-9_]{3,80}$/i;
 
 const MAX_NATIVE_MESSAGE_CHARS = 48 * 1024 * 1024;
+const MAX_NATIVE_CAMERA_CHARS = 32 * 1024 * 1024;
 const MAX_NATIVE_PAGE_CHARS = 40 * 1024 * 1024;
 const MAX_NATIVE_PAGE_COUNT = 20;
 const ANDROID_BRIDGE = `
@@ -214,10 +215,13 @@ function App() {
     try {
       const picture = await cameraRef.current.takePictureAsync({ base64: true, exif: false, quality: 1, skipProcessing: false });
       if (!picture?.base64) throw new Error('لم تُحفظ الصورة');
+      // Do not JSON-encode or inject camera photos large enough to stall WebView.
+      if (picture.base64.length > MAX_NATIVE_CAMERA_CHARS)
+        throw new Error('الصورة كبيرة جداً لهذا الجهاز. قلّل دقة الكاميرا من إعدادات الهاتف ثم أعد الالتقاط.');
       const mode = ['maker', 'cardPhoto', 'ocr'].includes(cameraMode) ? cameraMode : 'scan';
       closeCamera();
       inject('AbuBassamNativeCameraResult', { mode, dataUrl: `data:image/jpeg;base64,${picture.base64}` });
-    } catch (_) { setCameraBusy(false); cameraError('تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.'); }
+    } catch (error) { setCameraBusy(false); cameraError(String(error?.message || 'تعذر التقاط الصورة. أعد فتح الكاميرا وحاول مرة أخرى.')); }
   }, [cameraBusy, cameraError, cameraMode, cameraReady, closeCamera, inject]);
 
   const onBarcodeScanned = useCallback((result) => {
