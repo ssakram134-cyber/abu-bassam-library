@@ -99,6 +99,26 @@ window.showResult=i=>{const r=results[i];if(!r||r.error)return;const src=selecte
 async function processAll(){if(!selected.length||processing)return;processing=true;cancelRequested=false;resetResults();lockProcessingControls(true);$('processBtn').disabled=true;$('cancelWrap').style.display='grid';$('cancelBtn').textContent='إلغاء المعالجة';let ok=0,fail=0,orig=0,out=0;for(let i=0;i<selected.length;i++){if(cancelRequested)break;$('progress').textContent=`معالجة ${i+1} من ${selected.length}...`;try{const r=await compressOne(selected[i],i);if(out+r.compressedBytes>MAX_TOTAL_OUTPUT_BYTES){revoke(r);throw new Error('النتائج تتجاوز 96MB؛ احفظ هذه المجموعة وابدأ مجموعة أخرى')}results.push(r);ok++;orig+=r.originalBytes;out+=r.compressedBytes}catch(e){results.push({id:selected[i].id,originalName:selected[i].file.name,error:String(e?.message||e)});fail++}await new Promise(r=>setTimeout(r,0))}processing=false;lockProcessingControls(false);$('cancelWrap').style.display='none';$('processBtn').disabled=!selected.length;renderResults();$('summary').textContent=cancelRequested?`تم الإلغاء. أُنجزت ${ok} صورة قبل الإلغاء.`:`نجح: ${ok}${fail?` • تعذر: ${fail}`:''} • قبل: ${fmt(orig)} • بعد: ${fmt(out)}${orig?` • التوفير: ${Math.max(0,Math.round((orig-out)/orig*100))}%`:''}`;$('summary').classList.add('show');$('progress').textContent=''}
 function namedDataUrl(dataUrl,name){const s=String(dataUrl||''),marker=';base64,';const at=s.indexOf(marker);if(at<0)return s;return `${s.slice(0,at)};name=${encodeURIComponent(name)}${marker}${s.slice(at+marker.length)}`}
 function browserSave(name,data){const a=document.createElement('a');a.download=name;a.href=data;document.body.appendChild(a);a.click();a.remove()}
+const pendingNativeSaves=new Set();
+function trackNativeSave(requestId){
+ if(typeof requestId==='string'&&/^abu-export-[a-z0-9-]+$/.test(requestId)){pendingNativeSaves.add(requestId);return true}
+ $('progress').textContent='تعذر إرسال طلب الحفظ إلى Android؛ حاول تقليل حجم الصور.';return false
+}
+function onNativeSaveResult(event){
+ const detail=event?.detail;
+ if(!detail||!pendingNativeSaves.has(detail.requestId))return;
+ const status=String(detail.status||'failed');
+ if(status==='queued'){$('progress').textContent='طلب الحفظ التالي في الانتظار حتى انتهاء العملية الحالية.';return}
+ pendingNativeSaves.delete(detail.requestId);
+ if(status==='saved')$('progress').textContent='أكد Android حفظ '+(Number(detail.count)||1)+' صورة بنجاح.';
+ else if(status==='partial')$('progress').textContent='حُفظت '+Number(detail.count)+' صورة، وتعذر حفظ '+Number(detail.failed)+' صورة.';
+ else if(status==='cancelled')$('progress').textContent='أُلغيت عملية الحفظ، ولم يُؤكَّد حفظ أي ملف.';
+ else if(status==='duplicate')$('progress').textContent='طلب الحفظ مكرر؛ العملية الأولى ما زالت جارية.';
+ else if(status==='busy')$('progress').textContent='هناك طلبان في الانتظار بالفعل؛ أعد المحاولة بعد اكتمالهما.';
+ else if(status==='failed')$('progress').textContent='تعذر حفظ الصورة: '+String(detail.error||'خطأ غير معروف');
+ else $('progress').textContent='أُرسلت العملية إلى Android، ولم يُؤكَّد الحفظ بعد.';
+}
+try{window.parent.addEventListener('abu-bassam-native-export-result',onNativeSaveResult)}catch(_){}
 async function saveResults(){
  if(processing||saving)return;
  const good=results.filter(r=>!r.error);
@@ -111,7 +131,7 @@ async function saveResults(){
   if(bridge?.savePagesToGallery){
    const pages=[];
    for(const r of good){pages.push(namedDataUrl(await blobUrlData(r.blob),r.name));await new Promise(resolve=>setTimeout(resolve,0))}
-   bridge.savePagesToGallery('Abu_Bassam_Compressed',JSON.stringify(pages),'image/jpeg');
+   if(!trackNativeSave(bridge.savePagesToGallery('Abu_Bassam_Compressed',JSON.stringify(pages),'image/jpeg')))return;
    $('progress').textContent='أُرسل طلب حفظ الصور إلى Android. اختر مجلد الصور وأكّد العملية من نافذة النظام.'
   }else{
    for(const r of good)browserSave(r.name,r.url);
@@ -127,7 +147,7 @@ window.saveOneResult=async i=>{
  saving=true;lockProcessingControls(true);$('saveBtn').disabled=true;
  try{
   if(bridge?.saveToGallery){
-   bridge.saveToGallery(r.name,r.mime,namedDataUrl(await blobUrlData(r.blob),r.name));
+   if(!trackNativeSave(bridge.saveToGallery(r.name,r.mime,namedDataUrl(await blobUrlData(r.blob),r.name))))return;
    $('progress').textContent='أُرسل طلب حفظ الصورة إلى Android. اختر المجلد إذا طُلب منك.'
   }else browserSave(r.name,r.url)
  }catch(e){alert('تعذر تجهيز حفظ الصورة: '+String(e?.message||e))}
