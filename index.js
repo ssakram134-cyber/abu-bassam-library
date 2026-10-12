@@ -79,6 +79,19 @@ function splitDataUrl(dataUrl) {
   }
   return { mime, base64 };
 }
+// A failed SAF write must not leave behind an empty or truncated user document.
+async function writeSafFile(directoryUri, displayName, mime, base64) {
+  const saf = FileSystem.StorageAccessFramework;
+  const uri = await saf.createFileAsync(directoryUri, displayName, mime);
+  try {
+    await saf.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+    return uri;
+  } catch (error) {
+    await saf.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    throw error;
+  }
+}
+
 function printDimensions(paper) {
   if (paper === 'A5') return { width: 148, height: 210 };
   if (paper === 'A6') return { width: 105, height: 148 };
@@ -201,8 +214,7 @@ function App() {
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
       if (!permission.granted) return;
-      const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
-      await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
       Alert.alert('تم الحفظ', `تم حفظ ${finalName} بنجاح.`);
     } catch (error) { Alert.alert('تعذر الحفظ', String(error?.message || error)); }
   }, []);
@@ -215,8 +227,7 @@ function App() {
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Pictures');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
       if (!permission.granted) return;
-      const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, finalMime);
-      await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+      await writeSafFile(permission.directoryUri, displayName, finalMime, parsed.base64);
       Alert.alert('تم الحفظ في المعرض', `تم حفظ ${finalName} داخل مجلد الصور الذي اخترته.`);
     } catch (error) { Alert.alert('تعذر الحفظ في المعرض', String(error?.message || error)); }
   }, []);
@@ -246,8 +257,7 @@ function App() {
           const finalName = safeName(requestedName || fallbackName);
           const dot = finalName.lastIndexOf('.');
           const displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
-          const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, itemMime);
-          await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, parsed.base64, { encoding: FileSystem.EncodingType.Base64 });
+          await writeSafFile(permission.directoryUri, displayName, itemMime, parsed.base64);
           saved += 1;
         } catch (_) { failed += 1; }
       }
@@ -273,19 +283,24 @@ function App() {
   }, []);
 
   const savePdfHtml = useCallback(async ({ name, html }) => {
+    let temporaryPdfUri = '';
     try {
       if (!String(html || '').trim()) throw new Error('لا توجد كروت لحفظها');
       const result = await Print.printToFileAsync({ html: String(html), base64: true });
+      temporaryPdfUri = String(result.uri || '');
       const base64 = result.base64 || await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
       const finalName = safeName(name || `Abu_Bassam_Cards_${Date.now()}.pdf`), dot = finalName.lastIndexOf('.'), displayName = dot > 0 ? finalName.slice(0, dot) : finalName;
       const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
       const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
       if (!permission.granted) return;
-      const uri = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, displayName, 'application/pdf');
-      await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (result.uri?.startsWith(FileSystem.cacheDirectory || '')) await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch(() => {});
+      await writeSafFile(permission.directoryUri, displayName, 'application/pdf', base64);
       Alert.alert('تم حفظ PDF', `تم حفظ ${finalName} بأعلى جودة متاحة.`);
     } catch (error) { Alert.alert('تعذر حفظ PDF', String(error?.message || error)); }
+    finally {
+      if (temporaryPdfUri && FileSystem.cacheDirectory && temporaryPdfUri.startsWith(FileSystem.cacheDirectory)) {
+        await FileSystem.deleteAsync(temporaryPdfUri, { idempotent: true }).catch(() => {});
+      }
+    }
   }, []);
 
   const writeTemporaryFile = useCallback(async (name, mime, data) => {
