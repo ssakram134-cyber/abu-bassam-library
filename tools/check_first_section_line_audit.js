@@ -32,8 +32,8 @@ const required=[
  [geo,"window.addEventListener('pointermove',move)",'crop drag must survive handle re-render'],
  [geo,"token!==drawToken",'stale crop animation frames must not duplicate handles'],
  [compress,"function lockProcessingControls(locked)",'compression controls must lock during processing'],
- [compress,"if(processing)return alert('لا يمكن إضافة صور أثناء المعالجة",'compression must reject file additions while busy'],
- [compress,"window.moveItem=(i,d)=>{if(processing)return;",'compression must reject reordering while busy'],
+ [compress,"if(processing||saving)return alert('لا يمكن إضافة صور أثناء المعالجة أو الحفظ.",'compression must reject file additions while busy'],
+ [compress,"window.moveItem=(i,d)=>{if(processing||saving)return;",'compression must reject reordering while busy'],
  [complete,"it.src!==before)return false",'photo undo must discard delayed image changes'],
  [complete,"if(await setPhotoSource(it,next))pushUndo(it,before)",'flip history must change only after successful image replacement'],
  [photo,"selectedItem()!==item||item.src!==before",'restoring original photo must reject stale selection'],
@@ -56,8 +56,11 @@ const required=[
  [photo,"margin:p.margin,photoImageRef:im",'poster margin must be stored with current print pages'],
 
  [geo,"geoTarget=it;geoSourceAtOpen=it.src",'geometry editor must pin source image when opened'],
- [geo,"if(geoTarget!==it||it.src!==originalSrc||item()!==it||!uploadedImages.includes(it))",'geometry must reject selection changes after asynchronous work'],
+ [geo,"const cancelled=()=>operationId!==geoOperationId||geoTarget!==it||it.src!==originalSrc||item()!==it||!uploadedImages.includes(it);",'geometry must reject selection changes after asynchronous work'],
  [geo,"if(geometryBusy||ev.pointerId!==pointerId)return;",'geometry corners must not move while processing'],
- [geo,"if((y&63)===63)await new Promise(resolve=>requestAnimationFrame(resolve));",'projective correction must yield for responsive touch'],
+ [geo,"if(startY+rows<oh)await new Promise(resolve=>requestAnimationFrame(resolve));",'projective correction must yield for responsive touch'],
+ [geo,"const strip=outCtx.createImageData(ow,rows)",'perspective must render strips rather than allocate whole output twice'],
+ [geo,"if(!finished&&output){output.width=0;output.height=0}",'canceled perspective must release backing store'],
+ [geo,"}else pts[i]={x,y};refreshOverlay()",'pointer movement must not rerasterize the source image'],
 ];for(const [src,needle,reason] of required)if(!src.includes(needle))issues.push('Regression guard missing: '+reason);
 if(issues.length){console.error(issues.join('\n'));process.exitCode=1}else console.log('First-section photo/print code audit passed\n'+rows.join('\n')+'\nTotal physical lines examined by static checks: '+total+'; critical regression guards: '+required.length);
