@@ -24,7 +24,7 @@ async function check(){
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('حجم الصور كبير')));
  window.Android.printPages(Array(21).fill('x'),'A4',300);
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('20 صفحة')));
- window.Android.printPages('a'.repeat(300),'A4',300);
+ window.Android.printPages('a'.repeat(220),'A4',300);
  assert.equal(sent.length,1);assert.ok(notices.some(x=>x.includes('الحد الآمن')));
  const jobs=[],alerts=[];
  const printer=new Function('useCallback','Print','printDimensions','Alert',
