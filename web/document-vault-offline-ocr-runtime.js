@@ -34,10 +34,26 @@ function fileToData(file){return new Promise((resolve,reject)=>{
  if(!file||file.size>MAX_OCR_SOURCE_BYTES||!/^image\/(png|jpeg|webp|bmp)$/i.test(file.type||'')){reject(new Error('صيغة الصورة غير مدعومة أو حجمها يتجاوز 12MB'));return}
  const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(reader.error||new Error('تعذر قراءة الصورة'));reader.readAsDataURL(file)
 })}
-async function inputChanged(event){const file=event?.target?.files?.[0];if(!file)return;try{await recognize(await fileToData(file))}catch(error){setProgress(String(error?.message||error))}finally{if(event?.target)event.target.value=''}}
+async function inputChanged(event){const file=event?.target?.files?.[0];if(!file)return;const epoch=recognizeEpoch;try{const data=await fileToData(file);if(epoch===recognizeEpoch)await recognize(data)}catch(error){if(epoch===recognizeEpoch)setProgress(String(error?.message||error))}finally{if(event?.target)event.target.value=''}}
 function bind(){const input=$('vOcrInput');if(input&&input.dataset.abuOfflineOcr!=='1'){input.dataset.abuOfflineOcr='1';input.onchange=inputChanged}if(window.DocumentVault&&!DocumentVault.__abuOfflineOcrPatched){DocumentVault.__abuOfflineOcrPatched=true;const oldRe=DocumentVault.reOcr;DocumentVault.reOcr=()=>{const src=lastImage||$('vOcrImage')?.src;if(src)return recognize(src);if(typeof oldRe==='function')return oldRe()}}
 const prev=window.AbuBassamNativeCameraResult;if(prev&&!prev.__abuOfflineOcrWrapped){const wrap=function(result){if(result&&result.mode==='ocr'&&result.dataUrl){recognize(result.dataUrl);return}return prev(result)};wrap.__abuOfflineOcrWrapped=true;window.AbuBassamNativeCameraResult=wrap}}
-function boot(){bind();let n=0,t=setInterval(()=>{n++;bind();if(n>240)clearInterval(t)},100);new MutationObserver(bind).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')scheduleIdle(15000)})}
+function clearOcrSession(){
+ recognizeEpoch++;lastImage='';busy=false;
+ const img=$('vOcrImage'),text=$('vOcrText');
+ if(img){img.removeAttribute('src');img.style.display='none'}
+ if(text)text.value='';
+ setProgress('اختر صورة جديدة لقراءة النص.');
+ scheduleIdle(0)
+}
+function boot(){
+ bind();
+ let retryCount=0;
+ const retry=setInterval(()=>{bind();if(++retryCount>=20)clearInterval(retry)},250);
+ document.addEventListener('abu-vault-ready',bind);
+ document.addEventListener('abu-runtime-loaded',bind);
+ document.addEventListener('abu-bassam-auth-changed',clearOcrSession);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')scheduleIdle(15000)})
+}
 window.AbuDocumentVaultOfflineOcr={recognize,ready:()=>!!window.Tesseract,terminate};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

@@ -42,6 +42,8 @@ async function main(){
  decorate();assert.equal(node.style.opacity,'.48');
  permitted=true;decorate();assert.equal(node.style.opacity,'0.9','Restored permission must restore opacity');
  assert.ok(guard.includes('readOnlyException(field)'),'Read-only search fields must still be editable for searching');
+ assert.ok(!ocr.includes('new MutationObserver'),'OCR rebind must not monitor the whole document continuously');
+ assert.ok(ocr.includes('recognizeEpoch++;lastImage=')&&ocr.includes("document.addEventListener('abu-bassam-auth-changed',clearOcrSession)"),'Logout must invalidate outstanding OCR and private preview data');
  const deferred={};
  class ImageFake{set src(v){Promise.resolve().then(()=>this.onload?.())}}
  const openFn=new Function('getItem','permitted','modal','URL','Image','reset','$','drawPreview','requestAnimationFrame','updateOverlay','alert',
