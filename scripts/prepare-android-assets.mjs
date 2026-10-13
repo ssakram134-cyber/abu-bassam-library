@@ -10,6 +10,21 @@ const documentVendorRoot = resolve(destination, 'vendor', 'documents');
 const DOWNLOAD_TIMEOUT_MS = 45000;
 
 const pair = (jsdelivr, unpkg) => [jsdelivr, unpkg];
+const mediaPipeRoot=resolve(destination,'vendor','mediapipe');
+const MEDIAPIPE_VERSION='0.1.1675465747';
+const MEDIAPIPE_ASSETS=[
+ ['selfie_segmentation.js',15000],
+ ['selfie_segmentation.binarypb',300],
+ ['selfie_segmentation.tflite',100000],
+ ['selfie_segmentation_landscape.tflite',100000],
+ ['selfie_segmentation_solution_wasm_bin.js',100000],
+ ['selfie_segmentation_solution_wasm_bin.wasm',4000000],
+ ['selfie_segmentation_solution_simd_wasm_bin.js',100000],
+ ['selfie_segmentation_solution_simd_wasm_bin.wasm',4000000],
+].map(([name,minBytes])=>[name,pair(
+ 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@'+MEDIAPIPE_VERSION+'/'+name,
+ 'https://unpkg.com/@mediapipe/selfie_segmentation@'+MEDIAPIPE_VERSION+'/'+name
+),minBytes]);
 const OCR_ASSETS = [
   ['tesseract.min.js', pair(
     'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
@@ -103,7 +118,15 @@ for(const [relative,urls,minBytes] of DOCUMENT_ASSETS){
 for(const [relative,,minBytes] of DOCUMENT_ASSETS){
   if(!(await existsEnough(resolve(documentVendorRoot,relative),minBytes)))throw new Error(`Required offline document viewer asset is missing: ${relative}`);
 }
+for(const [relative,urls,minBytes] of MEDIAPIPE_ASSETS){
+  await download(urls,resolve(mediaPipeRoot,relative),minBytes);
+}
+for(const [relative,,minBytes] of MEDIAPIPE_ASSETS){
+  if(!(await existsEnough(resolve(mediaPipeRoot,relative),minBytes)))throw new Error(`Required offline MediaPipe asset is missing: ${relative}`);
+}
+await writeFile(resolve(mediaPipeRoot,'selfie_segmentation_solution_simd_wasm_bin.data'),Buffer.alloc(0));
 
 process.stdout.write(`Android web assets prepared at ${destination}\n`);
 process.stdout.write('Offline OCR assets (Arabic + English) are embedded only in generated Android assets; canonical web source remains unchanged.\n');
 process.stdout.write('Offline PDF/DOCX/XLSX viewer assets are embedded in generated Android assets.\n');
+process.stdout.write('Offline MediaPipe background removal assets are embedded in Android assets.\n');
