@@ -16,4 +16,4 @@ forbid(index,'cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation','remote backg
 forbid(pin,'cdn.jsdelivr.net','remote pinned background removal asset');
 for(const file of ['web/mediapipe-pin-runtime.js','web/device-name-runtime.js']){try{new Function(read(file))}catch(e){errors.push(`${file}: JavaScript syntax error: ${e.message}`)}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('External dependency checks passed: bundled local MediaPipe background removal uses pinned version 0.1.1675465747.\n');
+process.stdout.write('External dependency source checks passed: APK asset-preparation config requires pinned MediaPipe 0.1.1675465747 (device execution unverified).\n');

@@ -65,7 +65,7 @@ async function loadAdvancedRuntime(){
   if(failed.length){
     document.dispatchEvent(new CustomEvent('abu-runtime-error',{detail:{message:'تعذر تحميل '+failed.length+' من أدوات التطبيق',files:failed}}));
     setStatus('questionsHostStatus','تعذر تحميل بعض الأدوات؛ راجع سجل التشغيل.',false);
-    throw new Error('OPTIONAL_RUNTIME_LOAD_FAILED: '+failed.join(', '))
+    return false
   }
 }
 function injectArabicRuntimes(){const frame=$('questionsFrame');if(!frame||language!=='ar'||!frameLoaded(frame))return;try{const doc=frame.contentDocument;if(!doc)return;[['abuQuestionTemplatesExternal','questions-templates-runtime.js'],['abuQuestionPaperExternal','questions-paper-runtime.js'],['abuQuestionTypesExternal','question-type-runtime.js']].forEach(([id,src])=>{if(doc.getElementById(id))return;const script=doc.createElement('script');script.id=id;script.src=src;script.async=false;script.onerror=()=>console.warn(src+' failed to load');doc.head.appendChild(script)})}catch(e){setStatus('questionsHostStatus','تعذر تحميل أدوات الأسئلة',false)}}

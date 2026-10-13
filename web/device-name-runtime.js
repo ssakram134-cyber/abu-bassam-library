@@ -81,24 +81,26 @@
     await loadCustomerPermissionsHardening()
   }
   async function loadApprovedUi(){
-    await loadMediaPipePin();
-    await loadFeatureRecovery();
-    await loadChildTemplates();
-    await loadCardModels();
-    await loadStandaloneCardModels();
-    await loadStrictWorkflow();
-    await loadStandaloneFold();
-    await loadA4CardEditor();
-    await loadNotificationCorrections();
-    await loadNotificationExcel();
-    await loadBranchVault();
-    await loadDocumentVaultHardening();
-    await loadBackupCenter();
-    await loadAccountCenter();
-    await loadPasswordRecovery();
-    await loadAppUpdate();
-    await loadSettingsCorrections();
-    await loadOperationLogCorrections()
+    const failed=[];
+    try{await loadMediaPipePin();}catch(error){failed.push('loadMediaPipePin');console.error('loadMediaPipePin failed',error)}
+    try{await loadFeatureRecovery();}catch(error){failed.push('loadFeatureRecovery');console.error('loadFeatureRecovery failed',error)}
+    try{await loadChildTemplates();}catch(error){failed.push('loadChildTemplates');console.error('loadChildTemplates failed',error)}
+    try{await loadCardModels();}catch(error){failed.push('loadCardModels');console.error('loadCardModels failed',error)}
+    try{await loadStandaloneCardModels();}catch(error){failed.push('loadStandaloneCardModels');console.error('loadStandaloneCardModels failed',error)}
+    try{await loadStrictWorkflow();}catch(error){failed.push('loadStrictWorkflow');console.error('loadStrictWorkflow failed',error)}
+    try{await loadStandaloneFold();}catch(error){failed.push('loadStandaloneFold');console.error('loadStandaloneFold failed',error)}
+    try{await loadA4CardEditor();}catch(error){failed.push('loadA4CardEditor');console.error('loadA4CardEditor failed',error)}
+    try{await loadNotificationCorrections();}catch(error){failed.push('loadNotificationCorrections');console.error('loadNotificationCorrections failed',error)}
+    try{await loadNotificationExcel();}catch(error){failed.push('loadNotificationExcel');console.error('loadNotificationExcel failed',error)}
+    try{await loadBranchVault();}catch(error){failed.push('loadBranchVault');console.error('loadBranchVault failed',error)}
+    try{await loadDocumentVaultHardening();}catch(error){failed.push('loadDocumentVaultHardening');console.error('loadDocumentVaultHardening failed',error)}
+    try{await loadBackupCenter();}catch(error){failed.push('loadBackupCenter');console.error('loadBackupCenter failed',error)}
+    try{await loadAccountCenter();}catch(error){failed.push('loadAccountCenter');console.error('loadAccountCenter failed',error)}
+    try{await loadPasswordRecovery();}catch(error){failed.push('loadPasswordRecovery');console.error('loadPasswordRecovery failed',error)}
+    try{await loadAppUpdate();}catch(error){failed.push('loadAppUpdate');console.error('loadAppUpdate failed',error)}
+    try{await loadSettingsCorrections();}catch(error){failed.push('loadSettingsCorrections');console.error('loadSettingsCorrections failed',error)}
+    try{await loadOperationLogCorrections();}catch(error){failed.push('loadOperationLogCorrections');console.error('loadOperationLogCorrections failed',error)}
+    if(failed.length)throw new Error('OPTIONAL_RUNTIME_LOAD_FAILED: '+failed.join(','));
   }
   function showBootFailure(error){
     const splash=document.getElementById('splash');
