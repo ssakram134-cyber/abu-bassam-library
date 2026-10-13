@@ -13,6 +13,7 @@ function json(body: unknown, status=200){return new Response(JSON.stringify(body
 function userClient(req:Request){const authorization=req.headers.get('Authorization')||'';return createClient(SUPABASE_URL,ANON_KEY,{global:{headers:{Authorization:authorization}},auth:{persistSession:false}})}
 function adminClient(){return createClient(SUPABASE_URL,SERVICE_KEY,{auth:{persistSession:false}})}
 function safePart(v:string){return String(v||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180)}
+function validDevicePart(id:string){return /^[A-Za-z0-9_.-]{1,180}$/.test(id)&&id!=='.'&&id!=='..'}
 async function sha256Hex(value:string){const bytes=new TextEncoder().encode(value),hash=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function permissionEnabled(device:{role?:string;permissions?:Record<string,unknown>},key:string){
   if(device?.role==='owner')return true;
@@ -22,10 +23,14 @@ function permissionEnabled(device:{role?:string;permissions?:Record<string,unkno
 async function context(req:Request,permission:string){
   const deviceId=req.headers.get('x-device-id')||'',secret=req.headers.get('x-device-secret')||'';
   if(!deviceId||!secret)throw new Error('DEVICE_REQUIRED');
+  if(!validDevicePart(deviceId))throw new Error('DEVICE_ID_INVALID');
   const userApi=userClient(req),{data:{user},error:userError}=await userApi.auth.getUser();
   if(userError||!user)throw new Error('NOT_AUTHENTICATED');
   const admin=adminClient(),{data:device,error}=await admin.from('abu_bassam_devices').select('device_id,role,active,permissions,secret_hash').eq('user_id',user.id).eq('device_id',deviceId).maybeSingle();
   if(error||!device||device.active===false||!device.secret_hash||device.secret_hash!==await sha256Hex(secret))throw new Error('DEVICE_NOT_AUTHORIZED');
+  const {data:registry,error:registryError}=await admin.from('abu_bassam_devices').select('device_id').eq('user_id',user.id);
+  if(registryError||!Array.isArray(registry))throw new Error('DEVICE_REGISTRY_UNAVAILABLE');
+  if(registry.some(row=>String(row.device_id)!==deviceId&&safePart(String(row.device_id))===safePart(deviceId)))throw new Error('DEVICE_PATH_COLLISION');
   if(!permissionEnabled(device,permission))throw new Error(permission.toUpperCase()+'_NOT_ALLOWED');
   return{user,userApi,admin,deviceId,device};
 }

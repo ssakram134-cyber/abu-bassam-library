@@ -23,3 +23,14 @@ Scope: 44 existing Supabase files (6 Edge functions, 38 SQL migrations), plus th
 - Migration filename follows the existing project sequence because the Supabase CLI is not available in this environment; validate with `supabase migration list` on the real project before applying. Never edit historical migration history.
 
 Reference: Supabase changelog 2026-10-13 and PostgreSQL RLS and storage hardening recommendations.
+
+
+## Additional hardening — same audit cycle
+4. DEVICE_PATH_COLLISION: UUID-like device IDs were stored as arbitrary database strings and projected to Storage path parts via a lossy replacement. Two different registered devices could normalize to one object prefix, potentially breaking branch isolation. Both backup-center and branch-vault Edge contexts now reject invalid path ID characters and fail closed if another account device normalizes to the same prefix. Existing colliding device registrations require a controlled migration and test.
+5. CUSTOMER_DOCUMENT_LITERAL_PATH: the customer-document SQL commit RPC tested Storage prefixes with LIKE; a branch device ID containing '_' or '%' could alter LIKE matching. A follow-up migration replaces wildcard matching with literal prefix comparisons and requires a revision suffix. No customer data is deleted.
+6. The approved design counts in AGENTS.md are 9 envelope models and 6 thanks-letter models, which differed from the catalog and live UIs. A cross-section consistency commit aligns the catalog, studio, thanks-letter UI and automated project checker, preserving saved document text and migrating a retired custom envelope template ID.
+
+Verification:
+- Source regression check verified 57 assertions with 11 behavioral multipart cases, strict ID parsing and exact Storage prefix markers in isolated V8 mocks.
+- All SECURITY DEFINER function declaration headers in the 39 SQL migration files were scanned for explicit search_path clauses; this is a static check only.
+- Mandatory unresolved: real Deno typecheck/deployment; applying SQL on the confirmed Library TEST database; testing old device IDs; RLS/Storage advisor reports and real restore/deletion scenarios. Do not run these migrations against the unrelated connected project.
