@@ -1,0 +1,41 @@
+# Manual Codemagic APK build; there is no automatic push or pull_request trigger.
+# Test APK only unless the existing production signing keystore is explicitly provisioned.
+workflows:
+  abu-bassam-manual-apk:
+    name: Abu Bassam Library - manual Android APK
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: v22.13.1
+      java: 17
+    scripts:
+      - name: Install exact repository dependencies
+        script: |
+          npm ci --no-audit --no-fund
+      - name: Check source and security regression tests
+        script: |
+          npm run check:web
+      - name: Generate standalone Android project and offline assets
+        script: |
+          npm run android:prebuild
+      - name: Assemble an APK using the generated Android project
+        script: |
+          set -eu
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+      - name: Verify resulting artifact before download
+        script: |
+          set -eu
+          APK="$(find android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          test -s "$APK"
+          unzip -l "$APK" | grep -F 'assets/index.android.bundle'
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          shasum -a 256 "$APK" > android/app/build/outputs/apk/release/APK_SHA256.txt
+          printf 'APK built and signature verified: %s\n' "$APK"
+    artifacts:
+      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/apk/release/APK_SHA256.txt
