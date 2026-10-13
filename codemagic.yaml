@@ -1,0 +1,33 @@
+# Manual, test-only Android build for abu-bassam-library.
+# The existing repository script performs source checks, Expo prebuild,
+# offline asset preparation, release APK assembly, signing verification,
+# and generates a SHA-256 report. This workflow does not publish an update.
+workflows:
+  android-apk-test:
+    name: Abu Bassam Library - Android APK (test only)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: v22.11.0
+      java: 17
+    # No automatic triggers. Start manually after reviewing the source.
+    scripts:
+      - name: Install locked npm dependencies
+        script: |
+          set -e
+          npm ci --no-audit --no-fund
+      - name: Build and verify standalone test APK
+        script: |
+          set -e
+          npm run build:apk:local
+      - name: Verify test APK artifacts
+        script: |
+          set -e
+          test -s dist/Abu_Bassam_Library_4.3.2.apk
+          test -s dist/SHA256.txt
+          test -s dist/SIGNING_CERTIFICATE.txt
+          test -s dist/BUILD_TYPE.txt
+          grep -Fx 'local-test-release-default-key-with-embedded-js' dist/BUILD_TYPE.txt
+    artifacts:
+      - dist/*.apk
+      - dist/*.txt
