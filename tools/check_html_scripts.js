@@ -4,6 +4,25 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const webDir = path.join(root, 'web');
+function validateExternalScript(filename, src) {
+  const target = String(src || '').trim();
+  if (!target) throw new Error('Empty script source in ' + filename);
+  if (/^(?:https?:)?\/\//i.test(target) || /^(?:data|blob|javascript):/i.test(target)) {
+    throw new Error('Remote or inline script source is prohibited in offline HTML: ' + target);
+  }
+  const clean = target.split(/[?#]/, 1)[0];
+  if (!clean || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(clean) || clean.startsWith('/')) {
+    throw new Error('Unsupported script source: ' + target);
+  }
+  const file = path.resolve(path.dirname(filename), clean);
+  if (!file.startsWith(webDir + path.sep)) throw new Error('Script escapes web directory: ' + target);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error('Missing local HTML script: ' + path.relative(root, file));
+  return file;
+}
+
+module.exports = { validateExternalScript };
+
+if (require.main === module) {
 const explicit = process.argv.slice(2);
 const files = explicit.length
   ? explicit.map((name) => path.resolve(root, name))
@@ -32,7 +51,9 @@ for (const filename of files) {
     totalBlocks += 1;
     const attrs = match[1] || '';
     const source = match[2] || '';
-    if (/\bsrc\s*=\s*["'][^"']+["']/i.test(attrs)) {
+    const externalSrc = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (externalSrc !== undefined) {
+      validateExternalScript(filename, externalSrc);
       externalBlocks += 1;
       continue;
     }
@@ -52,3 +73,5 @@ for (const filename of files) {
 }
 
 process.stdout.write(`HTML script validation passed: ${files.length} HTML files, ${totalBlocks} script blocks, ${parsedBlocks} inline JS blocks parsed, ${externalBlocks} external script tags skipped as files.\n`);
+
+}
