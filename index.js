@@ -179,6 +179,7 @@ function App() {
   const [cameraFacing, setCameraFacing] = useState('back');
   const [cameraFrameKind, setCameraFrameKind] = useState('paper');
   const [webReady, setWebReady] = useState(false);
+  const [startupError, setStartupError] = useState('');
 
   const inject = useCallback((functionName, payload) => {
     const json = JSON.stringify(payload).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -198,11 +199,12 @@ function App() {
 
   useEffect(() => {
     if (webReady) return undefined;
+    if (startupError) return undefined;
     const timer = setTimeout(() => {
-      Alert.alert('تعذر إكمال تشغيل التطبيق', 'لم تكتمل طبقات الأمان والواجهة خلال المهلة المحددة. أغلق التطبيق وافتحه مرة أخرى.');
+      setStartupError('تأخر بدء الواجهة الآمنة. يمكنك إعادة تحميلها دون حذف الصور أو المستندات.');
     }, STARTUP_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [webReady]);
+  }, [webReady, startupError]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -549,7 +551,11 @@ function App() {
     }
     let message; try { message = JSON.parse(raw); } catch (_) { return; }
     if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') return;
-    if (message.type === 'webBootReady') { setWebReady(true); return; }
+    if (message.type === 'webBootReady') { setStartupError(''); setWebReady(true); return; }
+    if (message.type === 'webBootFailed') {
+      setStartupError('فشل تهيئة التطبيق بأمان: ' + String(message.reason || 'تعذر تحميل أحد الملفات').slice(0, 150));
+      return;
+    }
     if (message.type === 'openCamera') return openCamera(message.mode, message.frameKind);
     if (message.type === 'scanBarcodeImage') return runNativeExport(nativeExportBusyRef, () => scanBarcodeImage(message));
     if (message.type === 'saveBase64') return runNativeExport(nativeExportBusyRef, async () => {
@@ -606,9 +612,15 @@ function App() {
           return false;
         }}
         injectedJavaScriptBeforeContentLoaded={ANDROID_BRIDGE} injectedJavaScript={ANDROID_BRIDGE} onMessage={onWebMessage}
-        onError={() => { Alert.alert('تعذر فتح التطبيق', 'تعذر تحميل واجهة مكتبة أبو بسام. أغلق التطبيق وافتحه مرة أخرى.'); }}
+        onError={() => { setStartupError('تعذر تحميل واجهة مكتبة أبو بسام من الملفات المحلية.'); }}
       />
-      {!webReady && <View style={styles.loading}><ActivityIndicator size="large" color="#76533e" /><Text style={styles.loadingText}>جاري فتح مكتبة أبو بسام…</Text></View>}
+      {!webReady && <View style={styles.loading}>
+        {!startupError && <ActivityIndicator size="large" color="#76533e" />}
+        <Text style={styles.loadingText}>{startupError || 'جاري فتح مكتبة أبو بسام…'}</Text>
+        {!!startupError && <TouchableOpacity accessibilityRole="button" accessibilityLabel="إعادة تحميل واجهة التطبيق" onPress={() => {
+          setStartupError(''); setWebReady(false); webRef.current?.reload();
+        }} style={styles.retryStartup}><Text style={styles.retryStartupText}>إعادة المحاولة</Text></TouchableOpacity>}
+      </View>}
       {cameraMode && (
         <View style={styles.cameraOverlay}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraFacing} enableTorch={cameraFacing === 'back' && torch}
@@ -637,7 +649,9 @@ function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fffaf3' }, webView: { flex: 1, backgroundColor: '#fffaf3' },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf3' },
-  loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14 },
+  loadingText: { color: '#5b4438', fontSize: 15, fontWeight: '700', marginTop: 14, textAlign: 'center', paddingHorizontal: 22 },
+  retryStartup: { marginTop: 18, backgroundColor: '#087f72', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12 },
+  retryStartupText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100, backgroundColor: '#000' },
   cameraShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 38 },
   cameraHeader: { width: '100%', paddingTop: 14, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },

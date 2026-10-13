@@ -42,7 +42,7 @@ function keyGuard(event){
 }
 function decorate(){
   if(!secondary())return;
-  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){if(el.dataset.abuPermissionDenied!=='1')el.dataset.abuOriginalOpacity=el.style.opacity||'';el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else{if(el.dataset.abuOriginalOpacity!==undefined){el.style.opacity=el.dataset.abuOriginalOpacity;delete el.dataset.abuOriginalOpacity}if(String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')}})
+  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission),wasDenied=el.dataset.abuPermissionDenied==='1';el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){if(!wasDenied)el.dataset.abuOriginalOpacity=el.style.opacity||'';el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else{if(el.dataset.abuOriginalOpacity!==undefined){el.style.opacity=el.dataset.abuOriginalOpacity;delete el.dataset.abuOriginalOpacity}if(String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')}})
 }
 let decorateQueued=false;
 function scheduleDecorate(){

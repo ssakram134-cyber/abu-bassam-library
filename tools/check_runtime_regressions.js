@@ -22,7 +22,7 @@ forbid(recovery,'scheduleRecovery','obsolete recovery retry loop');
 forbid(recovery,'new MutationObserver','obsolete recovery observer');
 
 const device=read('device-name-runtime.js');
-for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+for(const marker of ['dismissSplash','signalBootReady()','void loadApprovedUi().catch','await loadSecurity();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
