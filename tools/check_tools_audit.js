@@ -56,4 +56,34 @@ for (const marker of ["'web/secure-sync-runtime.js'","'web/app-security-runtime.
   assert.ok(validator.includes(marker),'Current fail-closed source requirement absent: '+marker);
 }
 assert.ok(String(project.scripts?.['check:web']||'').includes('node tools/check_tools_audit.js'),'Tool regression must be part of checks');
+const catalogWindow={};
+new Function('window',fs.readFileSync(path.join(root,'web','card-template-library.js'),'utf8'))(catalogWindow);
+const specification=fs.readFileSync(path.join(root,'AGENTS.md'),'utf8');
+const envelopeModels=catalogWindow.AbuBassamCardTemplateLibrary?.find(x=>x.id==='envelope')?.models||[];
+const thanksModels=catalogWindow.AbuBassamCardTemplateLibrary?.find(x=>x.id==='thanks')?.models||[];
+assert.ok(specification.includes('صناعة الظرف: **9**')&&specification.includes('كتاب الشكر والتقدير: **6**'),'Template model counts must remain sourced from AGENTS.md');
+assert.deepEqual(envelopeModels.map(x=>x.id),Array.from({length:9},(_,i)=>'env-'+(i+1)),'Envelope models 1-9 only');
+assert.deepEqual(thanksModels.map(x=>x.id),Array.from({length:6},(_,i)=>'t'+(i+1)),'Thanks models 1-6 only');
+const studio=fs.readFileSync(path.join(root,'web','design-studio-runtime.js'),'utf8');
+assert.ok(studio.includes('Array.from({length:9},(_,i)=>envelopeTemplate(i))'),'Envelope studio must have 9 built-in templates');
+const letter=fs.readFileSync(path.join(root,'web','thanks-letter.html'),'utf8');
+assert.deepEqual([...letter.matchAll(/<option value="(t\d+)">/g)].map(x=>x[1]),thanksModels.map(x=>x.id),'Thanks studio must have only approved models');
+const legacy=fs.readFileSync(path.join(root,'web','envelope-preload-runtime.js'),'utf8');
+assert.ok(legacy.includes("id:'legacy-env-10'"),'Legacy custom template must be migrated, not discarded');
+
+const records=new Map([
+ ['abuEnvelopeStudioV1',JSON.stringify({templateId:'env-10',html:'<div data-bound="1">صورة عائلية</div>',unit:'mm',w:225,h:115})],
+ ['abuEnvelopeCustomTemplatesV1',JSON.stringify([{id:'env-10',name:'قالب قديم',html:'<b>ملف أصلي</b>'},{id:'my-custom',name:'آخر',html:'<i>احتفاظ</i>'}])]
+]);
+const localStore={getItem:key=>records.get(key)||null,setItem:(key,value)=>records.set(key,value)};
+new Function('localStorage',legacy)(localStore);
+const migratedItems=JSON.parse(records.get('abuEnvelopeCustomTemplatesV1'));
+assert.equal(migratedItems[0].id,'legacy-env-10','Retired custom model must receive a non-system legacy ID');
+assert.equal(migratedItems[0].html,'<b>ملف أصلي</b>','Legacy custom template HTML must not be deleted');
+assert.equal(migratedItems[1].id,'my-custom','Other templates must not be changed');
+assert.ok(JSON.parse(records.get('abuEnvelopeStudioV1')).html.includes('صورة عائلية'),'Saved user document must remain intact');
+new Function('localStorage',legacy)(localStore);
+assert.deepEqual(JSON.parse(records.get('abuEnvelopeCustomTemplatesV1')),migratedItems,'Legacy migration must be idempotent');
+
+
 console.log('Tools audit checks passed: local HTML scripts exist, remote/traversal references blocked, and ZIP import validator uses current fail-closed security layout.');

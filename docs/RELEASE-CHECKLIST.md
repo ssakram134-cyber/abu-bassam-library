@@ -1,5 +1,7 @@
 # قائمة فحص إصدار Android — 4.3.2 / build 432
 
+> **مراجعة 2026-10-13:** هذا الملف قائمة اختبارات مطلوبة وليست تقرير نجاح للنسخة الحالية. لم يثبت بعد اجتياز `npm run check:web` كاملاً أو اختبار APK بعد PR #109–#112. لا يُعد أي بند مكتملًا قبل حفظ سجل تشغيل على SHA محدد، مع بقاء الاختبارات الميدانية منفصلة. تفاصيل التحقق في `docs/DOCS-AUDIT-2026-10-13.md`.
+
 ## فحص آلي إلزامي
 - `npm ci --no-audit --no-fund` باستخدام `package-lock.json` الحالي.
 - `npm run check:web` ويشمل فحص المشروع والأمان وأحدث الميزات ومسار Android ومصادر OCR و`tools/check_backup_center.js` و`tools/check_account_center.js` و`tools/check_app_update.js` و`tools/check_legacy_security_debt.js`.

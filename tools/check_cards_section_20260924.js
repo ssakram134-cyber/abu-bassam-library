@@ -5,7 +5,7 @@ for(const p of ['web/cards-section-upgrades-runtime.js','web/cards-hardening-run
 const loader=read('web/productivity-tools-runtime.js'),studio=read('web/cards-studio-runtime.js'),freeLayout=read('web/card-free-layout-runtime.js'),a4=read('web/a4-card-sheet-editor-v2-runtime.js'),standalone=read('web/standalone-card-layouts-plus-runtime.js'),library=read('web/card-template-library.js');
 for(const src of [loader,studio,freeLayout,a4,standalone])new Function(src);
 const sandbox={window:{}};vm.runInNewContext(library,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
-const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
+const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:9,certificate:10,thanks:6};
 for(const [id,count] of Object.entries(expected)){const g=groups.find(x=>x.id===id);if(!g||g.models.length!==count)throw new Error(`cards check failed: ${id} expected ${count}, got ${g?.models?.length??'missing'}`)}
 for(const f of ['card-models-plus-runtime.js','standalone-card-layouts-plus-runtime.js','card-free-layout-runtime.js','a4-card-sheet-editor-v2-runtime.js'])need(loader,f,'loader '+f);
 need(loader,'async function loadAdvancedRuntime()','advanced runtime loader must be sequential');

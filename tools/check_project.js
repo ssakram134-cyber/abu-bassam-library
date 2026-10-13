@@ -32,7 +32,7 @@ if(String(android.versionCode)!=='432')errors.push(`app.json: expected versionCo
 const librarySource=read('card-template-library.js');const sandbox={window:{}};vm.runInNewContext(librarySource,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
 if(!Array.isArray(groups))errors.push('card-template-library.js: library did not load');
 else{
-  const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
+  const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:9,certificate:10,thanks:6};
   for(const [id,count] of Object.entries(expected)){const g=groups.find(x=>x.id===id);if(!g)errors.push(`card catalog: missing ${id}`);else if(g.models?.length!==count)errors.push(`card catalog: ${id} expected ${count}, got ${g.models?.length}`);else{const ids=g.models.map(x=>x.id);if(new Set(ids).size!==ids.length)errors.push(`card catalog: duplicate model id in ${id}`)}}
 }
 const qAr=read('questions-paper-runtime.js');for(const t of ['A4P','A4L','A5P','A5L',"value=\"custom\"",'80,500','window.fitToScreen','window.checkAutoFlow'])has(qAr,t,'Arabic question paper');

@@ -27,7 +27,7 @@ need(admin,"return typeof raw[key]==='boolean'?raw[key]:false",'advanced permiss
 need(studio,"cardsA4Layout','printA4",'A4 permission set');
 need(studio,'printCardDirect','CR80 permission');
 need(studio,"cardsExportPdf','pdfCreate','pdfSave",'PDF permission');
-need(design,"Array.from({length:10},(_,i)=>envelopeTemplate(i))",'env-10 must be a system template');
+need(design,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'only 9 approved envelope templates are system models');
 need(design,'cardsManageCustomTemplates','Design Studio custom-template permission');
 need(standalone,'safeTextTarget','standalone safe text editing');
 need(standalone,'abu-recovery-frame-load','standalone event lifecycle');
@@ -42,4 +42,4 @@ const deviceLimit=read('supabase/migrations/202609270004_strict_device_limit_own
 for(const m of ["coalesce(trim(p_actor_device_id),'') = ''","coalesce(p_actor_secret,'') = ''","coalesce(v_actor.secret_hash,'') = ''","v_actor.secret_hash <> v_hash","p_device_limit > 50",'DEVICE_LIMIT_BELOW_CURRENT_COUNT','revoke all on function public.abu_bassam_set_device_limit(text,text,integer) from public, anon'])need(deviceLimit,m,'device limit security');
 
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('Final hardening checks passed: no patch runtimes, backup/restore fail closed, canonical cards enforce CR80/A4/export permissions, env-10 is system-owned, and device-limit changes require a verified owner secret.\n');
+process.stdout.write('Final hardening checks passed: no patch runtimes, backup/restore fail closed, canonical cards enforce CR80/A4/export permissions, legacy custom envelope data is preserved, and device-limit changes require a verified owner secret.\n');

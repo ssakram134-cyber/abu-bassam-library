@@ -14,7 +14,9 @@ try{
   let list=[];
   try{list=JSON.parse(localStorage.getItem(CUSTOM_KEY)||'[]')||[]}catch(_){list=[]}
   if(!Array.isArray(list))list=[];
-  const filtered=list.filter(item=>!(item&&item.id==='env-10'));
-  if(filtered.length!==list.length)localStorage.setItem(CUSTOM_KEY,JSON.stringify(filtered.slice(-30)));
+  const migrated=list.map(item=>item&&item.id==='env-10'
+    ? {...item,id:'legacy-env-10',name:String(item.name||'نموذج محفوظ قديم')}
+    : item);
+  if(JSON.stringify(migrated)!==JSON.stringify(list))localStorage.setItem(CUSTOM_KEY,JSON.stringify(migrated.slice(-30)));
 }catch(_){ }
 })();
