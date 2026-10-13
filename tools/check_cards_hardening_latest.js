@@ -32,7 +32,7 @@ need(layouts,"safeTextTarget",'standalone safe text editing is missing');
 need(layouts,"cardsEditImage",'standalone image edit permission is missing');
 need(layouts,"abu-recovery-frame-load",'standalone layouts must use explicit iframe lifecycle events');
 reject(layouts,"new MutationObserver(watch)",'standalone layout global observer returned');
-need(design,"Array.from({length:10},(_,i)=>envelopeTemplate(i))",'system envelope set must include env-10');
+need(design,"Array.from({length:9},(_,i)=>envelopeTemplate(i))",'nine approved envelope templates must be canonical');
 need(design,"cardsManageCustomTemplates",'custom template permission is missing');
 need(design,"cardsTemplatesDelete",'template delete permission is missing');
 need(design,"cardsEditText",'Design Studio text permission is missing');
@@ -46,7 +46,7 @@ for(const [name,src] of [['ration',ration],['mawkib',mawkib],['thanks',thanks],[
   need(src,"cardsExportPdf','pdfCreate','pdfSave",name+' PDF guard missing')
 }
 need(ration,"cardsExportImage','imageExport','exportOutsideApp",'ration image export guard missing');
-for(const id of ['t7','t8','t9','t10'])need(thanks,`value="${id}"`,`thanks template ${id} missing from source`);
+for(const id of ['t7','t8','t9','t10'])reject(thanks,`value="${id}"`,`unapproved thanks template ${id} must not be selectable`);
 need(recovery,"abu-recovery-frame-load",'recovery host must emit explicit iframe lifecycle event');
 need(recovery,"cardsExportImage','imageExport','exportOutsideApp",'recovery host image export guard missing');
-console.log('canonical cards checks passed: no patch runtimes, fail-closed permissions live in source, env-10 and thanks templates are canonical, and standalone editing uses explicit iframe lifecycle events.');
+console.log('canonical cards checks passed: no patch runtimes, fail-closed permissions live in source, 9 envelope and 6 thanks templates match AGENTS.md, and standalone editing uses explicit iframe lifecycle events.');

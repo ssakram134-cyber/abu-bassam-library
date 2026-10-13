@@ -20,13 +20,13 @@ for(const m of ["envelope:{title:'صناعة الظرف',file:'envelopes.html'}"
 forbid(recovery,'new MutationObserver(scheduleRecovery)','recovery host');
 
 const lib=read('card-template-library.js'),sandbox={window:{}};vm.runInNewContext(lib,sandbox);const groups=sandbox.window.AbuBassamCardTemplateLibrary;
-const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:10,certificate:10,thanks:10};
+const expected={personal:5,child:10,login:10,wifi:3,qr:4,ration:10,mawkib:4,'student-thanks':10,envelope:9,certificate:10,thanks:6};
 for(const [id,n] of Object.entries(expected)){const g=groups?.find?.(x=>x.id===id);if(!g||g.models?.length!==n)errors.push(`${id}: expected ${n}, got ${g?.models?.length??'missing'}`)}
 
 const ration=read('ration-card.html');for(let i=1;i<=10;i++)need(ration,`value="t${i}"`,`ration model ${i}`);
 const mawkib=read('mawkib-cards.html');for(let i=1;i<=4;i++)need(mawkib,`value="t${i}"`,`mawkib model ${i}`);
-const thanks=read('thanks-letter.html');for(let i=1;i<=10;i++)need(thanks,`value="t${i}"`,`thanks model ${i}`);
-const studio=read('design-studio-runtime.js');for(const m of ['Array.from({length:10}','id:`env-${i+1}`','envelopeTemplate(i)','cardsManageCustomTemplates','cardsTemplatesDelete','cardsEditText'])need(studio,m,'Design Studio');
+const thanks=read('thanks-letter.html');for(let i=1;i<=6;i++)need(thanks,`value="t${i}"`,`approved thanks model ${i}`);for(let i=7;i<=10;i++)forbid(thanks,`value="t${i}"`,`retired thanks model ${i}`);
+const studio=read('design-studio-runtime.js');for(const m of ['Array.from({length:9},(_,i)=>envelopeTemplate(i))','id:`env-${i+1}`','cardsManageCustomTemplates','cardsTemplatesDelete','cardsEditText'])need(studio,m,'Design Studio');forbid(studio,'Array.from({length:10},(_,i)=>envelopeTemplate(i))','unapproved envelope model 10');
 const layouts=read('standalone-card-layouts-plus-runtime.js');for(const m of ['abuBassamStandaloneCardLayoutV2','safeTextTarget','abu-recovery-frame-load'])need(layouts,m,'standalone layouts');forbid(layouts,'new MutationObserver(watch)','standalone layouts');
 
 const appSecurity=read('app-security-runtime.js');for(const m of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','recordCredentialFailure','clearCredentialFailures','signOut({scope:\'local\'})'])need(appSecurity,m,'core login security');
