@@ -20,7 +20,11 @@ function validateExternalScript(filename, src) {
   return file;
 }
 
-module.exports = { validateExternalScript };
+function scriptSource(attrs) {
+  const match = String(attrs || '').match(/(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  return match ? (match[1] ?? match[2] ?? match[3] ?? '') : null;
+}
+module.exports = { validateExternalScript, scriptSource };
 
 if (require.main === module) {
 const explicit = process.argv.slice(2);
@@ -51,8 +55,8 @@ for (const filename of files) {
     totalBlocks += 1;
     const attrs = match[1] || '';
     const source = match[2] || '';
-    const externalSrc = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
-    if (externalSrc !== undefined) {
+    const externalSrc = scriptSource(attrs);
+    if (externalSrc !== null) {
       validateExternalScript(filename, externalSrc);
       externalBlocks += 1;
       continue;
