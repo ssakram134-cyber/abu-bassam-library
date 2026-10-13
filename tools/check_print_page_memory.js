@@ -102,19 +102,19 @@ const nativeCalls=[],native={printPages:(...args)=>nativeCalls.push(args)};
 const sampleA=new Canvas(),sampleB=new Canvas();sampleA.width=1200;sampleA.height=1800;sampleB.width=1200;sampleB.height=1800;
 const userBridge={};
 let pdfBuilds=0,telegramBuilds=0;
-const exports=new Function('document','window','Android','telegramSend','telegramReady','makePdfData','getPaperPrintKey','printDpi','alert','sampleA','sampleB',
+const printExports=new Function('document','window','Android','telegramSend','telegramReady','makePdfData','getPaperPrintKey','printDpi','alert','sampleA','sampleB',
  'let pageCanvases=[sampleA,sampleB],currentPage=0,pagePrintMeta={paperKey:"A4",dpi:150};'+jpeg+printing+
  ';return {downloadJPG,printDirectly}')(
  document,userBridge,native,()=>{telegramBuilds++},()=>false,()=>{pdfBuilds++;return 'pdf-data'},()=> 'A4',()=>150,()=>{},sampleA,sampleB
 );
-exports.downloadJPG();
+printExports.downloadJPG();
 check(sampleA.encodeCount===1&&sampleB.encodeCount===0&&downloads===1,
  'Browser JPG save must encode just the selected page');
-exports.printDirectly();
+printExports.printDirectly();
 check(pdfBuilds===0&&nativeCalls.length===0,
  'Browser without a native print bridge must not encode all images or create a PDF');
 userBridge.Android=native;
-exports.printDirectly();
+printExports.printDirectly();
 check(nativeCalls.length===1&&nativeCalls[0][1]==='A4'&&pdfBuilds===0,
  'Native print sends pages without creating an unnecessary Telegram PDF when sharing is off');
 
