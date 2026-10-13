@@ -21,9 +21,37 @@ function validateExternalScript(filename, src) {
 }
 
 function scriptSource(attrs) {
-  const match = String(attrs || '').match(/(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-  return match ? (match[1] ?? match[2] ?? match[3] ?? '') : null;
+  // Read attribute names, never tokens embedded inside a quoted attribute value.
+  const text=String(attrs||'');
+  let i=0;
+  while(i<text.length){
+    while(i<text.length&&/\s|\//.test(text[i]))i++;
+    const start=i;
+    while(i<text.length&&!/[\s=/>]/.test(text[i]))i++;
+    if(i===start){i++;continue}
+    const name=text.slice(start,i).toLowerCase();
+    while(i<text.length&&/\s/.test(text[i]))i++;
+    let value='';
+    if(text[i]==='='){
+      i++;
+      while(i<text.length&&/\s/.test(text[i]))i++;
+      const quote=text[i];
+      if(quote==='"'||quote==="'"){
+        i++;const begin=i;
+        while(i<text.length&&text[i]!==quote)i++;
+        value=text.slice(begin,i);
+        if(i<text.length)i++
+      }else{
+        const begin=i;
+        while(i<text.length&&!/[\s>]/.test(text[i]))i++;
+        value=text.slice(begin,i)
+      }
+    }
+    if(name==='src')return value;
+  }
+  return null;
 }
+
 module.exports = { validateExternalScript, scriptSource };
 
 if (require.main === module) {
@@ -46,7 +74,7 @@ let externalBlocks = 0;
 for (const filename of files) {
   if (!fs.existsSync(filename)) throw new Error(`Missing HTML file: ${filename}`);
   const html = fs.readFileSync(filename, 'utf8');
-  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  const pattern = /<script\b((?:"[^"]*"|'[^']*'|[^'">])*)>([\s\S]*?)<\/script>/gi;
   let match;
   let index = 0;
   let parsed = 0;
