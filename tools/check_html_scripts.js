@@ -20,8 +20,8 @@ function validateExternalScript(filename, src) {
   return file;
 }
 
-function scriptSource(attrs) {
-  // Read attribute names, never tokens embedded inside a quoted attribute value.
+function scriptAttribute(attrs,wanted) {
+  // Attribute tokenizer: quoted attribute values are opaque, including fake src= or type= tokens.
   const text=String(attrs||'');
   let i=0;
   while(i<text.length){
@@ -47,12 +47,13 @@ function scriptSource(attrs) {
         value=text.slice(begin,i)
       }
     }
-    if(name==='src')return value;
+    if(name===wanted)return value;
   }
   return null;
 }
+function scriptSource(attrs){return scriptAttribute(attrs,'src')}
 
-module.exports = { validateExternalScript, scriptSource };
+module.exports = { validateExternalScript, scriptSource, scriptAttribute };
 
 if (require.main === module) {
 const explicit = process.argv.slice(2);
@@ -89,7 +90,7 @@ for (const filename of files) {
       externalBlocks += 1;
       continue;
     }
-    const type = attrs.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1]?.trim().toLowerCase() || '';
+    const type = (scriptAttribute(attrs,'type')||'').trim().toLowerCase();
     if (type === 'module') {
       throw new Error(`${path.relative(root, filename)}#script-${index}: module scripts require an explicit module-aware validator; refusing to skip syntax validation.`);
     }

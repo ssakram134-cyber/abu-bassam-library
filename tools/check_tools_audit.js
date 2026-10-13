@@ -2,7 +2,8 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
-const { validateExternalScript, scriptSource } = require('./check_html_scripts.js');
+const { validateExternalScript, scriptSource, scriptAttribute } = require('./check_html_scripts.js');
+const { workflowTriggers } = require('./check_import_workflow.js');
 const root = path.resolve(__dirname,'..');
 const html = path.join(root,'web','index.html');
 const project = JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
@@ -18,6 +19,8 @@ assert.equal(scriptSource(' src=plain.js'), 'plain.js', 'Unquoted script sources
 assert.equal(scriptSource(' data-note="contains src=../../private.js" src="local.js"'), 'local.js', 'The actual src must win over fake tokens inside attribute values');
 assert.equal(scriptSource(' data-note="a > b" src="local.js"'), 'local.js', 'A quoted greater-than sign must not break parsing');
 assert.equal(scriptSource(' data-note="src=remote.example"'), null, 'Never invent an src from another attribute value');
+assert.equal(scriptAttribute(' data-note="contains type=application/json" type="text/javascript"','type'),'text/javascript','Type must not be spoofed through other quoted attributes');
+assert.equal(scriptAttribute(' data-note="contains type=text/javascript" type="application/json"','type'),'application/json','Actual non-JavaScript type must be parsed without matching hidden text');
 assert.equal(scriptSource(' data-src="placeholder.js"'), null, 'data-src is not executable script src');
 assert.equal(scriptSource(' src=""'), '', 'An empty src must fail');
 assert.ok(fs.existsSync(validateExternalScript(html,match[1])),'Current local asset must resolve');
@@ -34,8 +37,17 @@ const hygiene=fs.readFileSync(path.join(root,'tools','check_repository_hygiene.j
 assert.ok(hygiene.includes("'tools'"),'Repository hygiene must cover tools scripts');
 assert.ok(hygiene.includes("'.py'"),'Repository hygiene must scan Python scripts');
 const importWorkflow=fs.readFileSync(path.join(root,'.github','workflows','import-source-zip.yml'),'utf8');
+assert.deepEqual(workflowTriggers(importWorkflow),['workflow_dispatch'],'Current import workflow must be manual-only');
+for(const extra of ['push: {}','pull_request: [opened]']){
+ const mutated=importWorkflow.replace('  workflow_dispatch:', '  workflow_dispatch:\n  '+extra);
+ assert.ok(workflowTriggers(mutated).includes(extra.split(':')[0]), 'A concise extra auto trigger must be detected: '+extra)
+}
 assert.ok(importWorkflow.includes("base.startswith('.env.')"),'ZIP preflight must reject arbitrary .env.* files');
 assert.ok(validator.includes("forbiddenEnvironmentName.test(base)"),'Post-extract source validation must reject arbitrary .env.* files');
+const envMatcherLiteral=validator.match(/const forbiddenEnvironmentName=(\/[^\n;]+\/i);/)?.[1];
+assert.ok(envMatcherLiteral,'ZIP validator must retain a case-insensitive .env wildcard check');
+const envMatcher=new Function('return '+envMatcherLiteral)();
+for(const name of ['.env','.env.staging','.env.','.ENV.production','.env.local.backup'])assert.ok(envMatcher.test(name),'Environment secret file name must be rejected: '+name);
 
 assert.ok(!validator.includes("need('web/fail-closed-runtime.js'"),'Validator must not require deleted fail-closed patch runtime');
 assert.ok(validator.includes('obsolete fail-closed runtime must not return'),'Validator must reject obsolete security bypass patch');

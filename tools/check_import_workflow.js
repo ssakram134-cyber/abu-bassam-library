@@ -6,9 +6,14 @@ const workflow=fs.readFileSync(path.join(root,'.github','workflows','import-sour
 const validator=fs.readFileSync(path.join(root,'tools','validate_imported_source.js'),'utf8');
 function need(src,marker,label){if(!src.includes(marker))throw new Error(`source import check failed: ${label}`)}
 function forbid(src,marker,label){if(src.includes(marker))throw new Error(`source import check failed: forbidden ${label}`)}
+function workflowTriggers(source){
+ const onBlock=source.match(/^on:\s*\r?\n([\s\S]*?)(?=^[^\s#\r\n])/m)?.[1]||'';
+ return [...onBlock.matchAll(/^ {2}([a-zA-Z_][\w-]*):[^\r\n]*$/gm)].map(m=>m[1]);
+}
+module.exports={workflowTriggers};
+if(require.main===module){
 need(workflow,'workflow_dispatch:','manual-only trigger');
-const eventBlock = workflow.match(/^on:\s*\r?\n([\s\S]*?)(?=^[^\s#\r\n])/m)?.[1] || '';
-const triggers = [...eventBlock.matchAll(/^  ([a-zA-Z_][\w-]*):\s*$/gm)].map(match => match[1]);
+const triggers=workflowTriggers(workflow);
 if (triggers.length !== 1 || triggers[0] !== 'workflow_dispatch') {
   throw new Error('source import must be manual-only; actual triggers: ' + triggers.join(', '));
 }
@@ -33,3 +38,4 @@ need(validator,"cp.spawnSync(process.execPath,['--check',file]",'JavaScript synt
 const validation = cp.spawnSync(process.execPath,[path.join(root,'tools','validate_imported_source.js'),root],{cwd:root,encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024});
 if(validation.error || validation.status!==0)throw new Error('Trusted ZIP validator rejected the actual current repository: '+String(validation.error?.message||validation.stderr||validation.stdout||validation.status));
 console.log('Source ZIP import workflow check passed: manual preflight, validator accepts current repository, no lifecycle scripts, branch-only write, and PR review.');
+}

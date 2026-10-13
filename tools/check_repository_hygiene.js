@@ -68,4 +68,4 @@ const gitignore=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
 for(const pattern of ['*.jks','*.keystore','*.p12','*.pfx','*.pem','*.key'])if(!gitignore.includes(pattern))failures.push(`.gitignore: missing signing/secret exclusion ${pattern}`);
 
 if(failures.length){console.error(failures.join('\n'));process.exit(1)}
-console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; every permanent check_*.js is wired into check:web; legacy APK repack/sign paths and old app identity stay removed; no merge markers, TODO/FIXME, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);
+console.log(`repository hygiene passed: ${files.length} source/config files checked; authored web JavaScript parses; every permanent check_*.js is wired into check:web; legacy APK repack/sign paths and old app identity stay removed; no merge markers, unresolved source reminders, tracked signing files, obvious embedded private keys/tokens, or insecure WebView regression detected.`);

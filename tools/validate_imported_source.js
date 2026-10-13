@@ -75,7 +75,7 @@ const prepare=need('scripts/prepare-android-assets.mjs',["const vendorRoot = res
 if(prepare.includes("resolve(source, 'vendor', 'tesseract')"))fail('OCR preparation must not write generated assets into canonical web source');
 
 const forbiddenNames=new Set(['.env','.npmrc','local.properties','google-services.json','id_rsa','id_ed25519']);
-const forbiddenEnvironmentName=/^\.env(?:\..+)?$/i;
+const forbiddenEnvironmentName=/^\.env(?:\..*)?$/i;
 const forbiddenExt=new Set(['.jks','.keystore','.p12','.pfx','.pem','.key']);
 const files=walk(root);
 if(files.length>5000)fail('too many files');
