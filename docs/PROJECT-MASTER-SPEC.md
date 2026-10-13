@@ -1,6 +1,6 @@
 # PROJECT MASTER SPEC — مكتبة أبو بسام
 
-آخر تحديث: 2026-09-27. هذا المستند مع `AGENTS.md` هو المرجع الحالي للمشروع. المواصفات التفصيلية الإلزامية الأحدث هي: `docs/IMAGE-EDITING-PRINT-POSTER-SPEC-2026-09-24.md`، `docs/NOTIFICATION-CENTER-SPEC-2026-09-24.md`، `docs/BACKUP-CENTER-SPEC-2026-09-26.md`، `docs/ACCOUNT-RECOVERY-SPEC-2026-09-26.md`، و`docs/APP-UPDATE-SPEC-2026-09-27.md`. عند التعارض، القرار الأحدث تاريخًا في هذه المواصفات يتقدم على التقارير الأقدم.
+آخر تحديث لقرارات الاعتماد: 2026-10-14. راجع أولاً `docs/APPROVED-211-REQUIREMENTS.md` و`docs/APPROVED-211-TRACKER.csv` و`docs/ACCEPTED-EXECUTION-DECISIONS-2026-10-14.md`؛ كتابة البنود لا تعني تنفيذها. ثم استعن بالأجزاء التقنية التالية. آخر تحديث: 2026-09-27. هذا المستند مع `AGENTS.md` هو المرجع الحالي للمشروع. المواصفات التفصيلية الإلزامية الأحدث هي: `docs/IMAGE-EDITING-PRINT-POSTER-SPEC-2026-09-24.md`، `docs/NOTIFICATION-CENTER-SPEC-2026-09-24.md`، `docs/BACKUP-CENTER-SPEC-2026-09-26.md`، `docs/ACCOUNT-RECOVERY-SPEC-2026-09-26.md`، و`docs/APP-UPDATE-SPEC-2026-09-27.md`. عند التعارض، القرار الأحدث تاريخًا في هذه المواصفات يتقدم على التقارير الأقدم.
 
 ## الهوية
 - التطبيق: مكتبة أبو بسام للتصوير والقرطاسية.
