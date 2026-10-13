@@ -4,6 +4,58 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const webDir = path.join(root, 'web');
+function validateExternalScript(filename, src) {
+  const target = String(src || '').trim();
+  if (!target) throw new Error('Empty script source in ' + filename);
+  if (/^(?:https?:)?\/\//i.test(target) || /^(?:data|blob|javascript):/i.test(target)) {
+    throw new Error('Remote or inline script source is prohibited in offline HTML: ' + target);
+  }
+  const clean = target.split(/[?#]/, 1)[0];
+  if (!clean || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(clean) || clean.startsWith('/')) {
+    throw new Error('Unsupported script source: ' + target);
+  }
+  const file = path.resolve(path.dirname(filename), clean);
+  if (!file.startsWith(webDir + path.sep)) throw new Error('Script escapes web directory: ' + target);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error('Missing local HTML script: ' + path.relative(root, file));
+  return file;
+}
+
+function scriptAttribute(attrs,wanted) {
+  // Attribute tokenizer: quoted attribute values are opaque, including fake src= or type= tokens.
+  const text=String(attrs||'');
+  let i=0;
+  while(i<text.length){
+    while(i<text.length&&/\s|\//.test(text[i]))i++;
+    const start=i;
+    while(i<text.length&&!/[\s=/>]/.test(text[i]))i++;
+    if(i===start){i++;continue}
+    const name=text.slice(start,i).toLowerCase();
+    while(i<text.length&&/\s/.test(text[i]))i++;
+    let value='';
+    if(text[i]==='='){
+      i++;
+      while(i<text.length&&/\s/.test(text[i]))i++;
+      const quote=text[i];
+      if(quote==='"'||quote==="'"){
+        i++;const begin=i;
+        while(i<text.length&&text[i]!==quote)i++;
+        value=text.slice(begin,i);
+        if(i<text.length)i++
+      }else{
+        const begin=i;
+        while(i<text.length&&!/[\s>]/.test(text[i]))i++;
+        value=text.slice(begin,i)
+      }
+    }
+    if(name===wanted)return value;
+  }
+  return null;
+}
+function scriptSource(attrs){return scriptAttribute(attrs,'src')}
+
+module.exports = { validateExternalScript, scriptSource, scriptAttribute };
+
+if (require.main === module) {
 const explicit = process.argv.slice(2);
 const files = explicit.length
   ? explicit.map((name) => path.resolve(root, name))
@@ -23,7 +75,7 @@ let externalBlocks = 0;
 for (const filename of files) {
   if (!fs.existsSync(filename)) throw new Error(`Missing HTML file: ${filename}`);
   const html = fs.readFileSync(filename, 'utf8');
-  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  const pattern = /<script\b((?:"[^"]*"|'[^']*'|[^'">])*)>([\s\S]*?)<\/script>/gi;
   let match;
   let index = 0;
   let parsed = 0;
@@ -32,11 +84,13 @@ for (const filename of files) {
     totalBlocks += 1;
     const attrs = match[1] || '';
     const source = match[2] || '';
-    if (/\bsrc\s*=\s*["'][^"']+["']/i.test(attrs)) {
+    const externalSrc = scriptSource(attrs);
+    if (externalSrc !== null) {
+      validateExternalScript(filename, externalSrc);
       externalBlocks += 1;
       continue;
     }
-    const type = attrs.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1]?.trim().toLowerCase() || '';
+    const type = (scriptAttribute(attrs,'type')||'').trim().toLowerCase();
     if (type === 'module') {
       throw new Error(`${path.relative(root, filename)}#script-${index}: module scripts require an explicit module-aware validator; refusing to skip syntax validation.`);
     }
@@ -52,3 +106,5 @@ for (const filename of files) {
 }
 
 process.stdout.write(`HTML script validation passed: ${files.length} HTML files, ${totalBlocks} script blocks, ${parsedBlocks} inline JS blocks parsed, ${externalBlocks} external script tags skipped as files.\n`);
+
+}

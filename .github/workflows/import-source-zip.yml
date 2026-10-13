@@ -65,7 +65,7 @@ jobs:
                       raise SystemExit('Archive rejected: uncompressed size exceeds 500 MB')
                   base=p.name.lower()
                   ext=pathlib.PurePosixPath(base).suffix.lower()
-                  if base in forbidden_names or ext in forbidden_ext:
+                  if base in forbidden_names or base.startswith('.env.') or base in {'id_rsa','id_ed25519'} or ext in forbidden_ext:
                       raise SystemExit(f'Archive rejected: secret/signing file {name!r}')
           print(f'ZIP preflight passed: {count} entries, {total/1024/1024:.1f} MB')
           PY
