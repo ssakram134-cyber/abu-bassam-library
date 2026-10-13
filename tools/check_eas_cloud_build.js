@@ -39,6 +39,11 @@ assert.ok(prepare.includes('Offline PDF/DOCX/XLSX viewer assets are embedded'),'
 assert.ok(ignored.includes('credentials.json'),'Never track local signing passwords');
 assert.ok(ignored.includes('.env')&&ignored.includes('.env.*'),'Never track local environment secrets');
 assert.match(pinned,/^[a-fA-F0-9]{64}$/,'Production signing certificate baseline must remain pinned');
-assert.ok(actions.includes('if: ${{ false }}'),'GitHub Actions APK build remains deliberately disabled');
+assert.match(actions,/^on:\s*\n  workflow_dispatch:/m,'GitHub Actions APK build must be manual-only');
+for(const automaticTrigger of ['  push:','  pull_request:','  schedule:']){
+  assert.ok(!actions.includes(automaticTrigger),`APK workflow must not run automatically: ${automaticTrigger.trim()}`);
+}
+assert.ok(actions.includes("if: ${{ github.event_name == 'workflow_dispatch' }}"),
+  'APK build job must reject any non-manual invocation');
 assert.equal(Object.keys(eas.build).length,1,'No accidental remote-key APK profile may be exposed');
-console.log('EAS cloud APK configuration passed: explicit local keystore, offline assets after prebuild, pinned app identity, protected secrets, and disabled GitHub Actions.');
+console.log('EAS cloud APK configuration passed: explicit local keystore, offline assets after prebuild, pinned app identity, protected secrets, and manual-only GitHub Actions APK workflow.');
