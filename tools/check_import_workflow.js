@@ -4,6 +4,7 @@ const root=path.resolve(__dirname,'..');
 const workflow=fs.readFileSync(path.join(root,'.github','workflows','import-source-zip.yml'),'utf8');
 const validator=fs.readFileSync(path.join(root,'tools','validate_imported_source.js'),'utf8');
 const sourceAudit=fs.readFileSync(path.join(root,'.github','workflows','source-audit.yml'),'utf8');
+const sourceChecks=fs.readFileSync(path.join(root,'.github','workflows','source-code-checks.yml'),'utf8');
 function need(src,marker,label){if(!src.includes(marker))throw new Error(`source import check failed: ${label}`)}
 function forbid(src,marker,label){if(src.includes(marker))throw new Error(`source import check failed: forbidden ${label}`)}
 need(workflow,'workflow_dispatch:','manual-only trigger');
@@ -41,4 +42,13 @@ need(sourceAudit,'npm run check:all','source audit must use the full source test
 for(const unsafe of ['  push:','  pull_request:','  schedule:','assembleRelease','android:prebuild','upload-artifact']){
   forbid(sourceAudit,unsafe,`source audit must never trigger builds or automatic runs: ${unsafe}`);
 }
-console.log('Source ZIP import and manual source-only audit workflow policies passed.');
+for(const marker of ["      - '.github/workflows/**'","      - '.gitignore'","      - 'config/**'","      - 'codemagic.yaml'","      - 'eas.json'"]){
+  need(sourceChecks,marker,'source-check push trigger missing release configuration coverage: '+marker);
+}
+for(const marker of ['contents: read','npm ci --ignore-scripts --no-audit --no-fund','npm run check:web']){
+  need(sourceChecks,marker,'read-only source-check workflow missing: '+marker);
+}
+for(const unsafe of ['assembleRelease','android:prebuild','upload-artifact','./gradlew']){
+  forbid(sourceChecks,unsafe,'source-only workflow must never assemble Android: '+unsafe);
+}
+console.log('Source ZIP import and both source-only workflow policy checks passed.');
