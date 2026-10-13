@@ -33,8 +33,10 @@ if(!checkWeb.startsWith('node tools/check_project.js'))fail('check:web must be r
 if(/scripts\/patch-|repair:source/.test(checkWeb))fail('check:web must not repair or mutate source');
 for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
 for(const name of ['start','android','android:prebuild'])if(/scripts\/patch-/.test(String(pkg.scripts?.[name]||'')))fail(`${name} must not auto-patch canonical source`);
-const repair=String(pkg.scripts?.['repair:source']||'');
-for(const marker of ['patch-startup-stability.mjs','patch-customer-camera.mjs'])if(!repair.includes(marker))fail(`repair:source missing explicit compatibility repair: ${marker}`);
+if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source command must not return');
+for(const rel of ['scripts/patch-startup-stability.mjs','scripts/patch-customer-camera.mjs','web/touch-stability-runtime.js']){
+  if(fs.existsSync(path.join(root,rel)))fail(`obsolete source patch file must not return: ${rel}`);
+}
 const buildScript=read('scripts/build-android-local.mjs');
 for(const marker of ["process.argv.includes('--require-release-key')","ANDROID_KEYSTORE_FILE','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'",'Production release signing is required.','SIGNING_CERTIFICATE.txt'])if(!buildScript.includes(marker))fail(`local APK signing safeguard missing: ${marker}`);
 for(const name of ['preinstall','install','postinstall','prepare','prepublish','prepublishOnly'])if(pkg.scripts?.[name])fail(`npm lifecycle script is not allowed in imported source: ${name}`);
@@ -80,7 +82,15 @@ let total=0;
 for(const file of files){const rel=path.relative(root,file).replaceAll('\\','/');const st=fs.statSync(file);total+=st.size;if(st.size>100*1024*1024)fail(`file too large: ${rel}`);const base=path.basename(file).toLowerCase(),ext=path.extname(file).toLowerCase();if(forbiddenNames.has(base)||forbiddenExt.has(ext))fail(`secret/signing file is forbidden: ${rel}`);if(/(^|\/)\.git(\/|$)/.test(rel))fail(`embedded git metadata is forbidden: ${rel}`);}
 if(total>500*1024*1024)fail('uncompressed source is larger than 500 MB');
 
-for(const file of files){if(!/\.(?:js|mjs)$/i.test(file))continue;const result=cp.spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(result.status!==0)fail(`JavaScript syntax error in ${path.relative(root,file)}: ${(result.stderr||result.stdout||'').trim()}`)}
+for(const file of files){
+  if(!/\.(?:js|mjs)$/i.test(file))continue;
+  const rel=path.relative(root,file).replaceAll('\\','/');
+  // Expo's native entry contains JSX, which plain Node cannot parse.
+  // The PR's normal source checks must validate this entry with project tooling.
+  if(rel==='index.js')continue;
+  const result=cp.spawnSync(process.execPath,['--check',file],{encoding:'utf8'});
+  if(result.status!==0)fail(`JavaScript syntax error in ${rel}: ${(result.stderr||result.stdout||'').trim()}`);
+}
 
 const scanExt=/\.(?:js|mjs|ts|json|yml|yaml|gradle|properties|html|sql)$/i;
 let approvedDesigner=false;
