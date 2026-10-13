@@ -23,7 +23,7 @@ if(rows.length!==212)throw new Error('Requirements tracker must have 211 rows pl
 const ids=rows.slice(1).map(line=>line.match(/^"([^"]+)"/)?.[1]);
 if(ids.some((x,i)=>x!==(i<11?'B'+String(i+1).padStart(2,'0'):'F'+String(i-10).padStart(3,'0'))))
   throw new Error('Requirements tracker IDs missing, reordered, or duplicated');
-if(!rows.slice(1).every(line=>line.includes('يحتاج تحقق 🔍')||/,(?:تم ✅|ناقص ⚠️|غير موجود ❌),/.test(line)))
+if(!rows.slice(1).every(line=>['"تم ✅"','"ناقص ⚠️"','"غير موجود ❌"','"يحتاج تحقق 🔍"'].some(state=>line.includes(state))))
   throw new Error('Requirements tracker has invalid audit status');
 if(!spec.includes('٢١٢–٤١١')||!spec.includes('ملغاة'))
   throw new Error('Cancelled proposal exclusion missing');
