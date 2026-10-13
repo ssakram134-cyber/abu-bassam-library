@@ -126,6 +126,17 @@
       signalBootReady();dismissSplash();setTimeout(heartbeat,200);
       void loadApprovedUi().catch(error=>{
         console.error('Non-critical feature initialization failed',error);
+        const app=document.querySelector('.app');
+        if(app){
+          let warning=document.getElementById('abuRuntimeWarning');
+          if(!warning){
+            warning=document.createElement('div');warning.id='abuRuntimeWarning';
+            warning.setAttribute('role','status');
+            warning.style.cssText='padding:12px;margin:10px;border:1px solid #c38326;border-radius:12px;background:#fff4dc;color:#633a0d;font-size:12px;font-weight:bold;text-align:center';
+            app.prepend(warning)
+          }
+          warning.textContent='تعذر تشغيل بعض أدوات التطبيق. يستمر تسجيل الدخول بأمان؛ راجع الإصدار إذا تعذّر فتح إحدى الأدوات.'
+        }
         document.dispatchEvent(new CustomEvent('abu-runtime-error',{detail:{message:String(error?.message||error)}}))
       })
     }catch(error){showBootFailure(error)}

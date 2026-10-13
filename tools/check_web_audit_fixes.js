@@ -14,6 +14,7 @@ async function main(){
  for(const token of ["message.type === 'webBootFailed'","webRef.current?.reload()","STARTUP_WATCHDOG_MS = 12000"])assert.ok(native.includes(token),'Missing safe native boot recovery: '+token);
  assert.ok(device.indexOf('await loadSecurity();')<device.indexOf('signalBootReady();'),'Security gate must finish before boot signal');
  assert.ok(device.includes('catch(error){failed.push('),'Optional failures should not skip all other feature scripts');
+ assert.ok(device.includes("warning.id='abuRuntimeWarning'"),'Partial feature startup failure must have visible feedback');
  const waiting={dataset:{},handlers:{},addEventListener(k,fn){this.handlers[k]=fn},removeEventListener(k){delete this.handlers[k]}};
  const doc={getElementById:()=>waiting,dispatchEvent:()=>{}};
  const load=new Function('document','window','CustomEvent',extract(device,'  function loadScript(id,src,guard){','  const loadFeatureRecovery=')+';return loadScript')(doc,{},function(){});
