@@ -34,3 +34,8 @@ Verification:
 - Source regression check verified 57 assertions with 11 behavioral multipart cases, strict ID parsing and exact Storage prefix markers in isolated V8 mocks.
 - All SECURITY DEFINER function declaration headers in the 39 SQL migration files were scanned for explicit search_path clauses; this is a static check only.
 - Mandatory unresolved: real Deno typecheck/deployment; applying SQL on the confirmed Library TEST database; testing old device IDs; RLS/Storage advisor reports and real restore/deletion scenarios. Do not run these migrations against the unrelated connected project.
+
+## Integration audit follow-up
+- Fixed four additional project checkers that still required the superseded 10/10 envelope/thanks counts. Their model checks now match the approved 9/6 and explicitly reject retired thanks options.
+- Trusted imported-source validation now demands the two new Supabase SQL migrations, both hardened Edge gateways and the permanent Supabase regression checker.
+- Model recovery is checked with a behavioral, idempotent localStorage simulation; the original saved HTML remains present after migrating the legacy custom envelope ID.

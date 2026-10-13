@@ -13,7 +13,10 @@ function walk(dir,out=[]){for(const entry of fs.readdirSync(dir,{withFileTypes:t
 for(const rel of [
   'package.json','package-lock.json','app.json','index.js','index-auth.js','web/index.html','web/security-bootstrap-guard-runtime.js','web/security-hardening-runtime.js','web/security-extras-runtime.js','web/device-name-runtime.js','web/device-reconcile-runtime.js','web/secure-sync-runtime.js','web/app-security-runtime.js','web/branch-vault-runtime.js','web/backup-center-runtime.js','web/account-recovery-hardening-runtime.js',
   'web/questions-paper-runtime.js','web/questions-en-fixes-runtime.js','web/card-template-library.js','web/notification-excel-runtime.js',
-  'scripts/build-android-local.mjs','scripts/prepare-android-assets.mjs','tools/check_project.js','tools/check_security_controls.js','tools/check_account_center.js','tools/check_fail_closed_runtime.js','tools/check_branch_private_vault.js','tools/check_backup_center.js','tools/check_web_audit_fixes.js','tools/check_tools_audit.js'
+  'scripts/build-android-local.mjs','scripts/prepare-android-assets.mjs','tools/check_project.js','tools/check_security_controls.js','tools/check_account_center.js','tools/check_fail_closed_runtime.js','tools/check_branch_private_vault.js','tools/check_backup_center.js','tools/check_web_audit_fixes.js','tools/check_tools_audit.js','tools/check_supabase_audit.js',
+  'supabase/functions/backup-center/index.ts','supabase/functions/branch-vault/index.ts',
+  'supabase/migrations/20261013000100_backup_item_count_2000.sql',
+  'supabase/migrations/20261013000200_customer_document_literal_storage_prefix.sql'
 ])if(!fs.existsSync(path.join(root,rel)))fail(`missing ${rel}`);
 const pkg=readJson('package.json');
 const lock=readJson('package-lock.json');
@@ -31,7 +34,7 @@ if(pkg.scripts?.['build:apk:release']!=='node scripts/build-android-local.mjs --
 const checkWeb=String(pkg.scripts?.['check:web']||'');
 if(!checkWeb.startsWith('node tools/check_project.js'))fail('check:web must be read-only and start with tools/check_project.js');
 if(/scripts\/patch-|repair:source/.test(checkWeb))fail('check:web must not repair or mutate source');
-for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
+for(const checker of ['check_security_controls.js','check_account_center.js','check_fail_closed_runtime.js','check_branch_private_vault.js','check_backup_center.js','check_supabase_audit.js'])if(!checkWeb.includes(`node tools/${checker}`))fail(`check:web missing mandatory security checker: ${checker}`);
 for(const name of ['start','android','android:prebuild'])if(/scripts\/patch-/.test(String(pkg.scripts?.[name]||'')))fail(`${name} must not auto-patch canonical source`);
 if(Object.prototype.hasOwnProperty.call(pkg.scripts||{},'repair:source'))fail('obsolete repair:source script must not return');
 const buildScript=read('scripts/build-android-local.mjs');
@@ -65,6 +68,10 @@ need('web/account-recovery-hardening-runtime.js',['__ABU_ACCOUNT_RECOVERY_HARDEN
 need('web/branch-vault-runtime.js',['SECURE_STORAGE_REQUIRED','if(!Object.prototype.hasOwnProperty.call(LABELS,key))return false',"return api.can(key)===true","return device().permissions?.[key]===true","if(!registerCloudAdapter())throw new Error('VAULT_GATEWAY_NOT_READY')","if(!allowed('vaultDelete')||!allowed('vaultSync'))",'if(path)await removeVault(path)']);
 forbid('web/branch-vault-runtime.js',['__dev_secure_',"permissions?.[key]!==false",'removeVault(path).catch(()=>{})']);
 need('web/backup-center-runtime.js',['SECURE_STORAGE_REQUIRED',"typeof restore!=='function'",'خدمة الاستعادة الآمنة غير جاهزة']);
+need('supabase/functions/branch-vault/index.ts',['function validDevicePart(id:string)','DEVICE_PATH_COLLISION','VAULT_ACTIVE_REVISION']);
+need('supabase/functions/backup-center/index.ts',['function validDevicePart(id:string)','DEVICE_PATH_COLLISION','BACKUP_PART_SIZE_INVALID']);
+need('supabase/migrations/20261013000100_backup_item_count_2000.sql',['item_count between 0 and 2000']);
+need('supabase/migrations/20261013000200_customer_document_literal_storage_prefix.sql',["left(coalesce(p_storage_path,''),char_length(v_base||'.edited.'))", "left(v_original,char_length(v_base||'.original.'))"]);
 forbid('web/backup-center-runtime.js',['__dev_secure_']);
 need('web/questions-paper-runtime.js',['A4P','A4L','A5P','A5L','value="custom"']);
 forbid('web/questions-paper-runtime.js',['A4 فقط']);

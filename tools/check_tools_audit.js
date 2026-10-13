@@ -71,4 +71,19 @@ assert.deepEqual([...letter.matchAll(/<option value="(t\d+)">/g)].map(x=>x[1]),t
 const legacy=fs.readFileSync(path.join(root,'web','envelope-preload-runtime.js'),'utf8');
 assert.ok(legacy.includes("id:'legacy-env-10'"),'Legacy custom template must be migrated, not discarded');
 
+const records=new Map([
+ ['abuEnvelopeStudioV1',JSON.stringify({templateId:'env-10',html:'<div data-bound="1">صورة عائلية</div>',unit:'mm',w:225,h:115})],
+ ['abuEnvelopeCustomTemplatesV1',JSON.stringify([{id:'env-10',name:'قالب قديم',html:'<b>ملف أصلي</b>'},{id:'my-custom',name:'آخر',html:'<i>احتفاظ</i>'}])]
+]);
+const localStore={getItem:key=>records.get(key)||null,setItem:(key,value)=>records.set(key,value)};
+new Function('localStorage',legacy)(localStore);
+const migratedItems=JSON.parse(records.get('abuEnvelopeCustomTemplatesV1'));
+assert.equal(migratedItems[0].id,'legacy-env-10','Retired custom model must receive a non-system legacy ID');
+assert.equal(migratedItems[0].html,'<b>ملف أصلي</b>','Legacy custom template HTML must not be deleted');
+assert.equal(migratedItems[1].id,'my-custom','Other templates must not be changed');
+assert.ok(JSON.parse(records.get('abuEnvelopeStudioV1')).html.includes('صورة عائلية'),'Saved user document must remain intact');
+new Function('localStorage',legacy)(localStore);
+assert.deepEqual(JSON.parse(records.get('abuEnvelopeCustomTemplatesV1')),migratedItems,'Legacy migration must be idempotent');
+
+
 console.log('Tools audit checks passed: local HTML scripts exist, remote/traversal references blocked, and ZIP import validator uses current fail-closed security layout.');
