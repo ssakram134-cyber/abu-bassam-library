@@ -31,10 +31,10 @@ workflows:
           test -n "$APK"
           test -s "$APK"
           unzip -l "$APK" | grep -F 'assets/index.android.bundle'
-          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
-          sha256sum "$APK" > android/app/build/outputs/apk/release/APK_SHA256.txt
+          shasum -a 256 "$APK" > android/app/build/outputs/apk/release/APK_SHA256.txt
           printf 'APK built and signature verified: %s\n' "$APK"
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
