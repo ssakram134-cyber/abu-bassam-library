@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/source-code-checks.yml'
+      - '.github/workflows/**'
+      - '.gitignore'
+      - 'config/**'
+      - 'codemagic.yaml'
+      - 'eas.json'
       - 'web/**'
       - 'tools/**'
       - 'scripts/**'
