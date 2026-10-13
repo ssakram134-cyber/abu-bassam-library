@@ -6,11 +6,14 @@ const forbid=(s,t,l)=>{if(s.includes(t))errors.push(`${l}: forbidden ${t}`)};
 const pin=read('web/mediapipe-pin-runtime.js');
 const loader=read('web/device-name-runtime.js');
 const index=read('web/index.html');
-for(const t of ["VERSION='0.1.1675465747'",'@mediapipe/selfie_segmentation@${VERSION}/','window.getSelfie=async function','locateFile:file=>BASE+file'])need(pin,t,'MediaPipe pin runtime');
+const assets=read('scripts/prepare-android-assets.mjs');
+for(const t of ["VERSION='0.1.1675465747'","const BASE='vendor/mediapipe/'",'window.getSelfie=async function','locateFile:file=>BASE+file'])need(pin,t,'local MediaPipe runtime');
 for(const t of ['mediapipe-pin-runtime.js','loadMediaPipePin','loadPasswordPolicy','await loadMediaPipePin();','await loadPasswordPolicy();','await loadSecurity();'])need(loader,t,'startup dependency loader');
-need(index,'abuBassamBgConsent','background-removal consent');
-need(index,'تُعالج الصورة محليًا ولا تُرسل إلى خادم التطبيق','local-processing disclosure');
-forbid(pin,'@mediapipe/selfie_segmentation/selfie_segmentation.js','unpinned MediaPipe URL in active pin runtime');
+for(const t of ['MEDIAPIPE_ASSETS','selfie_segmentation.js','selfie_segmentation.tflite','selfie_segmentation_solution_wasm_bin.wasm','selfie_segmentation_solution_simd_wasm_bin.wasm'])need(assets,t,'offline MediaPipe build assets');
+need(index,'vendor/mediapipe/selfie_segmentation.js','offline main page background removal');
+forbid(index,'abuBassamBgConsent','obsolete network-consent flow');
+forbid(index,'cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation','remote background removal asset');
+forbid(pin,'cdn.jsdelivr.net','remote pinned background removal asset');
 for(const file of ['web/mediapipe-pin-runtime.js','web/device-name-runtime.js']){try{new Function(read(file))}catch(e){errors.push(`${file}: JavaScript syntax error: ${e.message}`)}}
 if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exit(1)}
-process.stdout.write('External dependency checks passed: optional MediaPipe background removal is user-consented and overridden at startup with pinned package version 0.1.1675465747 before the splash clears.\n');
+process.stdout.write('External dependency source checks passed: APK asset-preparation config requires pinned MediaPipe 0.1.1675465747 (device execution unverified).\n');

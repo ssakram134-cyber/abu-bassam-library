@@ -15,13 +15,25 @@
   async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
+    if(guard&&window[guard])return Promise.resolve(true);
+    let script=document.getElementById(id);
+    if(script?.dataset?.abuLoadState==='loaded')return Promise.resolve(true);
+    if(script?.dataset?.abuLoadState==='failed'){script.remove();script=null}
     return new Promise((resolve,reject)=>{
-      if(document.getElementById(id)||(guard&&window[guard])){resolve(true);return}
-      const script=document.createElement('script');
-      script.id=id;script.src=src;script.async=false;
-      script.onload=()=>{document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)};
-      script.onerror=()=>reject(new Error(src+' failed to load'));
-      (document.head||document.documentElement).appendChild(script)
+      const fresh=!script;
+      if(fresh){script=document.createElement('script');script.id=id;script.async=false}
+      let done=false;
+      const finish=error=>{
+        if(done)return;done=true;clearTimeout(timeout);
+        script.removeEventListener('load',onLoad);script.removeEventListener('error',onError);
+        if(error){script.dataset.abuLoadState='failed';script.remove();reject(error);return}
+        script.dataset.abuLoadState='loaded';
+        document.dispatchEvent(new CustomEvent('abu-runtime-loaded',{detail:{id,src}}));resolve(true)
+      };
+      const onLoad=()=>finish(null),onError=()=>finish(new Error(src+' failed to load'));
+      const timeout=setTimeout(()=>finish(new Error(src+' load timed out')),15000);
+      script.addEventListener('load',onLoad);script.addEventListener('error',onError);
+      if(fresh){script.dataset.abuLoadState='loading';script.src=src;(document.head||document.documentElement).appendChild(script)}
     })
   }
   const loadFeatureRecovery=()=>loadScript('abuFeatureRecoveryRuntime','feature-recovery-runtime.js','__ABU_FEATURE_RECOVERY_V1__');
@@ -69,40 +81,64 @@
     await loadCustomerPermissionsHardening()
   }
   async function loadApprovedUi(){
-    await loadMediaPipePin();
-    await loadFeatureRecovery();
-    await loadChildTemplates();
-    await loadCardModels();
-    await loadStandaloneCardModels();
-    await loadStrictWorkflow();
-    await loadStandaloneFold();
-    await loadA4CardEditor();
-    await loadNotificationCorrections();
-    await loadNotificationExcel();
-    await loadSecurity();
-    await loadBranchVault();
-    await loadDocumentVaultHardening();
-    await loadBackupCenter();
-    await loadAccountCenter();
-    await loadPasswordRecovery();
-    await loadAppUpdate();
-    await loadSettingsCorrections();
-    await loadOperationLogCorrections()
+    const failed=[];
+    try{await loadMediaPipePin();}catch(error){failed.push('loadMediaPipePin');console.error('loadMediaPipePin failed',error)}
+    try{await loadFeatureRecovery();}catch(error){failed.push('loadFeatureRecovery');console.error('loadFeatureRecovery failed',error)}
+    try{await loadChildTemplates();}catch(error){failed.push('loadChildTemplates');console.error('loadChildTemplates failed',error)}
+    try{await loadCardModels();}catch(error){failed.push('loadCardModels');console.error('loadCardModels failed',error)}
+    try{await loadStandaloneCardModels();}catch(error){failed.push('loadStandaloneCardModels');console.error('loadStandaloneCardModels failed',error)}
+    try{await loadStrictWorkflow();}catch(error){failed.push('loadStrictWorkflow');console.error('loadStrictWorkflow failed',error)}
+    try{await loadStandaloneFold();}catch(error){failed.push('loadStandaloneFold');console.error('loadStandaloneFold failed',error)}
+    try{await loadA4CardEditor();}catch(error){failed.push('loadA4CardEditor');console.error('loadA4CardEditor failed',error)}
+    try{await loadNotificationCorrections();}catch(error){failed.push('loadNotificationCorrections');console.error('loadNotificationCorrections failed',error)}
+    try{await loadNotificationExcel();}catch(error){failed.push('loadNotificationExcel');console.error('loadNotificationExcel failed',error)}
+    try{await loadBranchVault();}catch(error){failed.push('loadBranchVault');console.error('loadBranchVault failed',error)}
+    try{await loadDocumentVaultHardening();}catch(error){failed.push('loadDocumentVaultHardening');console.error('loadDocumentVaultHardening failed',error)}
+    try{await loadBackupCenter();}catch(error){failed.push('loadBackupCenter');console.error('loadBackupCenter failed',error)}
+    try{await loadAccountCenter();}catch(error){failed.push('loadAccountCenter');console.error('loadAccountCenter failed',error)}
+    try{await loadPasswordRecovery();}catch(error){failed.push('loadPasswordRecovery');console.error('loadPasswordRecovery failed',error)}
+    try{await loadAppUpdate();}catch(error){failed.push('loadAppUpdate');console.error('loadAppUpdate failed',error)}
+    try{await loadSettingsCorrections();}catch(error){failed.push('loadSettingsCorrections');console.error('loadSettingsCorrections failed',error)}
+    try{await loadOperationLogCorrections();}catch(error){failed.push('loadOperationLogCorrections');console.error('loadOperationLogCorrections failed',error)}
+    if(failed.length)throw new Error('OPTIONAL_RUNTIME_LOAD_FAILED: '+failed.join(','));
   }
   function showBootFailure(error){
     const splash=document.getElementById('splash');
-    if(splash){splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1'}
-    const message=document.getElementById('splashText')||splash?.querySelector?.('p,small,div');
-    if(message)message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.';
+    if(splash){
+      splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1';
+      let message=document.getElementById('splashText');
+      if(!message){
+        message=document.createElement('p');message.id='splashText';
+        message.style.cssText='position:absolute;z-index:2;bottom:12%;left:6%;right:6%;padding:14px;border-radius:12px;background:#fffdf4;color:#8f2735;text-align:center;font-size:13px;font-weight:bold';
+        splash.appendChild(message)
+      }
+      message.textContent='تعذر إكمال التهيئة الآمنة. أعد المحاولة، وإذا تكرر الخطأ راجع سجل التشغيل.'
+    }
+    try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootFailed',reason:String(error?.message||error||'UNKNOWN').slice(0,160)}))}catch(_){}
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
-    ensureIdentity();
     try{
-      await loadApprovedUi();
-      signalBootReady();
-      dismissSplash();
-      setTimeout(heartbeat,200)
+      ensureIdentity();
+      // The security gate is required before exposing the main view.
+      await loadSecurity();
+      if(!window.AbuBassamSecurity?.login||!window.__ABU_SECURITY_HARDENING_V2__)throw new Error('SECURITY_GATE_NOT_READY');
+      signalBootReady();dismissSplash();setTimeout(heartbeat,200);
+      void loadApprovedUi().catch(error=>{
+        console.error('Non-critical feature initialization failed',error);
+        const app=document.querySelector('.app');
+        if(app){
+          let warning=document.getElementById('abuRuntimeWarning');
+          if(!warning){
+            warning=document.createElement('div');warning.id='abuRuntimeWarning';
+            warning.setAttribute('role','status');
+            warning.style.cssText='padding:12px;margin:10px;border:1px solid #c38326;border-radius:12px;background:#fff4dc;color:#633a0d;font-size:12px;font-weight:bold;text-align:center';
+            app.prepend(warning)
+          }
+          warning.textContent='تعذر تشغيل بعض أدوات التطبيق. يستمر تسجيل الدخول بأمان؛ راجع الإصدار إذا تعذّر فتح إحدى الأدوات.'
+        }
+        document.dispatchEvent(new CustomEvent('abu-runtime-error',{detail:{message:String(error?.message||error)}}))
+      })
     }catch(error){showBootFailure(error)}
   }
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
