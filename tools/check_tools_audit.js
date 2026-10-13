@@ -7,6 +7,11 @@ const root = path.resolve(__dirname,'..');
 const html = path.join(root,'web','index.html');
 const project = JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 const actual = fs.readFileSync(html,'utf8');
+const configured = String(project.scripts?.['check:web']||'');
+const available = fs.readdirSync(path.join(root,'tools')).filter(name=>/^check_.*\.js$/i.test(name)).sort();
+const invoked = [...configured.matchAll(/\bnode tools\/(check_[a-z0-9_]+\.js)\b/g)].map(x=>x[1]).sort();
+assert.deepEqual(invoked,available,'Every check_*.js must execute exactly once in check:web, without omission or duplication');
+
 const match = actual.match(/<script\b[^>]*\bsrc=["']([^"']+)["']/i);
 assert.ok(match,'index.html must refer to at least one external local script');
 assert.equal(scriptSource(' src=plain.js'), 'plain.js', 'Unquoted script sources must be checked');
