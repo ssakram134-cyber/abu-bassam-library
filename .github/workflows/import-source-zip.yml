@@ -134,7 +134,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet && git diff --cached --quiet; then
+          # Include newly imported untracked files before checking whether anything changed.
+          git add -A
+          if git diff --cached --quiet; then
             echo "No source changes detected."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -143,7 +145,6 @@ jobs:
           git switch -c "$BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
           git commit -m "Review imported Abu Bassam source ZIP"
           git push --set-upstream origin "$BRANCH"
           echo "changed=true" >> "$GITHUB_OUTPUT"

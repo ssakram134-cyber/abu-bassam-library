@@ -23,7 +23,7 @@ jobs:
           cache: npm
 
       - name: Install locked dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run every regression check and list all failures
         run: npm run check:all

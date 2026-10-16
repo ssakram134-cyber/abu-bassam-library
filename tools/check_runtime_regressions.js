@@ -22,16 +22,21 @@ forbid(recovery,'scheduleRecovery','obsolete recovery retry loop');
 forbid(recovery,'new MutationObserver','obsolete recovery observer');
 
 const device=read('device-name-runtime.js');
-for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js'])need(device,marker,'startup/login guards');
+for(const marker of ['dismissSplash','signalBootReady()','await loadApprovedUi();','login-input-direction-runtime.js','abuLoaded','webBootFailed'])need(device,marker,'startup/login guards');
 forbid(device,'installSplashWatchdog','obsolete web splash watchdog');
 forbid(device,'setTimeout(dismissSplash,1800)','obsolete time-based splash dismissal');
+const indexHtml=read('index.html');
+forbid(indexHtml,"setTimeout(()=>$('splash').classList.add('hide'),1000)","premature splash dismissal");
+const guards=read('permission-section-guards-runtime.js');
+for(const marker of ['function guardDisabled','function guardImageLabel','abuSectionGuardOriginalDisabled','abuSectionGuardOriginalPointer',"#cardsCenter,.cs-modal,.ds-sheet,#abuRecoveryModal"])need(guards,marker,'reversible section touch guards');
+forbid(guards,'[class*="card" i]','overbroad card click interception');
 const native=fs.readFileSync(path.join(root,'index.js'),'utf8');
-for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady) return undefined;','setTimeout(() => {'])need(native,marker,'native startup watchdog');
+for(const marker of ['const STARTUP_WATCHDOG_MS = 12000;',"message.type === 'webBootReady'",'if (webReady || webFailure) return undefined;','webAttempt','retryWebBoot','onRenderProcessGone','onContentProcessDidTerminate','webBootFailed','setWebFailure'])need(native,marker,'native startup watchdog');
 forbid(device,'login-throttle-fix-runtime.js','obsolete login-throttle patch');
 const security=read('app-security-runtime.js');
 for(const marker of ['ATTEMPT_KEY','LOGIN_LOCK_KEY','BLOCK_COUNT_KEY','recordCredentialFailure','clearCredentialFailures'])need(security,marker,'canonical login throttle');
 
-for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','feature-recovery-runtime.js','device-name-runtime.js']){
+for(const file of ['envelope-agreement-runtime.js','productivity-tools-runtime.js','feature-recovery-runtime.js','device-name-runtime.js','permission-section-guards-runtime.js']){
   try{new vm.Script(read(file),{filename:file})}catch(error){errors.push(`${file}: ${error.message}`)}
 }
 
