@@ -39,8 +39,28 @@ function keyGuard(event){
   if(event.key.length===1||['Backspace','Delete','Enter'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();deny('edit')}
 }
 function decorate(){
-  
-  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
+  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{
+    if(exempt(el))return;
+    const permission=permissionFor(el),denied=!!permission&&!allowed(permission);
+    const own=Object.prototype.hasOwnProperty;
+    if(denied){
+      if(!own.call(el.dataset,'abuPermissionOriginalOpacity'))el.dataset.abuPermissionOriginalOpacity=el.style.opacity||'';
+      if(!own.call(el.dataset,'abuPermissionOriginalTitle'))el.dataset.abuPermissionOriginalTitle=el.getAttribute('title')||'';
+      el.style.opacity='.48';
+      el.title=`الصلاحية موقوفة: ${permission}`;
+    }else{
+      if(own.call(el.dataset,'abuPermissionOriginalOpacity')){
+        el.style.opacity=el.dataset.abuPermissionOriginalOpacity;
+        delete el.dataset.abuPermissionOriginalOpacity;
+      }
+      if(own.call(el.dataset,'abuPermissionOriginalTitle')){
+        const original=el.dataset.abuPermissionOriginalTitle;
+        if(original)el.title=original;else el.removeAttribute('title');
+        delete el.dataset.abuPermissionOriginalTitle;
+      }
+    }
+    el.dataset.abuPermissionDenied=denied?'1':'0';
+  });
 }
 let decorateQueued=false;
 function scheduleDecorate(){
