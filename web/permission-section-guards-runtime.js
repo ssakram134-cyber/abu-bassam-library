@@ -4,7 +4,7 @@ if(window.__ABU_PERMISSION_SECTION_GUARDS_V1__)return;
 window.__ABU_PERMISSION_SECTION_GUARDS_V1__=true;
 let opsPatched=false,notifyPatched=false,securityPatched=false,settingsPatched=false,printPatched=false;
 const $=id=>document.getElementById(id);
-const can=k=>window.AbuBassamPermissions?.can?.(k)!==false;
+const can=k=>{try{return window.AbuBassamPermissions?.can?.(k)===true}catch(_){return false}};
 function deny(k){const item=window.AbuBassamPermissions?.items?.find?.(x=>x.key===k);alert('هذه الصلاحية معطلة لهذا الفرع من قبل الأدمن: '+(item?.label||k));return false}
 function wrap(obj,name,key){const f=obj?.[name];if(typeof f!=='function'||f.__abuSectionPermissionGuard)return;const w=function(...args){if(!can(key))return deny(key);return f.apply(this,args)};w.__abuSectionPermissionGuard=true;w.__abuOriginal=f;obj[name]=w}
 function patchOps(){const a=window.AbuBassamOps;if(!a||opsPatched)return;opsPatched=true;wrap(a,'open','logsViewOwn');wrap(a,'sync','syncManual');const oldOpen=window.openOps;if(typeof oldOpen==='function')window.openOps=function(...args){if(!can('logsViewOwn'))return deny('logsViewOwn');return a.open(...args)}}

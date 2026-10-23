@@ -5,8 +5,7 @@ window.__ABU_PERMISSION_GUARD_V1__=true;
 
 const security=()=>window.AbuBassamSecurity;
 let toastTimer=null;
-function secondary(){return security()?.role?.()==='secondary'}
-function allowed(permission){return !secondary()||security()?.can?.(permission)!==false}
+function allowed(permission){try{const sec=security();if(!sec||typeof sec.role!=='function'||typeof sec.can!=='function')return false;const role=sec.role();if(role!=='owner'&&role!=='secondary')return false;return sec.can(permission)===true}catch(_){return false}}
 function textOf(el){return `${el?.id||''} ${el?.className||''} ${el?.getAttribute?.('onclick')||''} ${el?.getAttribute?.('title')||''} ${el?.textContent||''}`.toLowerCase()}
 function exempt(el){return !!el?.closest?.('#abuSecurityGate,#abuSecuritySettings,#abuSecurityExtrasSettings,#abuDeviceModal')}
 function permissionFor(el){
@@ -27,21 +26,41 @@ function toast(message){
 }
 function deny(permission){const names={edit:'التعديل',print:'الطباعة',export:'الحفظ والتصدير',appearance:'الثيمات والخطوط',sync:'المزامنة',security:'إعدادات الأمان',devices:'إدارة الأجهزة',reset:'إعادة الضبط'};toast(`هذه الصلاحية موقوفة على الجهاز الفرعي: ${names[permission]||permission}`)}
 function clickGuard(event){
-  if(!secondary())return;const target=event.target?.closest?.('button,a,[role="button"],label');if(!target||exempt(target))return;
+  const target=event.target?.closest?.('button,a,[role="button"],label');if(!target||exempt(target))return;
   const permission=permissionFor(target);if(permission&&!allowed(permission)){event.preventDefault();event.stopImmediatePropagation();deny(permission)}
 }
 function editableTarget(target){return target?.closest?.('input,textarea,select,[contenteditable="true"]')}
 function fieldGuard(event){
-  if(!secondary()||allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
+  if(allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
   event.preventDefault();event.stopImmediatePropagation();field.blur?.();deny('edit')
 }
 function keyGuard(event){
-  if(!secondary()||allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
+  if(allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
   if(event.key.length===1||['Backspace','Delete','Enter'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();deny('edit')}
 }
 function decorate(){
-  if(!secondary())return;
-  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
+  document.querySelectorAll('button,a,[role="button"]').forEach(el=>{
+    if(exempt(el))return;
+    const permission=permissionFor(el),denied=!!permission&&!allowed(permission);
+    const own=Object.prototype.hasOwnProperty;
+    if(denied){
+      if(!own.call(el.dataset,'abuPermissionOriginalOpacity'))el.dataset.abuPermissionOriginalOpacity=el.style.opacity||'';
+      if(!own.call(el.dataset,'abuPermissionOriginalTitle'))el.dataset.abuPermissionOriginalTitle=el.getAttribute('title')||'';
+      el.style.opacity='.48';
+      el.title=`الصلاحية موقوفة: ${permission}`;
+    }else{
+      if(own.call(el.dataset,'abuPermissionOriginalOpacity')){
+        el.style.opacity=el.dataset.abuPermissionOriginalOpacity;
+        delete el.dataset.abuPermissionOriginalOpacity;
+      }
+      if(own.call(el.dataset,'abuPermissionOriginalTitle')){
+        const original=el.dataset.abuPermissionOriginalTitle;
+        if(original)el.title=original;else el.removeAttribute('title');
+        delete el.dataset.abuPermissionOriginalTitle;
+      }
+    }
+    el.dataset.abuPermissionDenied=denied?'1':'0';
+  });
 }
 let decorateQueued=false;
 function scheduleDecorate(){
