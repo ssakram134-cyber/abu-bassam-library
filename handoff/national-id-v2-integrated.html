@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>مرتّب المستمسكات — نسخة تكامل جديدة</title>
+  <style>
+    :root{
+      --bg1:#f5fbf8;--bg2:#c9e6d6;--ink:#0b2a1f;--mut:#3d6553;--g:#14532d;--g2:#1f7a4d;
+      --glass:rgba(255,255,255,.55);--bd:rgba(255,255,255,.8);--sh:0 8px 30px rgba(10,70,45,.18);
+      --danger:#d95c5c;--panel:#ffffffdd;--divider:#dfeee5;--sheet:#ffffffee;
+      --page-bg:#ffffff;--page-border:#dfe7e1;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;margin:0}
+    body{font-family:Tahoma, Cairo, Arial, sans-serif;color:var(--ink);background:linear-gradient(160deg,var(--bg1),var(--bg2));overflow:hidden}
+    button,input,select,label{font:inherit;color:inherit}
+    button{cursor:pointer;border:0;background:none}
+    button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--g2);outline-offset:2px}
+    .app{display:grid;grid-template-columns:340px 1fr;gap:18px;height:100vh;padding:18px}
+    .sidebar{background:var(--panel);border:1px solid var(--bd);border-radius:24px;box-shadow:var(--sh);padding:16px;overflow:auto}
+    .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+    .title{font-weight:800;font-size:23px;color:var(--g)}
+    .sub{font-size:12px;color:var(--mut);margin:0 0 14px}
+    .section{background:var(--sheet);border:1px solid var(--divider);border-radius:16px;padding:12px;margin-bottom:12px}
+    .section h3{margin:0 0 10px;font-size:16px;color:var(--g)}
+    .toggle-row,.field-row,.size-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0}
+    .toggle-row label{display:flex;align-items:center;gap:8px;font-weight:700;flex:1}
+    .switch{position:relative;width:42px;height:24px;border-radius:999px;background:#c9d9ce;display:inline-block;transition:.2s}
+    .switch::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+    .switch.on{background:var(--g2)}
+    .switch.on::after{left:21px}
+    input[type="checkbox"]{display:none}
+    .field-box{display:flex;align-items:center;gap:8px;border:1px solid var(--divider);background:#f9fffb;border-radius:12px;padding:6px 10px;flex:1}
+    .field-box input{width:100%;border:0;background:transparent;padding:6px 0;direction:ltr;text-align:center;font-size:18px;font-weight:700;color:var(--ink)}
+    .stepper{display:flex;flex-direction:column;border-radius:12px;overflow:hidden;border:1px solid var(--divider)}
+    .stepper button{width:28px;height:24px;display:grid;place-items:center;background:#f0f8f3;color:var(--g);font-weight:900;font-size:16px}
+    .stepper button + button{border-top:1px solid var(--divider)}
+    .dupe-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .primary-btn,.secondary-btn{border-radius:12px;padding:10px 12px;font-weight:800;border:1px solid transparent}
+    .primary-btn{background:linear-gradient(135deg,var(--g),var(--g2));color:#fff}
+    .secondary-btn{background:#edf7ef;border:1px solid var(--divider);color:var(--g)}
+    .size-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .size-box{background:#f8fbf8;border:1px solid var(--divider);border-radius:12px;padding:8px}
+    .size-box label{display:block;font-size:12px;color:var(--mut);margin-bottom:6px;font-weight:700}
+    .size-box .inner{display:flex;align-items:center;gap:6px}
+    .size-box input{flex:1;border:0;background:transparent;text-align:center;font-size:18px;font-weight:800;color:var(--ink);direction:ltr}
+    .size-box .mini{display:flex;flex-direction:column;border-radius:9px;overflow:hidden;border:1px solid var(--divider)}
+    .size-box .mini button{height:22px;background:#f1f8f2;color:var(--g);font-weight:900}
+    .size-box .mini button + button{border-top:1px solid var(--divider)}
+    .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .kpi{background:#f4faf5;border:1px solid var(--divider);border-radius:12px;padding:7px 8px}
+    .kpi small{display:block;color:var(--mut);font-size:11px}
+    .kpi strong{display:block;font-size:16px;margin-top:3px}
+    .workspace{position:relative;background:rgba(255,255,255,.28);border:1px solid var(--bd);border-radius:24px;box-shadow:var(--sh);display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .paper{position:relative;width:min(78vh,760px);height:min(96vh,1000px);background:var(--page-bg);border:2px solid var(--page-border);border-radius:10px;box-shadow:inset 0 0 0 1px rgba(20,83,45,.08);overflow:hidden}
+    .paper::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent 0, rgba(16,64,38,.02) 100%);pointer-events:none}
+    .guide{position:absolute;pointer-events:none;border:1px dashed rgba(20,83,45,.28);background:rgba(20,83,45,.02)}
+    .card-shell{position:absolute;transform-origin:center center;user-select:none;touch-action:none}
+    .card-shell.selected .card-surface{outline:2.5px solid #1f9d63;outline-offset:2px}
+    .card-surface{position:absolute;inset:0;border-radius:12px;overflow:hidden;background:#f5f5f5;box-shadow:0 6px 18px rgba(0,0,0,.16)}
+    .card-face{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background-size:cover;background-position:center;background-repeat:no-repeat}
+    .card-face.back{transform:rotateY(180deg) scaleX(-1)}
+    .card-shell[data-state="front"]; .card-face.back{opacity:0}
+    .card-shell[data-state="back"]; .card-face.front{opacity:0}
+    .card-shell[data-state="front"]; .card-face.front{opacity:1}
+    .card-shell[data-state="back"]; .card-face.back{opacity:1}
+    .card-shell[data-state="front"]; .card-face.front{filter:none}
+    .card-shell[data-state="back"]; .card-face.front{filter:brightness(0.95)}
+    .card-shell .label{position:absolute;left:8px;right:8px;bottom:8px;padding:4px 8px;border-radius:999px;background:rgba(0,0,0,.18);color:#fff;text-align:center;font-size:10px;font-weight:700;letter-spacing:.02em;backdrop-filter:blur(4px)}
+    .card-shell.selected .label{background:rgba(20,83,45,.28)}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    .toolbar button{padding:8px 10px;border-radius:10px;background:#eefaf2;border:1px solid var(--divider);color:var(--g);font-weight:800}
+    .ghost{opacity:.5}
+    @media (max-width:980px){.app{grid-template-columns:1fr;height:auto;min-height:100vh}.sidebar{max-height:none}.workspace{min-height:66vh}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="bar"><div class="title">مرتّب المستمسكات</div></div>
+      <p class="sub">نسخة تكامل مستقلة — لا تعدّل الملف الأصلي</p>
+
+      <div class="section">
+        <h3>تحريك البطاقة</h3>
+        <div class="toggle-row">
+          <label for="allowMoveToggle"><span>☐ السماح بتحريك البطاقة</span></label>
+          <span id="allowMoveSwitch" class="switch" aria-label="toggle"></span>
+          <input id="allowMoveToggle" type="checkbox" />
+        </div>
+        <div class="toggle-row">
+          <label for="linkFacesToggle"><span>☑ تحريك الوجه والظهر معاً</span></label>
+          <span id="linkFacesSwitch" class="switch on" aria-label="toggle"></span>
+          <input id="linkFacesToggle" type="checkbox" checked />
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>تكرار البطاقة</h3>
+        <div class="dupe-row">
+          <button id="duplicateCardBtn" class="primary-btn" type="button">تكرار البطاقة</button>
+          <div class="field-box" style="max-width:120px;">
+            <input id="duplicateCount" type="number" min="1" step="1" value="1" aria-label="عدد النسخ" />
+          </div>
+        </div>
+        <div class="stepper" style="margin-top:10px;display:inline-flex;flex-direction:column;"> 
+          <button type="button" data-step="up" data-target="duplicateCount">▲</button>
+          <button type="button" data-step="down" data-target="duplicateCount">▼</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>الطول والعرض</h3>
+        <div class="size-grid">
+          <div class="size-box">
+            <label>الطول — ملم</label>
+            <div class="inner">
+              <input id="heightInput" type="number" min="1" step="1" value="85" />
+              <div class="mini">
+                <button type="button" data-size="height" data-step="1">▲</button>
+                <button type="button" data-size="height" data-step="-1">▼</button>
+              </div>
+            </div>
+          </div>
+          <div class="size-box">
+            <label>العرض — ملم</label>
+            <div class="inner">
+              <input id="widthInput" type="number" min="1" step="1" value="55" />
+              <div class="mini">
+                <button type="button" data-size="width" data-step="1">▲</button>
+                <button type="button" data-size="width" data-step="-1">▼</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="toggle-row" style="margin-top:12px;">
+          <label for="dimensionLockToggle"><span>قفل المقاس</span></label>
+          <span id="dimensionLockSwitch" class="switch" aria-label="toggle"></span>
+          <input id="dimensionLockToggle" type="checkbox" />
+        </div>
+        <div class="toolbar">
+          <button id="restoreSizeBtn" type="button">استعادة الأبعاد الأصلية</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>التعديل</h3>
+        <div class="toolbar">
+          <button id="rotate90Btn" type="button">دوران 90°</button>
+          <button id="rotate180Btn" type="button">دوران 180°</button>
+          <button id="rotateCustomBtn" type="button">دوران مخصص</button>
+          <button id="undoBtn" type="button">تراجع</button>
+          <button id="redoBtn" type="button">إعادة</button>
+        </div>
+        <div class="toolbar">
+          <button id="alignLeftBtn" type="button">يسار</button>
+          <button id="alignCenterBtn" type="button">وسط</button>
+          <button id="alignRightBtn" type="button">يمين</button>
+          <button id="alignTopBtn" type="button">أعلى</button>
+          <button id="alignBottomBtn" type="button">أسفل</button>
+        </div>
+        <div class="toolbar">
+          <button id="copyStyleBtn" type="button">نسخ التنسيق</button>
+          <button id="showGuidesBtn" type="button">إظهار خط القص</button>
+          <button id="toggleLandscapeBtn" type="button">تبديل الاتجاه</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>إدارة المشروع</h3>
+        <div class="toolbar">
+          <button id="saveProjectBtn" type="button">حفظ المشروع</button>
+          <button id="restoreProjectBtn" type="button">استرجاع</button>
+          <button id="clearTempBtn" type="button">تنظيف الملفات المؤقتة</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><small>عدد البطاقات</small><strong id="cardCountKpi">0</strong></div>
+          <div class="kpi"><small>المساحة المتبقية</small><strong id="spaceKpi">0%</strong></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <div id="paper" class="paper" aria-label="ورقة العمل"></div>
+    </main>
+  </div>
+
+  <script src="../web/jspdf.umd.min.js"></script>
+  <script>
+    (() => {
+      const PAGE_WIDTH_MM = 210;
+      const PAGE_HEIGHT_MM = 297;
+      const SCALE = 3.2;
+      const STORAGE_KEY = 'national-id-v2-integrated-project';
+      let state = {
+        pageWidthMm: PAGE_WIDTH_MM,
+        pageHeightMm: PAGE_HEIGHT_MM,
+        cards: [],
+        selectedId: null,
+        allowMove: false,
+        linkFaces: true,
+        guidesOn: true,
+        landscape: false,
+        history: [],
+        future: [],
+        nextId: 1
+      };
+
+      class DocumentModel {
+        constructor(overrides = {}) {
+          const def = {
+            id: `card-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            type: 'national-id',
+            frontImage: makeSvgFace('front'),
+            backImage: makeSvgFace('back'),
+            widthMm: 85,
+            heightMm: 55,
+            xMm: 20,
+            yMm: 20,
+            frontX: 0,
+            frontY: 0,
+            backX: 0,
+            backY: 0,
+            rotation: 0,
+            allowMove: false,
+            linkedFaces: true,
+            dimensionLocked: false,
+            shadow: 0,
+            edgeCurve: 12,
+            order: 0,
+            selected: false,
+            faceMode: 'front'
+          };
+          Object.assign(this, def, overrides);
+          this.frontX = Number(this.frontX ?? this.xMm ?? 0);
+          this.frontY = Number(this.frontY ?? this.yMm ?? 0);
+          this.backX = Number(this.backX ?? this.frontX ?? 0);
+          this.backY = Number(this.backY ?? this.frontY ?? 0);
+        }
+      }
+
+      class LayoutController {
+        static mmToPx(mm) { return mm * SCALE; }
+        static pxToMm(px) { return px / SCALE; }
+        static pageSizePx() {
+          return {
+            width: LayoutController.mmToPx(state.pageWidthMm),
+            height: LayoutController.mmToPx(state.pageHeightMm)
+          };
+        }
+        static clampCard(card) {
+          const pad = 10;
+          const maxX = Math.max(0, state.pageWidthMm - card.widthMm);
+          const maxY = Math.max(0, state.pageHeightMm - card.heightMm);
+          card.xMm = Math.min(Math.max(pad, card.xMm || 0), maxX - pad);
+          card.yMm = Math.min(Math.max(pad, card.yMm || 0), maxY - pad);
+          card.frontX = card.xMm;
+          card.frontY = card.yMm;
+          card.backX = card.xMm;
+          card.backY = card.yMm;
+          return card;
+        }
+        static render() {
+          const paper = document.getElementById('paper');
+          const { width, height } = LayoutController.pageSizePx();
+          paper.style.width = `${width}px`;
+          paper.style.height = `${height}px`;
+          paper.innerHTML = '';
+          if (state.guidesOn) {
+            paper.appendChild(makeGuide('h', 0, 0, width, 0));
+            paper.appendChild(makeGuide('v', 0, 0, 0, height));
+            for (let i = 1; i < 7; i++) {
+              paper.appendChild(makeGuide('v', i * (width / 8), 0, 0, height));
+            }
+          }
+          state.cards.forEach((card) => {
+            const shell = document.createElement('div');
+            shell.className = 'card-shell';
+            shell.dataset.id = card.id;
+            shell.dataset.state = card.faceMode || 'front';
+            if (state.selectedId === card.id) shell.classList.add('selected');
+            shell.style.width = `${LayoutController.mmToPx(card.widthMm)}px`;
+            shell.style.height = `${LayoutController.mmToPx(card.heightMm)}px`;
+            shell.style.left = `${LayoutController.mmToPx(card.xMm)}px`;
+            shell.style.top = `${LayoutController.mmToPx(card.yMm)}px`;
+            shell.style.transform = `rotate(${card.rotation || 0}deg)`;
+            shell.style.zIndex = String((card.order || 0) + 5);
+            shell.style.boxShadow = `0 ${Math.max(2, card.shadow || 6)}px ${Math.max(10, card.shadow || 14)}px rgba(0,0,0,.12)`;
+
+            const surface = document.createElement('div');
+            surface.className = 'card-surface';
+            surface.style.borderRadius = `${card.edgeCurve || 10}px`;
+
+            const front = document.createElement('div');
+            front.className = 'card-face front';
+            front.style.backgroundImage = `url(${card.frontImage})`;
+            front.style.borderRadius = `${card.edgeCurve || 10}px`;
+            front.textContent = 'وجه';
+            front.style.fontSize = '11px';
+            front.style.fontWeight = '800';
+            front.style.color = '#fff';
+            front.style.backgroundSize = 'cover';
+            front.style.backgroundPosition = 'center';
+
+            const back = document.createElement('div');
+            back.className = 'card-face back';
+            back.style.backgroundImage = `url(${card.backImage})`;
+            back.style.borderRadius = `${card.edgeCurve || 10}px`;
+            back.textContent = 'ظهر';
+            back.style.fontSize = '11px';
+            back.style.fontWeight = '800';
+            back.style.color = '#fff';
+            back.style.backgroundSize = 'cover';
+            back.style.backgroundPosition = 'center';
+
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = card.type === 'national-id' ? 'بطاقة وطنية' : 'مستمسك';
+
+            surface.appendChild(front);
+            surface.appendChild(back);
+            surface.appendChild(label);
+            shell.appendChild(surface);
+            shell.addEventListener('pointerdown', (event) => PointerInteractionController.onPointerDown(event, card.id));
+            shell.addEventListener('click', () => { state.selectedId = card.id; LayoutController.render(); });
+            paper.appendChild(shell);
+          });
+          updateKpis();
+        }
+      }
+
+      class PointerInteractionController {
+        static active = null;
+        static onPointerDown(event, cardId) {
+          const card = state.cards.find((it) => it.id === cardId);
+          if (!card || !state.allowMove) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const shell = event.currentTarget;
+          state.selectedId = cardId;
+          PointerInteractionController.active = {
+            cardId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startCardX: card.xMm,
+            startCardY: card.yMm,
+            pointerId: event.pointerId,
+            shell
+          };
+          shell.setPointerCapture(event.pointerId);
+          shell.addEventListener('pointermove', PointerInteractionController.onPointerMove);
+          shell.addEventListener('pointerup', PointerInteractionController.onPointerUp);
+          shell.addEventListener('pointercancel', PointerInteractionController.onPointerUp);
+          LayoutController.render();
+        }
+        static onPointerMove(event) {
+          const active = PointerInteractionController.active;
+          if (!active || active.pointerId !== event.pointerId) return;
+          const card = state.cards.find((it) => it.id === active.cardId);
+          if (!card) return;
+          const dxMm = (event.clientX - active.startX) / SCALE;
+          const dyMm = (event.clientY - active.startY) / SCALE;
+          const nextX = active.startCardX + dxMm;
+          const nextY = active.startCardY + dyMm;
+          const minX = 10;
+          const minY = 10;
+          const maxX = Math.max(10, state.pageWidthMm - card.widthMm - 10);
+          const maxY = Math.max(10, state.pageHeightMm - card.heightMm - 10);
+          card.xMm = Math.min(Math.max(nextX, minX), maxX);
+          card.yMm = Math.min(Math.max(nextY, minY), maxY);
+          if (state.linkFaces) {
+            card.frontX = card.xMm;
+            card.frontY = card.yMm;
+            card.backX = card.xMm;
+            card.backY = card.yMm;
+          } else {
+            card.frontX = card.xMm;
+            card.frontY = card.yMm;
+            card.backX = card.xMm + 4;
+            card.backY = card.yMm + 4;
+          }
+          LayoutController.render();
+        }
+        static onPointerUp(event) {
+          const active = PointerInteractionController.active;
+          if (!active) return;
+          if (event.pointerId !== active.pointerId) return;
+          active.shell?.releasePointerCapture?.(event.pointerId);
+          active.shell?.removeEventListener('pointermove', PointerInteractionController.onPointerMove);
+          active.shell?.removeEventListener('pointerup', PointerInteractionController.onPointerUp);
+          active.shell?.removeEventListener('pointercancel', PointerInteractionController.onPointerUp);
+          PointerInteractionController.active = null;
+          pushHistory();
+        }
+      }
+
+      class DuplicateController {
+        static duplicateSelected(count = 1) {
+          const selected = getSelectedCard();
+          if (!selected) return;
+          const total = Math.max(1, Number(count) || 1);
+          const maxPossible = countPossibleCopies(selected);
+          if (total > maxPossible) {
+            alert(`لا يمكن تكرار البطاقة ${total} مرة لأن المساحة المتاحة فقط تسمح بـ ${maxPossible}.`);
+            return;
+          }
+          const start = Number(selected.xMm || 0);
+          const startY = Number(selected.yMm || 0);
+          const offset = 8;
+          const created = [];
+          for (let i = 1; i < total; i++) {
+            const clone = new DocumentModel({
+              id: `card-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+              frontImage: selected.frontImage,
+              backImage: selected.backImage,
+              widthMm: selected.widthMm,
+              heightMm: selected.heightMm,
+              xMm: Math.min(start + (i % 3) * (selected.widthMm + offset), state.pageWidthMm - selected.widthMm - 5),
+              yMm: Math.min(startY + Math.floor(i / 3) * (selected.heightMm + offset), state.pageHeightMm - selected.heightMm - 5),
+              frontX: selected.frontX,
+              frontY: selected.frontY,
+              backX: selected.backX,
+              backY: selected.backY,
+              rotation: selected.rotation,
+              allowMove: selected.allowMove,
+              linkedFaces: selected.linkedFaces,
+              dimensionLocked: selected.dimensionLocked,
+              shadow: selected.shadow,
+              edgeCurve: selected.edgeCurve,
+              order: selected.order + i,
+              faceMode: selected.faceMode || 'front'
+            });
+            state.cards.push(clone);
+            created.push(clone);
+          }
+          if (created.length) {
+            state.selectedId = created[created.length - 1].id;
+          }
+          pushHistory();
+          LayoutController.render();
+        }
+      }
+
+      class UndoRedoManager {
+        static snapshot() {
+          return JSON.stringify({
+            cards: state.cards,
+            selectedId: state.selectedId,
+            allowMove: state.allowMove,
+            linkFaces: state.linkFaces,
+            pageWidthMm: state.pageWidthMm,
+            pageHeightMm: state.pageHeightMm,
+            guidesOn: state.guidesOn,
+            landscape: state.landscape
+          });
+        }
+        static restoreFrom(data) {
+          state.cards = data.cards || [];
+          state.selectedId = data.selectedId || null;
+          state.allowMove = !!data.allowMove;
+          state.linkFaces = !!data.linkFaces;
+          state.pageWidthMm = data.pageWidthMm || PAGE_WIDTH_MM;
+          state.pageHeightMm = data.pageHeightMm || PAGE_HEIGHT_MM;
+          state.guidesOn = data.guidesOn !== false;
+          state.landscape = !!data.landscape;
+          syncControls();
+          LayoutController.render();
+        }
+      }
+
+      function pushHistory() {
+        const snapshot = UndoRedoManager.snapshot();
+        if (!state.history.length || state.history[state.history.length - 1] !== snapshot) {
+          state.history.push(snapshot);
+          if (state.history.length > 40) state.history.shift();
+        }
+        state.future = [];
+      }
+      function undo() {
+        if (state.history.length < 2) return;
+        state.future.push(state.history.pop());
+        const prev = state.history[state.history.length - 1];
+        UndoRedoManager.restoreFrom(JSON.parse(prev));
+      }
+      function redo() {
+        if (!state.future.length) return;
+        const next = state.future.pop();
+        state.history.push(JSON.stringify(JSON.parse(next)));
+        UndoRedoManager.restoreFrom(JSON.parse(next));
+      }
+
+      function getSelectedCard() {
+        return state.cards.find((card) => card.id === state.selectedId) || state.cards[0] || null;
+      }
+      function countPossibleCopies(selected = getSelectedCard()) {
+        if (!selected) return 1;
+        const gap = 8;
+        let capacity = 1;
+        const limitX = Math.max(1, Math.floor((state.pageWidthMm - 12) / (selected.widthMm + gap)));
+        const limitY = Math.max(1, Math.floor((state.pageHeightMm - 12) / (selected.heightMm + gap)));
+        capacity = Math.max(1, limitX * limitY);
+        return capacity;
+      }
+
+      function makeSvgFace(mode) {
+        const colorA = mode === 'back' ? '#114a30' : '#1d724d';
+        const colorB = mode === 'back' ? '#94d7a8' : '#cfeee0';
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="500" height="320" viewBox="0 0 500 320">
+            <defs>
+              <linearGradient id="g-${mode}" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stop-color="${colorA}"/>
+                <stop offset="100%" stop-color="${colorB}"/>
+              </linearGradient>
+            </defs>
+            <rect width="500" height="320" fill="url(#g-${mode})" rx="26"/>
+            <rect x="34" y="34" width="432" height="252" rx="18" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.26)"/>
+            <circle cx="110" cy="112" r="58" fill="rgba(255,255,255,0.14)"/>
+            <path d="M98 146h32v92h-32z" fill="rgba(255,255,255,.16)"/>
+            <path d="M70 200c38-24 86-18 120 0" stroke="rgba(255,255,255,0.3)" stroke-width="8" fill="none" stroke-linecap="round"/>
+            <text x="252" y="138" text-anchor="middle" fill="white" font-family="Tahoma,Arial" font-size="30" font-weight="700">بطاقة وطنية</text>
+            <text x="252" y="188" text-anchor="middle" fill="rgba(255,255,255,.8)" font-family="Tahoma,Arial" font-size="18">الوجه ${mode === 'front' ? 'الأمامي' : 'الخلفي'}</text>
+          </svg>`;
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      }
+
+      function makeGuide(type, x, y, w, h) {
+        const el = document.createElement('div');
+        el.className = 'guide';
+        if (type === 'h') {
+          el.style.left = '0';
+          el.style.right = '0';
+          el.style.top = `${y}px`;
+          el.style.height = '1px';
+          el.style.borderTop = '1px dashed rgba(20,83,45,.24)';
+        } else {
+          el.style.top = '0';
+          el.style.bottom = '0';
+          el.style.left = `${x}px`;
+          el.style.width = '1px';
+          el.style.borderLeft = '1px dashed rgba(20,83,45,.24)';
+        }
+        return el;
+      }
+
+      function syncControls() {
+        const allow = document.getElementById('allowMoveToggle');
+        const allowSwitch = document.getElementById('allowMoveSwitch');
+        const link = document.getElementById('linkFacesToggle');
+        const linkSwitch = document.getElementById('linkFacesSwitch');
+        const dimensionLock = document.getElementById('dimensionLockToggle');
+        const dimLockSwitch = document.getElementById('dimensionLockSwitch');
+        allow.checked = !!state.allowMove;
+        allowSwitch.classList.toggle('on', state.allowMove);
+        link.checked = !!state.linkFaces;
+        linkSwitch.classList.toggle('on', state.linkFaces);
+        dimensionLock.checked = !!(getSelectedCard()?.dimensionLocked || false);
+        dimLockSwitch.classList.toggle('on', !!(getSelectedCard()?.dimensionLocked || false));
+      }
+
+      function updateKpis() {
+        const cardCount = document.getElementById('cardCountKpi');
+        const space = document.getElementById('spaceKpi');
+        const total = state.cards.length;
+        const used = state.cards.reduce((sum, card) => sum + (card.widthMm * card.heightMm), 0);
+        const pageArea = state.pageWidthMm * state.pageHeightMm;
+        const pct = Math.max(0, Math.min(100, Math.round((used / pageArea) * 100)));
+        cardCount.textContent = String(total);
+        space.textContent = `${100 - pct}%`;
+      }
+
+      function applySelectedSize() {
+        const card = getSelectedCard();
+        if (!card) return;
+        const height = Math.max(1, Number(document.getElementById('heightInput').value) || card.heightMm);
+        const width = Math.max(1, Number(document.getElementById('widthInput').value) || card.widthMm);
+        if (card.dimensionLocked) {
+          alert('المقاس مغلق حاليًا. ألغِ القفل أولاً لتعديله.');
+          return;
+        }
+        card.heightMm = height;
+        card.widthMm = width;
+        pushHistory();
+        LayoutController.render();
+      }
+
+      function setCardRotation(angle) {
+        const card = getSelectedCard();
+        if (!card) return;
+        card.rotation = (card.rotation + angle) % 360;
+        pushHistory();
+        LayoutController.render();
+      }
+
+      function alignCard(mode) {
+        const card = getSelectedCard();
+        if (!card) return;
+        const maxX = Math.max(10, state.pageWidthMm - card.widthMm - 10);
+        const maxY = Math.max(10, state.pageHeightMm - card.heightMm - 10);
+        if (mode === 'left') card.xMm = 10;
+        if (mode === 'center') card.xMm = (state.pageWidthMm - card.widthMm) / 2;
+        if (mode === 'right') card.xMm = maxX;
+        if (mode === 'top') card.yMm = 10;
+        if (mode === 'bottom') card.yMm = maxY;
+        pushHistory();
+        LayoutController.render();
+      }
+
+      function restoreSize() {
+        const card = getSelectedCard();
+        if (!card) return;
+        card.widthMm = 85;
+        card.heightMm = 55;
+        document.getElementById('widthInput').value = '55';
+        document.getElementById('heightInput').value = '85';
+        pushHistory();
+        LayoutController.render();
+      }
+
+      function saveProject() {
+        const payload = { cards: state.cards, selectedId: state.selectedId, allowMove: state.allowMove, linkFaces: state.linkFaces, pageWidthMm: state.pageWidthMm, pageHeightMm: state.pageHeightMm, guidesOn: state.guidesOn, landscape: state.landscape };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        alert('تم حفظ المشروع محلياً بنجاح.');
+      }
+
+      function restoreProject() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) { alert('لا توجد نسخة محفوظة.'); return; }
+          const payload = JSON.parse(raw);
+          state.cards = (payload.cards || []).map((card) => new DocumentModel(card));
+          state.selectedId = payload.selectedId || state.cards[0]?.id || null;
+          state.allowMove = !!payload.allowMove;
+          state.linkFaces = payload.linkFaces !== false;
+          state.pageWidthMm = payload.pageWidthMm || PAGE_WIDTH_MM;
+          state.pageHeightMm = payload.pageHeightMm || PAGE_HEIGHT_MM;
+          state.guidesOn = payload.guidesOn !== false;
+          state.landscape = !!payload.landscape;
+          syncControls();
+          LayoutController.render();
+        } catch (error) {
+          alert('تعذر استرجاع المشروع المحفوظ.');
+        }
+      }
+
+      function clearTempSensitiveFiles() {
+        localStorage.removeItem(STORAGE_KEY);
+        alert('تم تنظيف بيانات المشروع المؤقتة. لم تُحذف صور أو ملفات الأصل.');
+      }
+
+      function addInitialCard() {
+        const card = new DocumentModel({
+          id: `card-${state.nextId++}`,
+          xMm: 20,
+          yMm: 20,
+          widthMm: 85,
+          heightMm: 55,
+          frontImage: makeSvgFace('front'),
+          backImage: makeSvgFace('back'),
+          allowMove: false,
+          linkedFaces: true,
+          order: 1
+        });
+        state.cards.push(card);
+        state.selectedId = card.id;
+      }
+
+      function setupHandlers() {
+        const allowToggle = document.getElementById('allowMoveToggle');
+        const allowSwitch = document.getElementById('allowMoveSwitch');
+        const linkToggle = document.getElementById('linkFacesToggle');
+        const linkSwitch = document.getElementById('linkFacesSwitch');
+        const dimLockToggle = document.getElementById('dimensionLockToggle');
+        const dimLockSwitch = document.getElementById('dimensionLockSwitch');
+
+        allowToggle.addEventListener('change', () => {
+          state.allowMove = allowToggle.checked;
+          allowSwitch.classList.toggle('on', state.allowMove);
+          pushHistory();
+        });
+        linkToggle.addEventListener('change', () => {
+          state.linkFaces = linkToggle.checked;
+          linkSwitch.classList.toggle('on', state.linkFaces);
+          pushHistory();
+        });
+        dimLockToggle.addEventListener('change', () => {
+          const card = getSelectedCard();
+          if (!card) return;
+          card.dimensionLocked = dimLockToggle.checked;
+          dimLockSwitch.classList.toggle('on', card.dimensionLocked);
+          pushHistory();
+        });
+
+        document.getElementById('duplicateCardBtn').addEventListener('click', () => {
+          const count = Math.max(1, Number(document.getElementById('duplicateCount').value) || 1);
+          DuplicateController.duplicateSelected(count);
+        });
+
+        document.querySelectorAll('[data-step]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.target);
+            if (!target) return;
+            const current = Math.max(1, Number(target.value) || 1);
+            const next = btn.dataset.step === 'up' ? current + 1 : Math.max(1, current - 1);
+            target.value = String(next);
+          });
+        });
+
+        document.querySelectorAll('[data-size]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const card = getSelectedCard();
+            if (!card) return;
+            if (card.dimensionLocked) {
+              alert('لا يمكن تغيير المقاس لأن القفل مفعل.');
+              return;
+            }
+            const field = btn.dataset.size === 'height' ? document.getElementById('heightInput') : document.getElementById('widthInput');
+            const current = Number(field.value) || (btn.dataset.size === 'height' ? card.heightMm : card.widthMm);
+            const next = Math.max(1, current + Number(btn.dataset.step || 1));
+            field.value = String(next);
+            applySelectedSize();
+          });
+        });
+
+        document.getElementById('heightInput').addEventListener('change', applySelectedSize);
+        document.getElementById('widthInput').addEventListener('change', applySelectedSize);
+        document.getElementById('restoreSizeBtn').addEventListener('click', restoreSize);
+        document.getElementById('rotate90Btn').addEventListener('click', () => setCardRotation(90));
+        document.getElementById('rotate180Btn').addEventListener('click', () => setCardRotation(180));
+        document.getElementById('rotateCustomBtn').addEventListener('click', () => {
+          const card = getSelectedCard();
+          if (!card) return;
+          const value = Number(prompt('أدخل زاوية الدوران (درجات):', String(card.rotation || 0))); 
+          if (Number.isFinite(value)) {
+            card.rotation = value % 360;
+            pushHistory();
+            LayoutController.render();
+          }
+        });
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('redoBtn').addEventListener('click', redo);
+        document.getElementById('alignLeftBtn').addEventListener('click', () => alignCard('left'));
+        document.getElementById('alignCenterBtn').addEventListener('click', () => alignCard('center'));
+        document.getElementById('alignRightBtn').addEventListener('click', () => alignCard('right'));
+        document.getElementById('alignTopBtn').addEventListener('click', () => alignCard('top'));
+        document.getElementById('alignBottomBtn').addEventListener('click', () => alignCard('bottom'));
+        document.getElementById('showGuidesBtn').addEventListener('click', () => {
+          state.guidesOn = !state.guidesOn;
+          LayoutController.render();
+        });
+        document.getElementById('toggleLandscapeBtn').addEventListener('click', () => {
+          state.landscape = !state.landscape;
+          state.pageWidthMm = state.landscape ? 297 : 210;
+          state.pageHeightMm = state.landscape ? 210 : 297;
+          state.cards.forEach((card) => { const x = card.xMm; const y = card.yMm; card.xMm = Math.min(Math.max(10, ((state.pageWidthMm - card.widthMm) / 2)), state.pageWidthMm - card.widthMm - 10); card.yMm = Math.min(Math.max(10, ((state.pageHeightMm - card.heightMm) / 2)), state.pageHeightMm - card.heightMm - 10); if (state.linkFaces) { card.frontX = card.xMm; card.frontY = card.yMm; card.backX = card.xMm; card.backY = card.yMm; } });
+          pushHistory();
+          LayoutController.render();
+        });
+        document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
+        document.getElementById('restoreProjectBtn').addEventListener('click', restoreProject);
+        document.getElementById('clearTempBtn').addEventListener('click', clearTempSensitiveFiles);
+        document.getElementById('paper').addEventListener('click', (event) => {
+          if (event.target === document.getElementById('paper')) {
+            state.selectedId = null;
+            LayoutController.render();
+          }
+        });
+      }
+
+      function init() {
+        document.getElementById('duplicateCount').value = '1';
+        addInitialCard();
+        pushHistory();
+        setupHandlers();
+        syncControls();
+        LayoutController.render();
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
