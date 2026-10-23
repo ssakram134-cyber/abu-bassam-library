@@ -31,6 +31,8 @@ function click(sec,denied){
 click(undefined,true);click({role:()=>'',can:()=>true},true);
 click({role:()=> 'secondary'},true);click({role:()=> 'secondary',can:()=>true},false);
 click({role:()=> 'owner',can:()=>true},false);
+click({role:()=> 'owner'},true);
+click({role:()=> 'owner',can:()=>{throw Error('not ready')}},true);
 const line=sections.split('\n').find(x=>x.startsWith('const can=k=>'));
 assert.ok(line,'section guard helper missing');
 const expr=line.slice('const can='.length).replace(/;$/,'');
@@ -40,4 +42,4 @@ assert.equal(sc({can:()=>undefined}),false);
 assert.equal(sc({can:()=>false}),false);
 assert.equal(sc({can:()=>true}),true);
 assert.equal(sc({can:()=>{throw Error('not ready')}}),false);
-console.log('22 fail-closed guard checks passed');
+console.log('24 fail-closed guard checks passed');
