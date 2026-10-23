@@ -4,15 +4,29 @@
   const DEVICE_NAME_KEY = 'abuBassamLockedDeviceNameV3';
   const DEVICE_CREATED_KEY = 'abuBassamLockedDeviceCreatedV3';
   const APP_VERSION = '4.3.2';
+  let bootFailed = false;
+
   function uuid(){return globalThis.crypto?.randomUUID?.()||`device-${Date.now()}-${Math.random().toString(36).slice(2)}`}
-  function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز آخر'}
+  function platform(){const agent=navigator.userAgent||'';if(/Android/i.test(agent))return'Android';if(/Windows/i.test(agent))return'Windows';if(/iPhone|iPad/i.test(agent))return'iOS';return'جهاز';}
   function normalizeName(value){return String(value||'').trim()||'جهاز المكتبة'}
-  function signalBootReady(){try{window.ReactNativeWebView?.postMessage(JSON.stringify({type:'webBootReady',at:Date.now()}))}catch(_){}}
-  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.display='none';splash.setAttribute('aria-hidden','true')}
-  function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||''}}
-  function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);localStorage.removeItem('abuBassamDeviceNameV1');return identity}
+  function postBridgeMessage(payload){
+    try{window.ReactNativeWebView?.postMessage(JSON.stringify(payload))}catch(_){}
+  }
+  function signalBootReady(){
+    if (bootFailed) return;
+    postBridgeMessage({type:'webBootReady',at:Date.now()})
+  }
+  function signalBootFailure(error){
+    if (bootFailed) return;
+    bootFailed = true;
+    const message = String(error?.message || error || 'تعذر تحميل مكونات التطبيق بأمان.');
+    postBridgeMessage({type:'webBootFailed',error:message,at:Date.now()})
+  }
+  function dismissSplash(){const splash=document.getElementById('splash');if(!splash)return;splash.style.transition='none';splash.style.opacity='0';splash.style.visibility='hidden';splash.style.pointerEvents='none';splash.style.display='none';}
+  function current(){const name=normalizeName(localStorage.getItem(DEVICE_NAME_KEY)||'جهاز المكتبة');return{id:localStorage.getItem(DEVICE_ID_KEY)||'',name,createdAt:localStorage.getItem(DEVICE_CREATED_KEY)||new Date().toISOString()}}
+  function ensureIdentity(){let identity=current();if(identity.id)return identity;identity={id:uuid(),name:'جهاز المكتبة',createdAt:new Date().toISOString()};localStorage.setItem(DEVICE_ID_KEY,identity.id);localStorage.setItem(DEVICE_NAME_KEY,identity.name);localStorage.setItem(DEVICE_CREATED_KEY,identity.createdAt);return identity}
   async function heartbeat(){return ensureIdentity()}
-  async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.device_id,name:row.device_name,...row}))}catch(_){}}const now=new Date().toISOString();return[{id:identity.id,name:identity.name,platform:platform(),locked:true,first_seen:identity.createdAt,last_seen:now,updated_at:now,app_version:APP_VERSION}]}
+  async function list(){const identity=await heartbeat(),registry=window.AbuBassamDeviceRegistry;if(window.AbuBassamSecurity?.role?.()==='owner'&&registry?.rows){try{return(await registry.rows()).map(row=>({id:row.id,name:row.device_name||row.name||row.device||'جهاز',platform:row.platform||platform(),last_seen:row.last_seen||row.updated_at||new Date().toISOString()}))}catch(_){}}return[{id:identity.id,name:identity.name,platform:platform(),last_seen:new Date().toISOString()}]}
   function deviceName(){return normalizeName(current().name||'جهاز المكتبة')}
   function loadScript(id,src,guard){
     return new Promise((resolve,reject)=>{
@@ -66,7 +80,7 @@
     await loadLoginInputDirection();
     await loadPasswordPolicy();
     await loadPermissionSectionGuards();
-    await loadCustomerPermissionsHardening()
+    await loadCustomerPermissionsHardening();
   }
   async function loadApprovedUi(){
     await loadMediaPipePin();
@@ -87,13 +101,18 @@
     await loadPasswordRecovery();
     await loadAppUpdate();
     await loadSettingsCorrections();
-    await loadOperationLogCorrections()
+    await loadOperationLogCorrections();
   }
   function showBootFailure(error){
     const splash=document.getElementById('splash');
-    if(splash){splash.style.display='flex';splash.style.visibility='visible';splash.style.opacity='1'}
+    if(splash){
+      splash.style.display='flex';
+      splash.style.visibility='visible';
+      splash.style.opacity='1';
+      splash.style.pointerEvents='auto';
+    }
     const message=document.getElementById('splashText')||splash?.querySelector?.('p,small,div');
-    if(message)message.textContent='تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.';
+    if(message)message.textContent=String(error?.message || error || 'تعذر تحميل مكونات التطبيق بأمان. أعد فتح التطبيق.');
     console.error('Abu Bassam runtime initialization failed',error)
   }
   async function startApprovedUi(){
@@ -103,7 +122,10 @@
       signalBootReady();
       dismissSplash();
       setTimeout(heartbeat,200)
-    }catch(error){showBootFailure(error)}
+    }catch(error){
+      signalBootFailure(error);
+      showBootFailure(error);
+    }
   }
   window.AbuBassamDevices={get:current,name:deviceName,ensure:ensureIdentity,heartbeat,list,version:APP_VERSION};window.AbuBassamDeviceName=deviceName;
   if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',startApprovedUi,{once:true});else startApprovedUi();
