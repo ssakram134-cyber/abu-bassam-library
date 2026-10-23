@@ -5,7 +5,6 @@ window.__ABU_PERMISSION_GUARD_V1__=true;
 
 const security=()=>window.AbuBassamSecurity;
 let toastTimer=null;
-function restricted(){try{return security()?.role?.()!=='owner'}catch(_){return true}}
 function allowed(permission){try{const sec=security();if(!sec||typeof sec.role!=='function'||typeof sec.can!=='function')return false;const role=sec.role();if(role!=='owner'&&role!=='secondary')return false;return sec.can(permission)===true}catch(_){return false}}
 function textOf(el){return `${el?.id||''} ${el?.className||''} ${el?.getAttribute?.('onclick')||''} ${el?.getAttribute?.('title')||''} ${el?.textContent||''}`.toLowerCase()}
 function exempt(el){return !!el?.closest?.('#abuSecurityGate,#abuSecuritySettings,#abuSecurityExtrasSettings,#abuDeviceModal')}
@@ -27,20 +26,20 @@ function toast(message){
 }
 function deny(permission){const names={edit:'التعديل',print:'الطباعة',export:'الحفظ والتصدير',appearance:'الثيمات والخطوط',sync:'المزامنة',security:'إعدادات الأمان',devices:'إدارة الأجهزة',reset:'إعادة الضبط'};toast(`هذه الصلاحية موقوفة على الجهاز الفرعي: ${names[permission]||permission}`)}
 function clickGuard(event){
-  if(!restricted())return;const target=event.target?.closest?.('button,a,[role="button"],label');if(!target||exempt(target))return;
+  const target=event.target?.closest?.('button,a,[role="button"],label');if(!target||exempt(target))return;
   const permission=permissionFor(target);if(permission&&!allowed(permission)){event.preventDefault();event.stopImmediatePropagation();deny(permission)}
 }
 function editableTarget(target){return target?.closest?.('input,textarea,select,[contenteditable="true"]')}
 function fieldGuard(event){
-  if(!restricted()||allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
+  if(allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
   event.preventDefault();event.stopImmediatePropagation();field.blur?.();deny('edit')
 }
 function keyGuard(event){
-  if(!restricted()||allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
+  if(allowed('edit'))return;const field=editableTarget(event.target);if(!field||exempt(field)||field.closest('#abuSettingsModal'))return;
   if(event.key.length===1||['Backspace','Delete','Enter'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();deny('edit')}
 }
 function decorate(){
-  if(!restricted())return;
+  
   document.querySelectorAll('button,a,[role="button"]').forEach(el=>{if(exempt(el))return;const permission=permissionFor(el);const denied=permission&&!allowed(permission);el.dataset.abuPermissionDenied=denied?'1':'0';if(denied){el.style.opacity='.48';el.title=`الصلاحية موقوفة: ${permission}`}else if(el.dataset.abuPermissionDenied==='0'&&String(el.title||'').startsWith('الصلاحية موقوفة:'))el.removeAttribute('title')})
 }
 let decorateQueued=false;
